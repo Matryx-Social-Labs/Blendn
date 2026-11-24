@@ -145,7 +145,7 @@ export type ButtonProps = {
   count?: number
   /** A leading glyph: 20 pt, 16 at `sm` and `raised`. */
   icon?: IconName
-  /** A leading mark that is not a glyph, in its place: a crew's emblem on "Like for Nebula" (R2-D1). Decorative. */
+  /** A leading mark that is not a glyph, in its place: a crew's emblem on "Wave for Nebula" (R2-D1). Decorative. */
   leading?: ReactNode
   disabled?: boolean
   /** Busy: the label stays (for width, and as the name read), a spinner covers it after 300 ms. */

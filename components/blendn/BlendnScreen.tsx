@@ -554,7 +554,7 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
    * null for "Just me", undefined before they make one. The app never picks a
    * crew for somebody (lib/crews.ts): with one crew here that crew is the
    * answer, with several the like asks, and the answer becomes the choice.
-   * Every label (the chip, "Like for {crew}", "Liked for {crew}") and every
+   * Every label (the chip, "Wave for {crew}", "Waved for your crew") and every
    * request reads these same values.
    */
   const [likingAs, setLikingAs] = useState<string | null | undefined>(undefined)
@@ -818,7 +818,7 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
           title: `Mix with ${p.name}`,
           sides: { ours: { kind: 'crew', name: crew.name, emblemSeed: emblemOf(crew.crewId), count: crew.presentCount }, theirs: { kind: 'person', pseudonym: p.name } },
         })
-      } else say('Liked for your crew', 'success')
+      } else say('Waved for your crew', 'success')
     } finally {
       likingForCrew.current = false
     }
@@ -831,7 +831,7 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
   const cardCrewLike = (p: RoomPerson) => {
     if (personAs === 'ask') {
       closeCardThen(() => {
-        void chooseLikingAs(soloCrews, 'Like for which crew?', false).then((answer) => {
+        void chooseLikingAs(soloCrews, 'Wave for which crew?', false).then((answer) => {
           if (answer) void likeForCrew(p, answer)
         })
       })

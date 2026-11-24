@@ -420,13 +420,13 @@ describe('Liking as a crew: what the button says is what it sends (R2-D1)', () =
   const nebula = { crewId: 'nebula', name: 'Nebula', presentCount: 2 }
   const crew = (crewId: string, o: Record<string, unknown> = {}) => ({ crewId, name: crewId, emblemSeed: crewId, openToSolo: true, size: 3, ...o })
 
-  it('one crew here that may like people: "Like for Nebula" likes as Nebula', async () => {
+  it('one crew here that may like people: "Wave for Nebula" waves as Nebula', async () => {
     api.crewsAt.mockResolvedValue({ success: true, data: { crewsEnabled: true, crews: [], myCrews: [nebula], total: 0, hasMore: false } })
     api.myCrews.mockResolvedValue({ success: true, data: { crews: [crew('nebula', { name: 'Nebula' })], invites: [] } } as never)
     api.likePersonAsCrew.mockResolvedValue({ success: true, data: { liked: true, blend: null } })
     await drawRoom()
     await openFromGrid(1)
-    await fireEvent.press(screen.getByRole('button', { name: 'Like for Nebula' }))
+    await fireEvent.press(screen.getByRole('button', { name: 'Wave for Nebula' }))
     await cardGone()
     expect(api.likePersonAsCrew).toHaveBeenCalledWith('e1', 'p1', 'nebula')
     expect(mockRoom.wave).not.toHaveBeenCalled()
@@ -437,18 +437,18 @@ describe('Liking as a crew: what the button says is what it sends (R2-D1)', () =
     api.myCrews.mockResolvedValue({ success: true, data: { crews: [crew('nebula', { name: 'Nebula', openToSolo: false })], invites: [] } } as never)
     await drawRoom()
     await openFromGrid(1)
-    expect(screen.queryByRole('button', { name: 'Like for Nebula' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Wave for Nebula' })).toBeNull()
     expect(screen.queryByRole('button', { name: /^Like/ })).toBeNull()
     expect(screen.getByRole('button', { name: 'Wave at Person p1' })).toBeTruthy()
   })
 
-  it('several that may: "Like for your crew", and the app picks none for you', async () => {
+  it('several that may: "Wave for your crew", and the app picks none for you', async () => {
     const orbit = { crewId: 'orbit', name: 'Orbit', presentCount: 2 }
     api.crewsAt.mockResolvedValue({ success: true, data: { crewsEnabled: true, crews: [], myCrews: [nebula, orbit], total: 0, hasMore: false } })
     api.myCrews.mockResolvedValue({ success: true, data: { crews: [crew('nebula', { name: 'Nebula' }), crew('orbit', { name: 'Orbit' })], invites: [] } } as never)
     await drawRoom()
     await openFromGrid(1)
-    await fireEvent.press(screen.getByRole('button', { name: 'Like for your crew' }))
+    await fireEvent.press(screen.getByRole('button', { name: 'Wave for your crew' }))
     await cardGone()
     expect(api.likePersonAsCrew).not.toHaveBeenCalled()
     const { showSheet } = jest.requireMock('../lib/sheet') as { showSheet: jest.Mock }

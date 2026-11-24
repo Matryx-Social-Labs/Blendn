@@ -374,25 +374,26 @@ describe('Flow 4: the room’s card (R2-D1, R3-D4, #51)', () => {
     expect(screen.getByRole('button', { name: 'Message' }).props.accessibilityHint).toBe('Sends a request, which shows them your name and photo.')
   })
 
-  it('a crew here: a "Like for Nebula" row under the dock (H.like), the dock only Wave + Message, and who they see', async () => {
+  it('a crew here: a "Wave for Nebula" row under the dock (H.select), the dock only Wave + Message, and who they see', async () => {
     const crewLike = jest.fn()
     await draw({ crewLike: { name: 'Nebula', emblemSeed: 'nebula', onPress: crewLike }, testID: 'c' })
-    await fireEvent.press(screen.getByRole('button', { name: 'Like for Nebula' }))
+    await fireEvent.press(screen.getByRole('button', { name: 'Wave for Nebula' }))
     expect(crewLike).toHaveBeenCalledTimes(1)
-    expect(haptics.like).toHaveBeenCalledTimes(1)
-    expect(text('A crew like is shown to Priya as Nebula, never as you.')).toBeTruthy()
+    expect(haptics.select).toHaveBeenCalledTimes(1)
+    expect(haptics.like).not.toHaveBeenCalled()
+    expect(text('A crew wave is shown to Priya as Nebula, never as you.')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Like as yourself' })).toBeNull()
     expect(screen.getByRole('button', { name: 'Wave at Priya' })).toBeTruthy()
   })
 
-  it('several crews may like: "Like for your crew"', async () => {
+  it('several crews may wave: "Wave for your crew"', async () => {
     await draw({ crewLike: { name: 'your crew', onPress: jest.fn() }, testID: 'c' })
-    expect(screen.getByRole('button', { name: 'Like for your crew' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Wave for your crew' })).toBeTruthy()
   })
 
   it('once you both waved, no crew like is offered', async () => {
     await draw({ variant: 'matched', wave: 'mutual', crewLike: { name: 'Nebula', emblemSeed: 'nebula', onPress: jest.fn() }, testID: 'c' })
-    expect(screen.queryByRole('button', { name: 'Like for Nebula' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Wave for Nebula' })).toBeNull()
   })
 })
 
