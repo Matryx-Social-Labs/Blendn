@@ -1,7 +1,7 @@
 import { useRef, type ComponentRef } from 'react'
-import { StyleSheet, Text, View } from 'react-native'
+import { Platform, StyleSheet, Text, View } from 'react-native'
 
-import { COLOR, FONT_FAMILY, MAX_FONT_SCALE, RADIUS, SPACE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, MATERIAL, MAX_FONT_SCALE, RADIUS, SPACE } from '../../lib/design/tokens'
 import { crewBadge, tagText, type CrewCard } from '../../lib/crews'
 import { ACHIEVEMENT } from '../ds/AchievementBadge'
 import { Chip } from '../ds/Chip'
@@ -93,5 +93,11 @@ const styles = StyleSheet.create({
   center: { textAlign: 'center' },
   ink: { color: COLOR.textPrimary },
   chips: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: SPACE.sm },
-  about: { borderRadius: RADIUS.rowInCard, backgroundColor: COLOR.surface, padding: SPACE.md, gap: SPACE.xs },
+  about: {
+    borderRadius: RADIUS.rowInCard,
+    // The sheet's own fill: 8% white on iOS glass, sunken on Android's solid sheet (CrewCard onSheet).
+    backgroundColor: Platform.OS === 'android' ? COLOR.surfaceSunken : MATERIAL.fillOnGlass,
+    padding: SPACE.md,
+    gap: SPACE.xs,
+  },
 })
