@@ -5,6 +5,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { broadcastParts } from '../../lib/chatFeed'
 import { crewLikeLine } from '../../lib/crews'
+import type { WaveBackOutcome } from '../../lib/crewWaveBack'
+import { CrewWavedNotice } from './CrewWavedNotice'
+
 import { goneKindFor } from '../../lib/chatGone'
 import { liveEndedState, type LiveEndedAction } from '../../lib/chatLiveEnded'
 import { markSeed } from '../../lib/creatureSeed'
@@ -23,6 +26,9 @@ import { RoomPoll } from './RoomPoll'
 import { chatHeaderBottom } from './ChatHeader'
 import { opensInSpoken } from '../../lib/preEventRoom'
 
+/** A live `crew_waved` line: the socket sends no metadata, so it is known by its words and drawn without the action. */
+const CREW_WAVED = /waved at (your|the) crew$/
+
 /** The poll's host as the server names them; the client's own stand-ins for no name are not a name. */
 const pollHost = (name: string) => (name && name !== 'Attendee' && name !== 'You' && name !== 'System' ? name : undefined)
 
@@ -35,6 +41,8 @@ export type RowHandlers = {
   link: (url: string) => void
   /** A vote the room itself refused (closed, not in it, not live): the room locks. */
   pollRefusal: (reason: PollRefusal) => void
+  /** A crew chat's `crew_waved` line answered (advisor L-A). */
+  crewWaveBack?: (m: RoomMessage) => Promise<WaveBackOutcome>
 }
 
 /**
@@ -103,6 +111,15 @@ export const RoomMessageRow = memo(function RoomMessageRow({
 }) {
   const runStart = afterChips ? styles.runStartAfterChips : styles.runStart
   if (item.sender_id === 'system') return <SystemLine text={item.message_text} />
+  // Another crew (or a person) waved at this crew: a notice with Wave back, never a bubble (advisor L-A).
+  if (item.message_type === 'system' && (item.crewWave || CREW_WAVED.test(item.message_text.trim()))) {
+    const answer = item.crewWave ? handlers.crewWaveBack : undefined
+    return (
+      <View testID={`row-${item.message_id}`} style={runStart}>
+        <CrewWavedNotice id={item.message_id} text={item.message_text} onWaveBack={answer ? () => answer(item) : undefined} />
+      </View>
+    )
+  }
   // A crew like is the room saying who did what, never somebody's bubble (your own drew as yours, TG-10).
   const like = item.message_type === 'system' ? crewLikeLine(item.message_text, mine ? 'You' : item.sender_name) : null
   if (like) return <SystemLine text={like} testID={`system-${item.message_id}`} />

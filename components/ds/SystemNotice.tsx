@@ -27,6 +27,8 @@ export type SystemNoticeProps = {
   kind?: 'info' | 'warn'
   /** At most one text action. */
   action?: { label: string; onPress: () => void }
+  /** A still line under the sentence: once answered ("Waved back"), why it can't be ("They've left the room"), or why it failed. */
+  note?: { text: string; icon?: IconName }
   testID?: string
 }
 
@@ -38,7 +40,7 @@ export type SystemNoticeProps = {
  * action as a button. No haptic: a notice is read, not felt. Increase
  * Contrast: the 50% hairline.
  */
-export function SystemNotice({ text, icon, kind = 'info', action, testID }: SystemNoticeProps) {
+export function SystemNotice({ text, icon, kind = 'info', action, note, testID }: SystemNoticeProps) {
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   return (
@@ -51,6 +53,12 @@ export function SystemNotice({ text, icon, kind = 'info', action, testID }: Syst
         <Text accessibilityLabel={kind === 'warn' ? `Warning: ${text}` : undefined} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.text]}>
           {text}
         </Text>
+        {note ? (
+          <View accessible style={styles.note}>
+            {note.icon ? <Icon name={note.icon} size={ICON.inline} color={COLOR.textSecondary} /> : null}
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.quiet]}>{note.text}</Text>
+          </View>
+        ) : null}
         {action ? (
           <Pressable
             accessibilityRole="button"
@@ -81,4 +89,6 @@ const styles = StyleSheet.create({
   body: { flex: 1, gap: SPACE.sm },
   text: { color: COLOR.textPrimary },
   action: { alignSelf: 'flex-start' },
+  note: { flexDirection: 'row', alignItems: 'center', gap: SPACE.xs },
+  quiet: { color: COLOR.textSecondary },
 })

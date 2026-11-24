@@ -470,7 +470,7 @@ export function defaultRoomName(kind: 'crew' | 'blend' | null): string {
  * ponytail: matched on the words, as the Banter's last message carries no `type` yet (S-7); read the kind once it does.
  */
 export function crewLikeLine(text: string, who: string): string | null {
-  return /^liked .+ for the crew$/.test(text.trim()) ? `${who} ${text.trim()}` : null
+  return /^(liked|waved at) .+ for the crew$/.test(text.trim()) ? `${who} ${text.trim()}` : null
 }
 
 /**

@@ -1,3 +1,4 @@
+import type { CrewWaveFrom } from './crewWaveBack'
 /**
  * A room's messages as the room screen holds them (`components/chat/RoomChat.tsx`), and
  * how the server's two shapes — the history page and the socket — become one.
@@ -28,6 +29,8 @@ export interface RoomMessage {
   waiting?: boolean
   /** A `poll` message's poll (SV8): until the server names it, the room says the poll as a notice. */
   poll_id?: string
+  /** A crew chat's `crew_waved` line (another crew or a person waved at this crew): what Wave back answers. */
+  crewWave?: CrewWaveFrom
   /** A sponsored broadcast's media (R3-D5 5.5). */
   media?: { kind: 'image'; uri: string } | { kind: 'video'; uri: string; poster?: string; duration: string }
 }
@@ -60,6 +63,15 @@ export function mediaOf(msg: any): RoomMessage['media'] {
 export function pollIdOf(msg: any): string | null {
   const id = msg?.pollId ?? msg?.poll_id ?? msg?.metadata?.pollId ?? msg?.metadata?.poll_id
   return typeof id === 'string' && id ? id : null
+}
+
+/** `metadata.kind: crew_waved` with its event and exactly who waved (a crew, or a person's room handle); anything else, nothing. */
+const crewWaveField = (msg: any): { crewWave?: CrewWaveFrom } => {
+  const m = msg?.metadata
+  if (!m || m.kind !== 'crew_waved' || typeof m.eventId !== 'string') return {}
+  if (typeof m.fromCrewId === 'string') return { crewWave: { eventId: m.eventId, fromCrewId: m.fromCrewId } }
+  if (typeof m.fromUserId === 'string') return { crewWave: { eventId: m.eventId, fromUserId: m.fromUserId } }
+  return {}
 }
 
 const pollField = (msg: any): { poll_id?: string } => {
@@ -96,6 +108,7 @@ export function roomMessagesFrom(raw: any[], userId?: string, roomKind?: string 
       message_type: sponsored ? 'sponsored' : msg.message_type || msg.type || 'text',
       ...(sponsored ? { media: mediaOf(msg) } : {}),
       ...pollField(msg),
+      ...crewWaveField(msg),
       // The server's field is `parent_id`; a reply lost its quote on reload otherwise.
       reply_to_message_id: msg.parent_id || msg.reply_to_message_id || msg.replyToMessageId || null,
       created_at: msg.created_at || msg.createdAt,

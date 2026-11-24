@@ -40,6 +40,8 @@ import { subscribeCheckInChanged } from '../../lib/checkIn'
 import { notOpenYetAt, opensInSpoken } from '../../lib/preEventRoom'
 import { useOpensAt, usePreEventRoom } from '../../lib/usePreEventRoom'
 import { newClientId } from '../../lib/clientId'
+import { waveBackFromChat, type WaveBackOutcome } from '../../lib/crewWaveBack'
+import { openBlend } from '../crews/CrewsView'
 import { BLEND_CLOSED_LINE, defaultRoomName, roomClosedLine, roomKindParam, UNKNOWN_ROOM_NAME } from '../../lib/crews'
 import { crewsApi } from '../../lib/crewsApi'
 import { COLOR, SIZE, SPACE } from '../../lib/design/tokens'
@@ -934,7 +936,14 @@ function RoomChatInner({ params, embedded }: { params: RoomChatParams; embedded?
     else if (reason === 'NOT_IN_ROOM') setOutOfRoom(true)
     else composer.setLock({ state: 'closed' })
   }
-  const handlersRef = useLatest({ openMenu, retrySend, react, pollRefusal, openSender })
+  /** A `crew_waved` line's Wave back, as this chat's crew (advisor L-A); a Mix it makes opens. */
+  const crewWaveBack = async (m: Message): Promise<WaveBackOutcome> => {
+    if (!m.crewWave || !crewIdParam) return { kind: 'error', text: 'Couldn’t wave back. Try again.' }
+    const outcome = await waveBackFromChat(m.crewWave, crewIdParam)
+    if (outcome.kind === 'done' && outcome.blend) openBlend(outcome.blend, defaultRoomName('blend'))
+    return outcome
+  }
+  const handlersRef = useLatest({ openMenu, retrySend, react, pollRefusal, openSender, crewWaveBack })
   const handlers = useMemo<RowHandlers>(
     () => ({
       menu: (m, a) => handlersRef.current.openMenu(m, a),
@@ -944,6 +953,7 @@ function RoomChatInner({ params, embedded }: { params: RoomChatParams; embedded?
       sender: (m) => handlersRef.current.openSender({ id: m.sender_id, name: m.sender_name }),
       link: (url) => showSheet(linkSheet(url, 'room')),
       pollRefusal: (reason) => handlersRef.current.pollRefusal(reason),
+      crewWaveBack: (m) => handlersRef.current.crewWaveBack(m),
     }),
     [handlersRef]
   )
