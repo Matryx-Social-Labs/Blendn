@@ -125,8 +125,9 @@ function FriendsScreenContent() {
   const listRef = useRef<FlatList<FriendItem>>(null)
   // The head a scrubber letter asked for whose page has not been read yet.
   const seeking = useRef<string | null>(null)
-  // A jump that read pages on its way: its first scroll runs before iOS has the new rows' height and is clamped short, so it lands
-  // again once the list grows (`onContentSizeChange`), once.
+  // A jump that read pages on its way: its first scroll runs before the platform has the new rows' height and is clamped short, and
+  // Android grows the list in more than one step. So it lands again each time the list grows (`onContentSizeChange`), until you
+  // drag the list yourself or pick another letter.
   const readOnWay = useRef(false)
   const landing = useRef<number | null>(null)
   /** Jumps to the sought head, or reads the next page on the way to it. */
@@ -146,7 +147,6 @@ function FriendsScreenContent() {
   const land = () => {
     if (landing.current === null) return
     listRef.current?.scrollToIndex({ index: landing.current, animated: false })
-    landing.current = null
   }
   const jumpTo = (letter: string) => {
     if (!letters || !heads) return
@@ -238,6 +238,7 @@ function FriendsScreenContent() {
             // The heads stick under the bar; `ListHeaderComponent` (when drawn) is index 0 to the list, so they shift by one.
             stickyHeaderIndices={items.flatMap((item, i) => (item.kind === 'head' ? [i + (list.friends.length && header ? 1 : 0)] : []))}
             onContentSizeChange={land}
+            onScrollBeginDrag={() => (landing.current = null)}
             onEndReachedThreshold={1.5}
             onEndReached={() => void shown.loadMore()}
             initialNumToRender={12}

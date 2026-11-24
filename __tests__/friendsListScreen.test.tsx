@@ -525,13 +525,16 @@ describe('A–Z (Flow 7 1-A)', () => {
     const data = list().props.data as FriendItem[]
     const z = data.findIndex((i) => i.kind === 'head' && i.title === 'Z')
     expect(scroll).toHaveBeenLastCalledWith({ index: z, animated: false })
-    // Seen on the sim (SCRUM-1099): that first scroll runs before iOS has the new rows' height, which clamps it short of Z. The
-    // jump lands again once the list grows, and only that once. Control: without the second scroll this fails.
+    // Seen on the sim and the emulator (SCRUM-1099): that first scroll runs before the platform has the new rows' height, which
+    // clamps it short of Z, and Android grows the list in more than one step. The jump lands again each time the list grows,
+    // until you drag the list yourself. Control: without the re-landing this fails.
     scroll.mockClear()
     await act(async () => fireEvent(list(), 'contentSizeChange', 402, 40000))
-    expect(scroll).toHaveBeenCalledWith({ index: z, animated: false })
     await act(async () => fireEvent(list(), 'contentSizeChange', 402, 41000))
-    expect(scroll).toHaveBeenCalledTimes(1)
+    expect(scroll.mock.calls).toEqual([[{ index: z, animated: false }], [{ index: z, animated: false }]])
+    await act(async () => fireEvent(list(), 'scrollBeginDrag', { nativeEvent: { contentOffset: { x: 0, y: 0 } } }))
+    await act(async () => fireEvent(list(), 'contentSizeChange', 402, 42000))
+    expect(scroll).toHaveBeenCalledTimes(2)
     scroll.mockRestore()
   })
 
