@@ -30,10 +30,8 @@ export function BlockedCrews({ onCount }: { onCount?: (count: number) => void })
   const [busy, setBusy] = useState(false)
   const seq = useRef(0)
 
-  const load = useCallback(async (page: number, limit: number) => {
-    const mine = ++seq.current
-    const result = await crewsApi.hiddenCrews(page, limit)
-    if (mine !== seq.current) return
+  /** An answer lands: page 1 replaces, a later page appends without repeats; a failure keeps what is on screen. */
+  const settle = useCallback((result: Awaited<ReturnType<typeof crewsApi.hiddenCrews>>, page: number, limit: number) => {
     if (!result.success || !result.data) {
       setRead((prev) => (prev.status === 'ready' ? prev : { status: 'failed' }))
       return
@@ -46,9 +44,18 @@ export function BlockedCrews({ onCount }: { onCount?: (count: number) => void })
     })
   }, [])
 
+  const load = async (page: number, limit: number) => {
+    const mine = ++seq.current
+    const result = await crewsApi.hiddenCrews(page, limit)
+    if (mine === seq.current) settle(result, page, limit)
+  }
+
   useEffect(() => {
-    void load(1, BLOCKED_CREWS_FIRST)
-  }, [load])
+    const mine = ++seq.current
+    void crewsApi.hiddenCrews(1, BLOCKED_CREWS_FIRST).then((result) => {
+      if (mine === seq.current) settle(result, 1, BLOCKED_CREWS_FIRST)
+    })
+  }, [settle])
 
   const total = read.status === 'ready' ? read.total : 0
   useEffect(() => onCount?.(total), [onCount, total])
