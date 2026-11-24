@@ -535,6 +535,22 @@ describe('A–Z (Flow 7 1-A)', () => {
     scroll.mockRestore()
   })
 
+  // Seen on the Android emulator (SCRUM-1099): a letter there rounds to whole pixels and stands ~14.3 apart, not 14, so a touch low
+  // on Y picked Z. The touch is read against the column's own measured pitch. Control: the fixed 14 picks प here.
+  it('a touch picks the letter drawn under it, at the pitch the column was laid out at', async () => {
+    await atScale(1)
+    const scroll = jest.spyOn(FlatList.prototype, 'scrollToIndex').mockImplementation(() => {})
+    mockGetFriends.mockResolvedValueOnce(page(sixtyFour(), 64))
+    mockByName.mockResolvedValueOnce(named(sixtyFourByName(), 64))
+    await open()
+    const data = list().props.data as FriendItem[]
+    // 29 letters at 15 apart (13 + 1 + 1 of rounding): Y is the 26th, from 375 to 390.
+    await act(async () => fireEvent(scrubber(), 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 24, height: 29 * 15 - 1 } } }))
+    await act(async () => fireEvent(scrubber(), 'responderGrant', { nativeEvent: { pageY: 25 * 15 + 12 } }))
+    expect(scroll).toHaveBeenLastCalledWith({ index: data.findIndex((i) => i.kind === 'head' && i.title === 'Y'), animated: false })
+    scroll.mockRestore()
+  })
+
   it('a jump within what is read does not land again when a later page grows the list', async () => {
     await atScale(1)
     const scroll = jest.spyOn(FlatList.prototype, 'scrollToIndex').mockImplementation(() => {})
