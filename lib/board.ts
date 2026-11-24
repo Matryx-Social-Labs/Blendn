@@ -26,6 +26,16 @@ export const BOARD_MAX_POST_LENGTH = 500
 
 /** What an ask that has not been accepted reads, whatever happened to it. */
 export const WAITING_LINE = 'Waiting on them'
+
+/**
+ * Said before the ask and before the accept (identity model, owner 2026-11-11; board `swap-names/` L-A, advisor): an
+ * accepted ask opens the chat with first names and photos already swapped, but only when both apps showed this first
+ * (`namesOnAccept` on the ask and on the accept). The flag is sent only from where the line is drawn.
+ */
+export const NAMES_ON_ACCEPT = {
+  ask: 'If they say yes, you’ll both see each other’s first name and photo.',
+  accept: 'If you say yes, you’ll both see each other’s first name and photo.',
+} as const
 /** An offer with no seats left. */
 export const FULL_LINE = 'Full'
 /** An ask that can no longer go anywhere: the post is gone, the night is over. */

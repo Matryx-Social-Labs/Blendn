@@ -6,6 +6,9 @@
  * in a toast, not in a withdrawal that fails.
  */
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native'
+import { NAMES_ON_ACCEPT } from '../lib/board'
+import { SPACE } from '../lib/design/tokens'
+import { StyleSheet } from 'react-native'
 
 jest.mock('expo-router', () => ({
   router: { back: jest.fn(), push: jest.fn() },
@@ -81,6 +84,8 @@ describe('answering an ask', () => {
     api.answerBoardRequest.mockResolvedValue({ success: true, data: { id: 'r-in', status: 'accepted', conversationId: 'conv-1' } })
     await render(<BoardRequestsSection refreshKey={0} onCount={jest.fn()} seatedPosts={new Set()} />)
 
+    // Said before Accept (identity model): with the asker's own, the chat opens swapped.
+    expect(await screen.findByText(NAMES_ON_ACCEPT.accept)).toBeTruthy()
     await fireEvent.press(await screen.findByLabelText('Accept the request from Arctic Falcon'))
 
     await waitFor(() =>
@@ -89,7 +94,7 @@ describe('answering an ask', () => {
         params: { conversationId: 'conv-1' },
       })
     )
-    expect(api.answerBoardRequest).toHaveBeenCalledWith('r-in', 'accept')
+    expect(api.answerBoardRequest).toHaveBeenCalledWith('r-in', 'accept', true)
     expect(screen.queryByText('Arctic Falcon')).toBeNull()
   })
 
@@ -104,6 +109,8 @@ describe('answering an ask', () => {
     api.answerBoardRequest.mockResolvedValue({ success: false, errorCode: 'CONFLICT', error })
     await render(<BoardRequestsSection refreshKey={0} onCount={jest.fn()} seatedPosts={new Set()} />)
 
+    // Said before Accept (identity model): with the asker's own, the chat opens swapped.
+    expect(await screen.findByText(NAMES_ON_ACCEPT.accept)).toBeTruthy()
     await fireEvent.press(await screen.findByLabelText('Accept the request from Arctic Falcon'))
 
     expect(await screen.findByText(line)).toBeTruthy()
@@ -114,11 +121,22 @@ describe('answering an ask', () => {
     await waitFor(() => expect(api.getBoardRequests).toHaveBeenCalledTimes(2))
   })
 
+  it('sets the names line apart as board 06 draws it: 20 pt above, 22 below (with the card gap 8)', async () => {
+    api.getBoardRequests.mockResolvedValue(listing([INCOMING]))
+    await render(<BoardRequestsSection refreshKey={0} onCount={jest.fn()} seatedPosts={new Set()} />)
+
+    const line = StyleSheet.flatten((await screen.findByTestId('board-request-r-in-consent')).props.style)
+    expect(line.marginTop + SPACE.sm).toBe(20)
+    expect(line.marginBottom + SPACE.sm).toBe(22)
+  })
+
   it('an ask the reload no longer lists goes, note and all', async () => {
     api.getBoardRequests.mockResolvedValueOnce(listing([INCOMING])).mockResolvedValue(listing([]))
     api.answerBoardRequest.mockResolvedValue({ success: false, errorCode: 'CONFLICT', error: 'That event has ended' })
     await render(<BoardRequestsSection refreshKey={0} onCount={jest.fn()} seatedPosts={new Set()} />)
 
+    // Said before Accept (identity model): with the asker's own, the chat opens swapped.
+    expect(await screen.findByText(NAMES_ON_ACCEPT.accept)).toBeTruthy()
     await fireEvent.press(await screen.findByLabelText('Accept the request from Arctic Falcon'))
     await waitFor(() => expect(screen.queryByText('Arctic Falcon')).toBeNull())
   })
@@ -132,6 +150,8 @@ describe('answering an ask', () => {
     })
     await render(<BoardRequestsSection refreshKey={0} onCount={jest.fn()} seatedPosts={new Set()} />)
 
+    // Said before Accept (identity model): with the asker's own, the chat opens swapped.
+    expect(await screen.findByText(NAMES_ON_ACCEPT.accept)).toBeTruthy()
     await fireEvent.press(await screen.findByLabelText('Accept the request from Arctic Falcon'))
 
     await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('Only the person who was asked can answer', 'error', { haptic: 'error' }))

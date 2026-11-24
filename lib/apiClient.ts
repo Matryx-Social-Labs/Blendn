@@ -3681,11 +3681,12 @@ class ApiClientClass {
   async getConversation(conversationId: string): Promise<ApiResponse<{
     id: string
     /**
-     * Already resolved by the server: a pseudonym until they reveal, and
-     * `image` null until then too. Never re-derive this on the client -- the
-     * whole rule lives in one place server-side so it cannot drift.
+     * Already resolved by the server: a pseudonym until you have both swapped names, then their first name; `image` null
+     * until then. `id` is the chat's `rh_` handle always. Never re-derive this on the client.
      */
     otherUser: { id: string; name: string | null; image: string | null }
+    /** Your own room pseudonym in this conversation (your side of the strip). Null for a message request. */
+    yourPseudonym?: string | null
     /**
      * Opened from a mutual like rather than an accepted message request.
      *
@@ -3700,15 +3701,15 @@ class ApiClientClass {
      * the reveal fields being absent drew the match header on a request.
      */
     pseudonymous?: boolean
-    /** Whether you have shown them who you are. */
+    /** You tapped Swap names. */
     youRevealed?: boolean
-    /** Whether they have shown you. */
+    /** You may see their name and photo: true only once you have BOTH tapped. */
     theyRevealed?: boolean
-    /** Whether they asked you to. There is no "declined". */
+    /** They tapped Swap names and you have not. There is no "declined". */
     revealRequested?: boolean
     /**
      * Whether to offer "Add friend" (SCRUM-750). Read it through `parseFriendOffer`; absent from a server that does not
-     * send it. `otherUser.id` is a handle until they reveal: only an offer with `canAdd` makes it a real id.
+     * send it. `otherUser.id` is the chat's handle; the friend request sends it as is (the server resolves it).
      */
     friend?: unknown
     createdAt: string
@@ -3718,11 +3719,9 @@ class ApiClientClass {
   }
 
   /**
-   * Show them who you are. One way -- the server has no path back to false.
-   *
-   * Refused with `reveal_incomplete` when there is no name or no photo:
-   * revealing shows exactly those two things, so without them the switch turns
-   * on and their screen is unchanged.
+   * Swap names (identity model): your tap, which is also the ask. Nothing shows until both have tapped; `mutual` is true
+   * once they have. A repeat tap is a no-op. Refused with `reveal_incomplete` without a name and a photo, and 400 on a
+   * conversation that was never pseudonymous.
    */
   async revealInConversation(conversationId: string): Promise<ApiResponse<{
     revealed: boolean
@@ -3736,20 +3735,9 @@ class ApiClientClass {
     )
   }
 
-  /**
-   * Ask them to reveal.
-   *
-   * Idempotent by construction -- it sets one boolean on their side, so asking
-   * twice changes nothing and sends nothing. There is deliberately no decline
-   * to receive back.
-   */
-  async requestReveal(conversationId: string): Promise<ApiResponse<{ requested: boolean }>> {
-    return this.queuedRequest(
-      `/api/mobile/conversations/${pathSegment(conversationId)}/reveal`,
-      { method: 'POST', body: JSON.stringify({ ask: true }) },
-      true,
-      3
-    )
+  /** Take your Swap names tap back while they have not tapped. `CONFLICT` (409) once you have both swapped: it is kept. */
+  async cancelReveal(conversationId: string): Promise<ApiResponse<{ revealed: false }>> {
+    return this.queuedRequest(`/api/mobile/conversations/${pathSegment(conversationId)}/reveal`, { method: 'DELETE' }, true, 3)
   }
 
   /**
@@ -4172,11 +4160,14 @@ class ApiClientClass {
     )
   }
 
-  /** No message: asking is one tap, and "can I join?" needs no essay. */
-  async askOnBoard(eventId: string, postId: string): Promise<ApiResponse<{ id: string; status: 'pending' }>> {
+  /**
+   * No message: asking is one tap, and "can I join?" needs no essay. `namesOnAccept`: the card showed "If they say yes,
+   * you'll both see each other's first name and photo." With the accepter's own, the chat opens swapped.
+   */
+  async askOnBoard(eventId: string, postId: string, namesOnAccept: boolean): Promise<ApiResponse<{ id: string; status: 'pending' }>> {
     return this.queuedRequest(
       `/api/mobile/events/${encodeURIComponent(eventId)}/board/${encodeURIComponent(postId)}/requests`,
-      { method: 'POST', body: JSON.stringify({}) },
+      { method: 'POST', body: JSON.stringify(namesOnAccept ? { namesOnAccept: true } : {}) },
       true,
       2
     )
@@ -4186,14 +4177,18 @@ class ApiClientClass {
     return this.queuedRequest('/api/mobile/board/requests')
   }
 
-  /** `conversationId` comes back on accept: the pseudonymous DM it opened. */
+  /**
+   * `conversationId` comes back on accept: the DM it opened. `namesOnAccept` (accept only): the row showed "If you say yes,
+   * you'll both see each other's first name and photo." With the asker's own, that DM opens swapped.
+   */
   async answerBoardRequest(
     requestId: string,
-    action: 'accept' | 'decline' | 'withdraw'
+    action: 'accept' | 'decline' | 'withdraw',
+    namesOnAccept = false
   ): Promise<ApiResponse<{ id: string; status: BoardRequestStatus; conversationId?: string }>> {
     return this.queuedRequest(
       `/api/mobile/board/requests/${encodeURIComponent(requestId)}`,
-      { method: 'PATCH', body: JSON.stringify({ action }) },
+      { method: 'PATCH', body: JSON.stringify(action === 'accept' && namesOnAccept ? { action, namesOnAccept: true } : { action }) },
       true,
       2
     )

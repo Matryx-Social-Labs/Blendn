@@ -38,7 +38,7 @@ import { DockRow } from '../components/ds/DockRow'
 import { NAVIGATOR_ROUTES, TextSizeBoundary } from '../components/TextSizeBoundary'
 import { MAX_FONT_SCALE, SPACE } from '../lib/design/tokens'
 import { ChatHeader } from '../components/chat/ChatHeader'
-import { MatchOpenerCard, NudgeLine, RevealLine, SayHi } from '../components/chat/DmParts'
+import { MatchOpenerCard, RevealLine, SayHi } from '../components/chat/DmParts'
 import { RevealBar } from '../components/ds/RevealBar'
 import { TextArea, TextField } from '../components/ds/TextField'
 import { Composer } from '../components/ds/Composer'
@@ -152,7 +152,6 @@ describe('at AX XXXL (fontScale 3.571)', () => {
         />
         <MatchOpenerCard you={face} them={face} title="You both waved" body="Say something about the night." />
         <SayHi line="Say hi to Tumbling Moose." onPress={jest.fn()} />
-        <NudgeLine text="Tumbling Moose asked to know who you are" />
       </View>
     )
     expect(screen.getByText('Both anonymous').props.maxFontSizeMultiplier).toBe(CONTROL_FONT_CAP)
@@ -165,7 +164,7 @@ describe('at AX XXXL (fontScale 3.571)', () => {
   it('the DM’s reveal bar and a form field’s name stop at their caps (D-3, D-8: EMAIL drew at 3.571x over a 1.3x input; now its label cap)', async () => {
     await render(
       <View>
-        <RevealBar you={{ name: 'Asha', face: { kind: 'creature', pseudonym: 'Tumbling Moose' } as never }} them={{ name: 'Tumbling Moose', face: { kind: 'creature', pseudonym: 'Tumbling Moose' } as never }} state="youOnly" />
+        <RevealBar you={{ name: 'Asha', face: { kind: 'creature', pseudonym: 'Tumbling Moose' } as never }} them={{ name: 'Tumbling Moose', face: { kind: 'creature', pseudonym: 'Tumbling Moose' } as never }} state="mine" />
         <TextField label="EMAIL" value="" onChangeText={jest.fn()} />
       </View>
     )

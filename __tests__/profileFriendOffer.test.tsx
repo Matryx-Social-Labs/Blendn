@@ -275,15 +275,6 @@ describe('Accept is felt on press-in', () => {
 })
 
 describe('when it does not go through', () => {
-  it('NOT_A_REVEALED_MATCH: "Reveal yourself first", and the button stays', async () => {
-    api.sendFriendRequest.mockResolvedValue({ success: false, errorCode: 'NOT_FOUND', reasonCode: 'NOT_A_REVEALED_MATCH', error: 'Not found' } as never)
-    await open(OFFER('none', true))
-    await act(async () => fireEvent.press(await screen.findByTestId('profile-friend')))
-    await flush()
-    expect(mockShowToast).toHaveBeenCalledWith('Reveal yourself first', 'info')
-    expect(screen.getByText('Add friend')).toBeTruthy()
-  })
-
   it('any other failure: the standard error toast, and the button stays', async () => {
     api.sendFriendRequest.mockResolvedValue({ success: false, errorCode: 'NOT_FOUND', error: 'Not found' } as never)
     await open(OFFER('none', true))

@@ -51,7 +51,10 @@ const CELLS = [
   'ds-person-live',
   'ds-rolling-q50',
   'ds-rolling-live',
-  'ds-reveal-asked',
+  'ds-reveal-none',
+  'ds-reveal-mine',
+  'ds-reveal-theirs',
+  'ds-reveal-both',
   'ds-timering-venue',
 ]
 

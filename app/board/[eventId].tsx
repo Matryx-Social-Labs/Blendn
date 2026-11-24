@@ -490,7 +490,8 @@ export function BoardScreen() {
       setLocalAsks((prev) => ({ ...prev, [post.id]: { kind: 'asking' } }))
       let next: AskState
       try {
-        const result = await apiClient.askOnBoard(eventId, post.id)
+        // The card drew NAMES_ON_ACCEPT.ask above the button (BoardSections AskFooter), so the ask carries the flag.
+        const result = await apiClient.askOnBoard(eventId, post.id, true)
         if (result.success) {
           // The server's yes (Flow 4 Board: no press haptic, H.success when the ask is recorded).
           H.success()

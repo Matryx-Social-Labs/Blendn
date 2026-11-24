@@ -10,7 +10,7 @@ import { KeyboardFrame } from '../../components/chat/KeyboardFrame'
 import { ChatHeader, chatFeedFrame, chatHeaderBottom } from '../../components/chat/ChatHeader'
 import { FeedSkeleton, HEADER_FACE, LoadOlder, NewestChip } from '../../components/chat/ChatParts'
 import { useSkeletonCrossfade } from '../../components/motion/useSkeletonCrossfade'
-import { DmMessageRow, MatchOpenerCard, NudgeLine, PhotoPreviewSheet, quoteText, RevealLine, RevealSheets, SayHi, type DmRowHandlers } from '../../components/chat/DmParts'
+import { DmMessageRow, MatchOpenerCard, PhotoPreviewSheet, quoteText, RevealLine, SayHi, SwapNotYetSheet, type DmRowHandlers } from '../../components/chat/DmParts'
 import { personFace } from '../../lib/personFace'
 import { Avatar } from '../../components/ds/Avatar'
 import { ChatBubble } from '../../components/ds/ChatBubble'
@@ -156,9 +156,12 @@ function PrivateChatInner() {
   /* The identity of this conversation, from the server: only it can say whether they revealed to you. */
   const [reveal, setReveal] = useState<ConversationRevealState | null>(null)
   const [revealBusy, setRevealBusy] = useState(false)
-  /** You asked them this session: the Asked state (the server keeps no "you asked"). */
-  const [asked, setAsked] = useState(false)
-  const [revealSheet, setRevealSheet] = useState<'confirm' | { notYet: string } | null>(null)
+  /** Swap names refused for want of a photo: the server's sentence, with the way to add one. */
+  const [notYet, setNotYet] = useState<string | null>(null)
+  /** Any other refusal of a swap or a cancel, said in the strip. */
+  const [swapError, setSwapError] = useState<string | null>(null)
+  /** Your own room pseudonym in this chat (your side of the strip); null for a message request. */
+  const [yourPseudonym, setYourPseudonym] = useState<string | null>(null)
   /* The conversation's own record did not load: options says so and offers to try again. */
   const [revealFailed, setRevealFailed] = useState(false)
   const [revealAttempt, setRevealAttempt] = useState(0)
@@ -189,6 +192,7 @@ function PrivateChatInner() {
       setOtherId(r.data.otherUser?.id || null)
       setOtherImage(r.data.otherUser?.image || null)
       setFriend(parseFriendOffer(r.data.friend))
+      setYourPseudonym(r.data.yourPseudonym ?? null)
       setReveal({
         displayName: r.data.otherUser?.name || 'Someone',
         youRevealed: r.data.youRevealed ?? false,
@@ -209,7 +213,7 @@ function PrivateChatInner() {
   useEffect(() => {
     const sub = Notifications.addNotificationReceivedListener((n) => {
       const data = n.request.content.data
-      if (data?.type === 'reveal' && data.conversationId === conversation) setRevealAttempt((x) => x + 1)
+      if ((data?.type === 'reveal' || data?.type === 'reveal_request') && data.conversationId === conversation) setRevealAttempt((x) => x + 1)
     })
     return () => sub.remove()
   }, [conversation])
@@ -228,11 +232,10 @@ function PrivateChatInner() {
   const otherTypingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const setMessage = (id: string, change: (m: PrivateMessage) => PrivateMessage) => setMessages((prev) => prev.map((m) => (m.id === id ? change(m) : m)))
 
-  // Their profile, only once they are a name to you: an accepted request, or a match who revealed.
+  // Their profile, only on an accepted message request: a swap shows a first name and a photo in this chat, never the profile.
   const profileId = otherId || idParam(otherUserId) || undefined
-  const theirRealName = !!reveal && (reveal.pseudonymous === false || reveal.theyRevealed)
   const openProfile =
-    theirRealName && profileId
+    reveal?.pseudonymous === false && profileId
       ? () => router.push({ pathname: '/user/[id]', params: { id: String(profileId) } } as never)
       : undefined
   // Nobody is called "Chat" (r7 M10: a failed thread titled itself "Chat" and offered "Message Chat"): with no name yet, the
@@ -246,7 +249,7 @@ function PrivateChatInner() {
   const friendAsk = useFriendAsk(name)
   const friendNow = friendAction(friend)
   const friendOffered = friendNow?.lit === true
-  const view = reveal ? revealView(reveal, asked, friendOffered) : null
+  const view = reveal ? revealView(reveal, friendOffered) : null
   /** `inline`: from the options sheet, which shows a refusal under its row instead of a toast. */
   const addFriend = async (inline: boolean): Promise<{ ok: true } | { ok: false; error: string }> => {
     const result = await friendAsk.ask(otherId, { inline })
@@ -262,39 +265,44 @@ function PrivateChatInner() {
     if (panelOpen) setFoldedPanel(panelKey)
   }
 
-  /* Ask them: the Asked state on the server's yes. No haptic (Flow 5 DM annotation). */
-  const askThem = () => {
+  /*
+   * Swap names (identity model; board `swap-names/`, advisor pick A): one tap, no confirm, because nothing shows until you
+   * have both tapped and you can cancel until then. Your tap is also the ask. H.success only when the server says you have
+   * both swapped; the names and photos then resolve in (#23). Refused for want of a photo: the Not yet sheet, with the way
+   * to add one. Any other refusal is said in the strip.
+   */
+  const swapNames = () => {
     if (!reveal || revealBusy) return
     setRevealBusy(true)
-    void apiClient
-      .requestReveal(conversation)
-      .then((r) => {
-        if (r.success) setAsked(true)
-        else showToast(userMessage(r, "Couldn’t ask them. Try again."), 'error', { haptic: 'error' })
-      })
-      .finally(() => setRevealBusy(false))
-  }
-
-  /*
-   * Show them who you are. The confirmation is not ceremony: the server has no
-   * path back, so the sheet says so before the tap. On the server's yes the
-   * names resolve in (#23) with H.success; the photo gate's refusal is the
-   * server's sentence, verbatim, in the Not yet sheet.
-   */
-  const showThem = () => {
-    setRevealBusy(true)
+    setSwapError(null)
     void apiClient
       .revealInConversation(conversation)
       .then((r) => {
         if (r.success) {
-          H.success()
-          setRevealSheet(null)
+          if (r.data?.mutual) H.success()
           setReveal((prev) => (prev ? { ...prev, youRevealed: true } : prev))
-          // Their reveal may already be in: your reveal is what can turn Add friend on, and only the server says so.
+          // The names (and Add friend) are the server's to give: read the conversation again.
           setRevealAttempt((n) => n + 1)
+        } else if (r.errorCode === 'reveal_incomplete') {
+          setNotYet(userMessage(r, 'Add a photo to your profile first'))
         } else {
-          setRevealSheet({ notYet: userMessage(r, "Couldn’t reveal. Try again.") })
+          setSwapError(userMessage(r, 'Couldn’t swap names. Try again.'))
         }
+      })
+      .finally(() => setRevealBusy(false))
+  }
+
+  /* Cancel while they haven't tapped. A 409 means they just did: the read again shows you both swapped. */
+  const cancelSwap = () => {
+    if (!reveal || revealBusy) return
+    setRevealBusy(true)
+    setSwapError(null)
+    void apiClient
+      .cancelReveal(conversation)
+      .then((r) => {
+        if (r.success) setReveal((prev) => (prev ? { ...prev, youRevealed: false } : prev))
+        else if (r.errorCode !== 'CONFLICT') setSwapError(userMessage(r, 'Couldn’t cancel. Try again.'))
+        setRevealAttempt((n) => n + 1)
       })
       .finally(() => setRevealBusy(false))
   }
@@ -743,7 +751,8 @@ function PrivateChatInner() {
   /* The options: the conversation's own sheet (lib/safetyUtils), or why it can't open yet. */
   const openOptions = () => {
     if (reveal) {
-      return showConversationOptions(conversation, name, reveal.youRevealed || reveal.pseudonymous === false, {
+      // They know you once you have both swapped (a one-sided tap shows nothing), or on a request that was never anonymous.
+      return showConversationOptions(conversation, name, reveal.theyRevealed || reveal.pseudonymous === false, {
         onLeft: () => router.back(),
         fromMatch: reveal.fromMatch ?? true,
         onViewProfile: openProfile,
@@ -786,7 +795,9 @@ function PrivateChatInner() {
    * server's photo or their initial (never a photo from the route); yours the same once you revealed.
    */
   const themFace: Face = ended ? { kind: 'creature', pseudonym: 'Conversation' } : directHeaderAvatar(reveal, otherImage, name)
-  const youFace: Face = reveal?.youRevealed ? personFace({ named: true, name: authUser?.name || YOU, photo: authUser?.image }) : { kind: 'creature', pseudonym: 'You' }
+  // Yours as they see it: your pseudonym's creature until you have both swapped (a one-sided tap shows nothing), then your photo.
+  const swapped = !!reveal && reveal.pseudonymous && reveal.theyRevealed
+  const youFace: Face = swapped ? personFace({ named: true, name: authUser?.name || YOU, photo: authUser?.image }) : { kind: 'creature', pseudonym: yourPseudonym || 'You' }
   // Photos once you can both see each other, or the conversation never hid anyone (R9, admin #697).
   const photosAllowed = !!reveal && (!reveal.pseudonymous || (reveal.youRevealed && reveal.theyRevealed))
   const { fontScale } = useWindowDimensions()
@@ -929,7 +940,7 @@ function PrivateChatInner() {
                   reply={replyingTo ? { name: replyingTo.senderId === myId ? 'yourself' : name, text: quoteText(quoteFrom(replyingTo)) } : null}
                   onCancelReply={() => setReplyingTo(null)}
                   // A real name by its first name, so the placeholder holds one line (C30); a pseudonym is whole ("Arctic Falcon").
-                  placeholder={`Message ${theirRealName ? firstNameOf(name) : name}`}
+                  placeholder={`Message ${reveal && (!reveal.pseudonymous || reveal.theyRevealed) ? firstNameOf(name) : name}`}
                   onAttach={photosAllowed ? () => void attach() : undefined}
                   onFocus={() => setTimeout(() => scrollToBottom(false), 120)}
                 />
@@ -953,7 +964,7 @@ function PrivateChatInner() {
         onMore={openOptions}
         // Their name once they are one; until then the face and the reveal line reopen a panel that was folded away.
         onIdentity={ended ? undefined : (openProfile ?? (panelKey !== null && !panelOpen ? () => setFoldedPanel(null) : undefined))}
-        identityHint={openProfile ? 'Opens their profile' : 'Shows the reveal options'}
+        identityHint={openProfile ? 'Opens their profile' : 'Shows Swap names'}
       />
       {/* The reveal stays in view under the header while either of you is a pseudonym; the feed starts below it. */}
       {panelOpen && view?.bar ? (
@@ -967,10 +978,12 @@ function PrivateChatInner() {
         >
           <RevealBar
             state={view.bar}
-            you={{ face: youFace, name: reveal?.youRevealed ? authUser?.name?.split(' ')[0] || YOU : YOU }}
+            you={{ face: youFace, name: swapped ? authUser?.name?.split(' ')[0] || YOU : yourPseudonym || YOU }}
             them={{ face: themFace, name }}
-            onShow={() => setRevealSheet('confirm')}
-            onAsk={askThem}
+            onSwap={swapNames}
+            onCancel={cancelSwap}
+            busy={revealBusy}
+            error={swapError}
             friend={
               view.bar === 'both' && friendNow
                 ? { label: friendNow.label, accept: friendNow.kind === 'accept', busy: friendAsk.busy, onPress: () => void addFriend(false) }
@@ -978,7 +991,6 @@ function PrivateChatInner() {
             }
             testID="dm-reveal"
           />
-          {view.nudge ? <NudgeLine text={view.nudge} /> : null}
         </Animated.View>
       ) : null}
       {ended ? null : <RealtimeStatusBanner status={socketStatus} style={{ ...styles.banner, top: top + barSpace }} />}
@@ -1035,14 +1047,11 @@ function PrivateChatInner() {
         }}
       />
 
-      <RevealSheets
-        name={name}
-        sheet={revealSheet}
-        busy={revealBusy}
-        onShow={showThem}
-        onClose={() => setRevealSheet(null)}
+      <SwapNotYetSheet
+        message={notYet}
+        onClose={() => setNotYet(null)}
         onAddPhoto={() => {
-          setRevealSheet(null)
+          setNotYet(null)
           router.push('/edit-profile')
         }}
       />

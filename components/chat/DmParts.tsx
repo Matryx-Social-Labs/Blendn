@@ -3,7 +3,6 @@ import { memo, useState } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 import Animated, { FadeOut } from 'react-native-reanimated'
 
-import { revealConfirmation } from '../../lib/conversationReveal'
 import { COLOR, DURATION, ICON, MAX_FONT_SCALE, RADIUS, SPACE } from '../../lib/design/tokens'
 import type { PrivateMessage } from '../../lib/directThread'
 import { clockTime } from '../../lib/time'
@@ -115,61 +114,24 @@ export function RevealLine({ seen, text }: { seen: boolean; text: string }) {
   )
 }
 
-/** "{name} asked to know who you are", under the bar (Flow 5 DM #02). */
-export function NudgeLine({ text }: { text: string }) {
-  const bold = useBoldText()
-  return <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.ink, styles.centre]}>{text}</Text>
-}
-
 /**
- * Showing them who you are (Flow 5 DM #06–#07): the confirm says it can't be
- * undone before the tap — Show them is lit in the screen's rose, never the gradient
- * (Send is this screen's primary), and its haptic is the server's H.success.
- * Refused for want of a photo, Not yet says the server's sentence.
+ * Swap names refused for want of a photo (`reveal_incomplete`): the server's sentence, and the way to add one. Swap names
+ * itself has no confirm: nothing shows until you have both tapped, and you can cancel until then.
  */
-export function RevealSheets({
-  name,
-  sheet,
-  busy,
-  onShow,
-  onClose,
-  onAddPhoto,
-}: {
-  name: string
-  sheet: 'confirm' | { notYet: string } | null
-  busy: boolean
-  onShow: () => void
-  onClose: () => void
-  onAddPhoto: () => void
-}) {
-  const copy = revealConfirmation(name)
+export function SwapNotYetSheet({ message, onClose, onAddPhoto }: { message: string | null; onClose: () => void; onAddPhoto: () => void }) {
   return (
-    <>
-      <Sheet
-        visible={sheet === 'confirm'}
-        onClose={onClose}
-        icon="eye"
-        title={copy.title}
-        body={copy.body}
-        actions={[
-          { label: copy.confirm, kind: 'lit', onPress: onShow, loading: busy, pressHaptic: false },
-          { label: 'Not now', kind: 'tertiary', onPress: onClose },
-        ]}
-        testID="dm-reveal-sheet"
-      />
-      <Sheet
-        visible={!!sheet && sheet !== 'confirm'}
-        onClose={onClose}
-        icon="image"
-        title="Not yet"
-        body={sheet && sheet !== 'confirm' ? sheet.notYet : undefined}
-        actions={[
-          { label: 'Add a photo', kind: 'lit', onPress: onAddPhoto },
-          { label: 'Close', kind: 'tertiary', onPress: onClose },
-        ]}
-        testID="dm-not-yet"
-      />
-    </>
+    <Sheet
+      visible={!!message}
+      onClose={onClose}
+      icon="image"
+      title="Not yet"
+      body={message ?? undefined}
+      actions={[
+        { label: 'Add a photo', kind: 'lit', onPress: onAddPhoto },
+        { label: 'Close', kind: 'tertiary', onPress: onClose },
+      ]}
+      testID="dm-not-yet"
+    />
   )
 }
 

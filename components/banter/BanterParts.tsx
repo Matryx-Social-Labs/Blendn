@@ -2,7 +2,7 @@ import { BAR_BOTTOM, barCircle, barHeight, barTop } from '../../lib/barGeometry'
 import { useBanterPress } from './pressGuard'
 import { Image } from 'expo-image'
 import type { ReactNode } from 'react'
-import { Platform, Pressable, StyleSheet, Text, View } from 'react-native'
+import { Platform, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native'
 import Animated, { Easing, FadeIn, FadeOut, withTiming } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
@@ -227,11 +227,25 @@ export function BlendLiveCard({
  * card, the asker and their note verbatim in two lines, the time, ⋯, then
  * Decline and Accept (or Join, for a crew invite) at 48 — Decline first.
  */
+/** A quiet line with an eye: what an answer will show (the Lobby's names-on-accept, `NAMES_ON_ACCEPT`). */
+export function EyeNote({ text, testID, style }: { text: string; testID?: string; style?: StyleProp<ViewStyle> }) {
+  const bold = useBoldText()
+  return (
+    <View testID={testID} style={[styles.eyeNote, style]}>
+      <Icon name="eye" size={ICON.inline} color={COLOR.textSecondary} />
+      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary, styles.grow]}>
+        {text}
+      </Text>
+    </View>
+  )
+}
+
 export function RequestCard({
   face,
   name,
   met,
   note,
+  consent,
   foot,
   time,
   pending = false,
@@ -246,6 +260,8 @@ export function RequestCard({
   /** Where you met ("Met in the room at …", `metInLine`), on its own line in the world's light (Flow 5 · B-A rq). */
   met?: string | null
   note: string
+  /** What saying yes will show, said above Decline / Accept (`EyeNote`). */
+  consent?: string
   /** A quiet line under the answers: what became of one that did not go through. */
   foot?: string
   time: string
@@ -305,6 +321,8 @@ export function RequestCard({
           </View>
           {onMore ? <IconButton icon="ellipsis" accessibilityLabel={`More options for the request from ${name}`} onPress={onMore} testID={testID && `${testID}-more`} /> : null}
         </View>
+        {/* Board 06 (L-A): the line stands apart from the row above and the answer below (20 / 22 pt with the card's gap). */}
+        {consent ? <EyeNote text={consent} testID={testID && `${testID}-consent`} style={styles.requestConsent} /> : null}
         <View style={styles.requestActions}>
           <Button
             kind="secondary"
@@ -646,6 +664,8 @@ const styles = StyleSheet.create({
   requestHead: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
   requestWho: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
   requestActions: { flexDirection: 'row', gap: SPACE.sm },
+  requestConsent: { marginTop: SPACE.md, marginBottom: SPACE.md + SPACE.xxs },
+  eyeNote: { flexDirection: 'row', alignItems: 'flex-start', gap: SPACE.xs },
   row: { minHeight: ROW_HEIGHT, flexDirection: 'row', alignItems: 'center', gap: SPACE.md, backgroundColor: COLOR.ink },
   rowPressed: { backgroundColor: COLOR.surfaceSunken },
   rowText: { flex: 1, minWidth: 0, gap: SPACE.xxs },

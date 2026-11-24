@@ -1,7 +1,7 @@
 /**
  * "Add friend" in a match's options (SCRUM-750), rendered: the owner's rule is "if users have matched and they have
  * revealed themselves we can then give an option to add as friend". The server decides (`friend: { state, canAdd }`);
- * the thread draws each state, asks with their real id and never a handle, and says what went wrong in the app's words.
+ * the thread draws each state, asks with the chat’s handle (the server resolves it), and says what went wrong in the app's words.
  */
 import { act, fireEvent, render, screen, within } from '@testing-library/react-native'
 
@@ -24,7 +24,7 @@ jest.mock('../lib/apiClient', () => ({
     getConversation: jest.fn(),
     getConversationMessages: jest.fn(),
     sendPrivateMessage: jest.fn(),
-    requestReveal: jest.fn(),
+    cancelReveal: jest.fn(),
     revealInConversation: jest.fn(),
     sendFriendRequest: jest.fn(),
   },
@@ -128,8 +128,8 @@ describe('what the options draw for each state', () => {
     await openOptions(withFriend({ state: 'none', canAdd: true }))
     expect(sheet().getByLabelText('Add friend')).toBeTruthy()
     expect(colourOf('Add friend')).toBe(COLOR.selectionRoseGlyph)
-    // Beside View profile and Unmatch, which keep their place.
-    expect(screen.getByLabelText('View profile')).toBeTruthy()
+    // Beside Unmatch. No View profile: a swap shows a first name and a photo in this chat, never the profile (identity model).
+    expect(screen.queryByLabelText('View profile')).toBeNull()
     expect(screen.getByLabelText('Unmatch…')).toBeTruthy()
   })
 
@@ -220,13 +220,6 @@ describe('when it does not go through, the row stays and the sheet says why (no 
     await flush()
   }
 
-  it('NOT_A_REVEALED_MATCH says to reveal first', async () => {
-    await press({ success: false, errorCode: 'NOT_FOUND', reasonCode: 'NOT_A_REVEALED_MATCH', error: 'Not found' })
-    expect(sheet().getByText('Reveal yourself first')).toBeTruthy()
-    expect(sheet().getByLabelText('Add friend')).toBeTruthy()
-    expect(mockShowToast).not.toHaveBeenCalled()
-  })
-
   it.each([
     ['any other 404', { success: false, errorCode: 'NOT_FOUND', error: 'Not found' }],
     ['a thrown request', new Error('network')],
@@ -251,13 +244,13 @@ describe('when it does not go through, the row stays and the sheet says why (no 
     expect(sheet().getByLabelText('Add friend')).toBeTruthy()
   })
 
-  it('never calls with a handle, even if the server offered one', async () => {
+  it('asks with the chat’s handle, which the server resolves (a swap never hands over the account id)', async () => {
+    api.sendFriendRequest.mockResolvedValue({ success: true, data: { state: 'requested' } } as never)
     api.getConversation.mockResolvedValue(withFriend({ state: 'none', canAdd: true }, { otherUser: { id: 'rh_dm_handle', name: 'Mika', image: null } }))
     await openOptions(withFriend({ state: 'none', canAdd: true }, { otherUser: { id: 'rh_dm_handle', name: 'Mika', image: null } }))
     await act(async () => fireEvent.press(sheet().getByLabelText('Add friend')))
     await flush()
-    expect(api.sendFriendRequest).not.toHaveBeenCalled()
-    expect(sheet().getByText("That didn’t go through. Try again.")).toBeTruthy()
+    expect(api.sendFriendRequest).toHaveBeenCalledWith({ userId: 'rh_dm_handle' })
   })
 })
 
@@ -454,11 +447,11 @@ describe('their reveal, live', () => {
   })
 })
 
-it('revealing yourself re-reads the conversation, so Add friend appears once they had revealed', async () => {
-  const theyOnly = { ...revealed, youRevealed: false, friend: { state: 'none', canAdd: false } }
-  api.getConversation.mockResolvedValueOnce({ success: true, data: theyOnly } as never)
+it('the tap that completes the swap re-reads the conversation, so Add friend appears', async () => {
+  const theirs = { ...revealed, youRevealed: false, theyRevealed: false, revealRequested: true, friend: { state: 'none', canAdd: false } }
+  api.getConversation.mockResolvedValueOnce({ success: true, data: theirs } as never)
   api.getConversation.mockResolvedValue(withFriend({ state: 'none', canAdd: true }))
-  api.revealInConversation.mockResolvedValue({ success: true } as never)
+  api.revealInConversation.mockResolvedValue({ success: true, data: { revealed: true, mutual: true } } as never)
   await render(
     <>
       <PrivateChat />
@@ -466,13 +459,11 @@ it('revealing yourself re-reads the conversation, so Add friend appears once the
     </>
   )
   await flush()
-  await act(async () => fireEvent.press(screen.getByLabelText('Show who you are')))
-  await act(async () => fireEvent.press(screen.getByText('Show them')))
+  await act(async () => fireEvent.press(screen.getByLabelText('Swap names')))
   await flush()
   expect(api.getConversation).toHaveBeenCalledTimes(2)
 
   await act(async () => fireEvent.press(screen.getByLabelText('Conversation options')))
-  // One sheet on screen at a time (lib/modalTurn): the options rise once the reveal sheet has gone (the fallback here).
   for (let i = 0; i < 2; i++) await act(async () => new Promise((r) => setTimeout(r, 700)))
   await flush()
   expect(sheet().getByLabelText('Add friend')).toBeTruthy()

@@ -53,27 +53,23 @@ export function friendAction(offer: FriendOffer | null): FriendAction | null {
 }
 
 /**
- * Room and conversation handles (`rh_…`) name a person only inside one room or one DM. `POST /friends/requests` takes
- * a real id and answers a handle as an id nobody has, so one is never sent.
+ * Room and conversation handles (`rh_…`) name a person only inside one room or one DM. A profile opened by a room handle
+ * offers no friend request; a swapped DM's handle is sent as is (the server resolves it, identity model).
  */
 export const isHandle = (id: string): boolean => id.startsWith('rh_')
 
-/** The server's reason when it says the match has not been revealed on both sides: "reveal first", not "unavailable". */
-export const NOT_A_REVEALED_MATCH = 'NOT_A_REVEALED_MATCH'
-
 export type FriendAskOutcome =
   | { ok: true; state: 'requested' | 'friends' }
-  | { ok: false; reason: 'reveal-first' | 'profile' | 'ratelimit' | 'failed' }
+  | { ok: false; reason: 'profile' | 'ratelimit' | 'failed' }
 
 type AskResponse = { success: boolean; data?: { state?: string }; reasonCode?: string; errorCode?: string; retryAfter?: number }
 
-/** The answer to `POST /friends/requests`: `requested`, `friends` (they had already asked), or one of two refusals. */
+/** The answer to `POST /friends/requests`: `requested`, `friends` (they had already asked), or a refusal. */
 export function friendAskOutcome(response: AskResponse): FriendAskOutcome {
   if (response.success) {
     const state = response.data?.state
     return state === 'requested' || state === 'friends' ? { ok: true, state } : { ok: false, reason: 'failed' }
   }
-  if ((response.reasonCode ?? response.errorCode) === NOT_A_REVEALED_MATCH) return { ok: false, reason: 'reveal-first' }
   // The two refusals with a fix of their own (Flow 15 15.19): an unfinished profile, and asking too fast.
   const refusal = friendRefusal(response)
   if (refusal) return { ok: false, reason: refusal.kind }
@@ -86,6 +82,5 @@ export const FRIEND_COPY = {
   friends: (name: string) => `You and ${name} are friends`,
   /** The dock's note once asked: a state, said in a line rather than as a dead button. */
   requestSentNote: 'Friend request sent',
-  revealFirst: 'Reveal yourself first',
   failed: "That didn’t go through. Try again.",
 } as const

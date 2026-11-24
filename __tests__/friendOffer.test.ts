@@ -73,8 +73,8 @@ describe('friendAskOutcome', () => {
     expect(friendAskOutcome({ success: true })).toEqual({ ok: false, reason: 'failed' })
   })
 
-  it('NOT_A_REVEALED_MATCH on the 404 means "reveal first"', () => {
-    expect(friendAskOutcome({ success: false, errorCode: 'NOT_FOUND', reasonCode: 'NOT_A_REVEALED_MATCH' })).toEqual({ ok: false, reason: 'reveal-first' })
+  it('the retired NOT_A_REVEALED_MATCH (identity model: the server no longer sends it) is a plain failure', () => {
+    expect(friendAskOutcome({ success: false, errorCode: 'NOT_FOUND', reasonCode: 'NOT_A_REVEALED_MATCH' })).toEqual({ ok: false, reason: 'failed' })
   })
 
   it.each([
@@ -105,7 +105,7 @@ it('says who a request went to, and never names a place', () => {
   expect(FRIEND_COPY.requestSentNote).toBe('Friend request sent')
   expect(FRIEND_COPY.requested('Mika')).toBe('Friend request sent to Mika')
   expect(FRIEND_COPY.friends('Mika')).toBe('You and Mika are friends')
-  expect(FRIEND_COPY.revealFirst).toBe('Reveal yourself first')
+  expect(FRIEND_COPY).not.toHaveProperty('revealFirst')
 })
 
 /**

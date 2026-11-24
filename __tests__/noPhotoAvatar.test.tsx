@@ -57,6 +57,7 @@ describe('every Banter face goes through personFace (F1 B: a creature means anon
   it('the DM screen draws the header and your own face from the same rule', () => {
     const src = read('app', 'private-chat', '[conversationId].tsx')
     expect(src).toContain('directHeaderAvatar(reveal, otherImage, name)')
-    expect(src).toContain('reveal?.youRevealed ? personFace({ named: true')
+    // Your own face is named only once the swap is mutual (task 17 a: a one-sided tap shows nothing).
+    expect(src).toContain('swapped ? personFace({ named: true')
   })
 })

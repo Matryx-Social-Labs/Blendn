@@ -6,6 +6,8 @@
  * a decline, and the guards that keep one tap one request.
  */
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native'
+import { NAMES_ON_ACCEPT } from '../lib/board'
+import { SPACE } from '../lib/design/tokens'
 import { AccessibilityInfo, StyleSheet } from 'react-native'
 
 const mockParams: Record<string, string> = {}
@@ -353,11 +355,23 @@ describe('asking', () => {
     api.askOnBoard.mockResolvedValue({ success: true, data: { id: 'r1', status: 'pending' } })
     await render(<BoardScreen />)
 
+    // Said before the tap (identity model): an accepted ask opens the chat swapped only when this line was shown.
+    expect(await screen.findByText(NAMES_ON_ACCEPT.ask)).toBeTruthy()
     await fireEvent.press(await screen.findByLabelText('Ask to join, Velvet Heron'))
     expect(await screen.findByText('Waiting on them')).toBeTruthy()
     expect(screen.queryByLabelText('Ask to join, Velvet Heron')).toBeNull()
-    expect(api.askOnBoard).toHaveBeenCalledWith('e1', 'p-offer')
+    expect(screen.queryByText(NAMES_ON_ACCEPT.ask)).toBeNull()
+    expect(api.askOnBoard).toHaveBeenCalledWith('e1', 'p-offer', true)
     expect(AccessibilityInfo.announceForAccessibility).toHaveBeenCalledWith('Waiting on them')
+  })
+
+  it('spaces the names line as board L-A: 10 pt under the post, 12 over Ask to join', async () => {
+    api.getBoard.mockResolvedValue(board([OFFER]))
+    await render(<BoardScreen />)
+
+    const block = StyleSheet.flatten((await screen.findByTestId('lobby-post-consent')).parent?.props.style)
+    expect(block.marginTop ?? 0).toBe(0)
+    expect(block.gap + SPACE.xxs).toBe(12)
   })
 
   it.each(['You have already asked — give them a moment', 'They have already answered this one'])(

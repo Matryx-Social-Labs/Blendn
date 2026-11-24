@@ -606,17 +606,17 @@ function RevealBars() {
   const them = { face: creature('Cosmic Panda'), name: 'Cosmic Panda' }
   const states = [
     ['none', { state: 'none' }],
-    ['youonly', { state: 'youOnly', you: { face: photo(PHOTO), name: 'Sam' } }],
-    ['theyonly', { state: 'theyOnly', them: { face: photo(PHOTO_2), name: 'Priya' } }],
-    ['asked', { state: 'asked' }],
+    ['mine', { state: 'mine' }],
+    ['theirs', { state: 'theirs' }],
+    ['both', { state: 'both', you: { face: photo(PHOTO), name: 'Sam' }, them: { face: photo(PHOTO_2), name: 'Priya' } }],
     ['pressed', { state: 'none', previewState: 'pressed' }],
     ['focused', { state: 'none', previewState: 'focused' }],
   ] as const
   return (
-    <Section title="RevealBar" note="the sheet tier · you ↔ them, seen or anonymous · Show them (a sheet confirms) · Ask them · silent">
+    <Section title="RevealBar" note="the sheet tier · you ↔ them · Swap names (lit) · waiting + Cancel (quiet) · they want to swap · both">
       {states.map(([state, props]) => (
         <Cell key={state} label={state} testID={`ds-reveal-${state}`} style={styles.backdrop}>
-          <RevealBar you={you} them={them} onShow={noop} onAsk={noop} {...props} />
+          <RevealBar you={you} them={them} onSwap={noop} onCancel={noop} {...props} />
         </Cell>
       ))}
     </Section>
