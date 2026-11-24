@@ -17,6 +17,7 @@ import { Banner } from '../../components/ds/Banner'
 import { MeBadges } from '../../components/profile/MeBadges'
 import { MePlusRow } from '../../components/profile/MePlusRow'
 import { MeIdentity, MeSkeleton } from '../../components/profile/MeSections'
+import { SeeAsOthersSheet } from '../../components/profile/SeeAsOthersSheet'
 import { NightsOut } from '../../components/profile/NightsOut'
 import { OfflineStrip, useOffline } from '../../components/profile/OfflineStrip'
 import { PhotoViewer } from '../../components/profile/PhotoViewer'
@@ -322,6 +323,7 @@ function ProfileInner() {
   const interests = profile?.interests ?? []
   const openEvent = (id: string) => router.push({ pathname: '/event/[id]', params: { id } })
   const openEdit = () => router.push('/edit-profile')
+  const [previewing, setPreviewing] = useState(false)
 
   /*
    * Pull to refresh: skips the cache. The spinner waits on the profile only;
@@ -415,6 +417,7 @@ function ProfileInner() {
             photo={photoList[0]}
             onEdit={openEdit}
             onPhoto={(from) => openPhoto(0, from)}
+            onPreview={() => setPreviewing(true)}
           />
         </FadeInUp>
 
@@ -591,6 +594,11 @@ function ProfileInner() {
         visible={viewer !== null}
         onClose={() => setViewer(null)}
         testID="me-viewer"
+      />
+      <SeeAsOthersSheet
+        visible={previewing}
+        onClose={() => setPreviewing(false)}
+        onEdit={openEdit}
       />
     </View>
   )

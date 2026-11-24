@@ -28,9 +28,8 @@ const SKELETON = { name: 30, line: 16, button: 44, buttonWidth: 140, nights: 220
  * word: it wraps to the lines it needs, and a word too wide for the line shrinks (`Title`). At the accessibility sizes the
  * photo sits above the name and the button spans the column (02 A, largest text).
  *
- * "See as others do" (the board's second button) is not drawn: what a room sees depends on the server's reveal rules, and a
- * preview guessed on the phone could show something others never see. It waits for the self-preview read (ROADMAP § Backend
- * later). Your job title is under About now, beside education.
+ * "See as others do", the board's neutral second button, opens your card as a room reads it (`SeeAsOthersSheet`, the server's
+ * own preview). Your job title is under About now, beside education.
  */
 export function MeIdentity({
   name,
@@ -40,6 +39,7 @@ export function MeIdentity({
   photo,
   onEdit,
   onPhoto,
+  onPreview,
 }: {
   name: string
   age?: number | null
@@ -49,6 +49,8 @@ export function MeIdentity({
   photo?: string | null
   onEdit: () => void
   onPhoto: (from: Rect | null) => void
+  /** Opens See as others do. */
+  onPreview: () => void
 }) {
   const bold = useBoldText()
   const large = useLargeText()
@@ -104,7 +106,10 @@ export function MeIdentity({
           ) : null}
         </View>
       </View>
-      <Button kind="lit" size="md" icon="pencil" label="Edit profile" onPress={onEdit} style={large ? styles.editWide : styles.edit} testID="me-edit" />
+      <View testID="me-actions" style={[styles.actions, large && styles.actionsStacked]}>
+        <Button kind="lit" size="md" icon="pencil" label="Edit profile" onPress={onEdit} testID="me-edit" />
+        <Button kind="secondary" size="md" icon="eye" label="See as others do" onPress={onPreview} testID="me-preview" />
+      </View>
     </View>
   )
 }
@@ -135,8 +140,9 @@ const styles = StyleSheet.create({
   ink: { color: COLOR.textPrimary },
   age: { fontFamily: FONT_FAMILY.mono[700] },
   muted: { color: COLOR.textSecondary },
-  edit: { alignSelf: 'flex-start' },
-  editWide: { alignSelf: 'stretch' },
+  /** `.me-a`: 8 apart on one line; a narrow phone wraps them rather than cutting a label. */
+  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm },
+  actionsStacked: { flexDirection: 'column', flexWrap: 'nowrap', alignItems: 'stretch' },
   photoBadge: {
     position: 'absolute',
     right: -SPACE.xxs,

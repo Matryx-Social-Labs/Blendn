@@ -12,7 +12,7 @@ import { waveAccessibilityLabel, type WaveStatus } from '../../lib/waves'
 import { Avatar } from './Avatar'
 import { Button } from './Button'
 import { Chip } from './Chip'
-import { LensBlocks } from './LensBlocks'
+import { LensBlocks, type LensBio } from './LensBlocks'
 import { CrewEmblem } from './CrewEmblem'
 import type { Face } from './Facepile'
 import { Sheet } from './Sheet'
@@ -21,7 +21,8 @@ import { StateScreen } from './StateScreen'
 import { Title } from './Title'
 
 /** ROUND3 D · 4.1: here now · was here · pre-event room · matched · friend · unavailable · thin. */
-export type PersonVariant = 'here' | 'was' | 'pre' | 'matched' | 'friend' | 'gone' | 'thin'
+/** `preview` is your own card, read-only (See as others do): no ⋯, no actions, and no line about having nothing in common. */
+export type PersonVariant = 'here' | 'was' | 'pre' | 'matched' | 'friend' | 'gone' | 'thin' | 'preview'
 export type PersonState = 'none' | 'requested'
 
 export type PersonCardPerson = {
@@ -49,6 +50,8 @@ export type PersonCardPerson = {
   shared?: { latest: string; more: number } | null
   /** State 2 B: a few of their interests, once they are shown to you (their profile's, not only the shared ones). */
   interests?: readonly string[]
+  /** `preview` only: your bio, interests and work, as somebody you have shown yourself to reads them. */
+  bio?: LensBio | null
 }
 
 export type PersonCardContentProps = {
@@ -170,6 +173,7 @@ export function PersonCardContent({
   }
 
   const thin = variant === 'thin'
+  const preview = variant === 'preview'
   const presence = variant === 'was' ? 'Was here' : variant === 'pre' ? 'Going' : null
   // P-A's meta line ("Anonymous · 31") when the caller put the person through the lens; else the plain age.
   const meta = thin ? [person.meta ?? age, person.city].filter((x) => x != null && x !== '').join(' · ') : (person.meta ?? (age ? String(age) : ''))
@@ -241,10 +245,10 @@ export function PersonCardContent({
           accessibilityRole="header"
           accessibilityLabel={heading}
           accessibilityHint={onViewProfile ? 'Opens their profile' : undefined}
-          style={styles.head}
+          style={[styles.head, preview && large && styles.headStacked]}
         >
           <Avatar size={FACE} ring={COLOR.ink} testID={id('face')} blink {...person.face} />
-          <View style={styles.headText}>
+          <View style={[styles.headText, preview && large && styles.headTextStacked]}>
             <Title testID={id('name')} style={styles.ink}>
               {name}
             </Title>
@@ -270,9 +274,12 @@ export function PersonCardContent({
             ) : null}
           </View>
         </Pressable>
-        {circle('ellipsis', `Block or report ${name}`, onMore)}
+        {preview ? null : circle('ellipsis', `Block or report ${name}`, onMore)}
       </View>
 
+      {preview ? (
+        person.bio && (person.bio.about || person.bio.interests?.length || person.bio.work) ? <LensBlocks lead={[]} tonight={null} common={undefined} bio={person.bio} testID={testID} /> : null
+      ) : (
       <LensBlocks
         lead={lead}
         tonight={tonight}
@@ -285,6 +292,7 @@ export function PersonCardContent({
         compact
         testID={testID}
       />
+      )}
 
       {person.interests?.length && !thin ? (
         <View testID={id('interests')} style={styles.chips}>
@@ -305,6 +313,7 @@ export function PersonCardContent({
         </View>
       ) : null}
 
+      {preview ? null : (
       <View testID={id('actions')} accessibilityLiveRegion="polite" style={row}>
         {variant === 'matched' ? (
           <Button label="Say hi" size="dock" icon="message-circle" onPress={onSayHi} style={slot} testID={id('say-hi')} />
@@ -348,6 +357,7 @@ export function PersonCardContent({
         )}
 
       </View>
+      )}
 
       {crewLike && (variant === 'here' || variant === 'was') ? (
         // Crew Mix likes stay until crew waves ship (Wave approval 3): a row under the dock, never a third dock button.
@@ -490,6 +500,8 @@ const styles = StyleSheet.create({
   /** `personName` sits 14 right of the 72 face. */
   head: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: SPACE.md + SPACE.xxs },
   headText: { flex: 1, minWidth: 0 },
+  headStacked: { flexDirection: 'column', alignItems: 'flex-start' },
+  headTextStacked: { flex: 0, alignSelf: 'stretch' },
   metaLine: { marginTop: SPACE.xxs },
   /** State 2 C's one line (combined board): a 16 glyph, 10 to the words, the count at the end. */
   sharedLine: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm + SPACE.xxs },

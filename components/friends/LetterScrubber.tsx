@@ -24,11 +24,13 @@ export function LetterScrubber({ letters, onLetter, testID }: { letters: readonl
   const sel = useSelection()
   const column = useRef<View>(null)
   const top = useRef(0)
+  // The pitch the column was laid out at: Android rounds each letter to whole pixels (~14.3 on a 2.625 screen), so the fixed
+  // `STEP` drifts a letter by the end of the column.
+  const pitch = useRef(STEP)
   const last = useRef<string | null>(null)
 
   const pick = (e: GestureResponderEvent) => {
-    const i = Math.min(letters.length - 1, Math.max(0, Math.floor((e.nativeEvent.pageY - top.current) / STEP)))
-    const letter = letters[i]
+    const letter = letterAt(letters, e.nativeEvent.pageY - top.current, pitch.current)
     if (letter === last.current) return
     last.current = letter
     H.select()
@@ -41,7 +43,11 @@ export function LetterScrubber({ letters, onLetter, testID }: { letters: readonl
       testID={testID}
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"
-      onLayout={() => column.current?.measureInWindow((_x, y) => (top.current = y))}
+      onLayout={(e) => {
+        const { height } = e.nativeEvent.layout
+        if (height > 0 && letters.length) pitch.current = (height + LETTER_GAP) / letters.length
+        column.current?.measureInWindow((_x, y) => (top.current = y))
+      }}
       onStartShouldSetResponder={() => true}
       onMoveShouldSetResponder={() => true}
       onResponderTerminationRequest={() => false}
@@ -60,8 +66,8 @@ export function LetterScrubber({ letters, onLetter, testID }: { letters: readonl
   )
 }
 
-/** Where a touch at `y` (from the column's top) lands: exported for the test. */
-export const letterAt = (letters: readonly string[], y: number) => letters[Math.min(letters.length - 1, Math.max(0, Math.floor(y / STEP)))]
+/** Where a touch at `y` (from the column's top) lands, `step` apart. */
+const letterAt = (letters: readonly string[], y: number, step: number) => letters[Math.min(letters.length - 1, Math.max(0, Math.floor(y / step)))]
 
 const styles = StyleSheet.create({
   column: { width: TOUCH_WIDTH, alignItems: 'center', gap: LETTER_GAP },

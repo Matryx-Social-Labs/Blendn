@@ -34,10 +34,10 @@ export interface FriendRequest {
   person: FriendPerson
   createdAt: string
   /**
-   * How it came (ROADMAP § Backend later: `via` on each incoming row): your link, or a match where you both revealed. Not sent
-   * by today's server, so absent is the usual case, and then no source is said at all: a guess was wrong for every match.
+   * How it came (admin #998): your link, or a match where you both revealed. `null` for a request made before the source was
+   * recorded, and then no source is said at all: a guess was wrong for every match.
    */
-  via?: 'link' | 'match'
+  via?: 'link' | 'match' | null
 }
 
 /** "From your link" / "From a match", only when the server said which (Flow 7 4-A); null otherwise, never a guess. */
@@ -59,6 +59,8 @@ export interface PageMeta {
 export interface FriendsPayload {
   friends: Friend[]
   count: number
+  /** `?order=name` only: the whole list's heads and their counts (read through `lettersFrom`). */
+  letters?: unknown
   pagination?: PageMeta
 }
 
