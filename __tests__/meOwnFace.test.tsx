@@ -46,14 +46,14 @@ const drew = (text: string) => screen.queryByText(text, all) !== null
 
 describe('the main photo on Me with none (Me + settings A 01)', () => {
   it('is your initial on your hue disc, never the cat, and a tap adds a photo', async () => {
-    await render(<MeIdentity name="Audit Host 06" onEdit={jest.fn()} onPhoto={jest.fn()} />)
+    await render(<MeIdentity name="Audit Host 06" onEdit={jest.fn()} onPhoto={jest.fn()} onPreview={jest.fn()} />)
     expect(drew('initial:Audit Host 06')).toBe(true)
     expect(screen.queryByTestId('icon-cat', all)).toBeNull()
     expect(screen.getByTestId('me-photo', all).props.accessibilityLabel).toBe('Add a photo')
   })
 
   it('with a photo it is the photo (the control)', async () => {
-    await render(<MeIdentity name="Audit Host 06" photo="https://cdn/a.jpg" onEdit={jest.fn()} onPhoto={jest.fn()} />)
+    await render(<MeIdentity name="Audit Host 06" photo="https://cdn/a.jpg" onEdit={jest.fn()} onPhoto={jest.fn()} onPreview={jest.fn()} />)
     expect(drew('initial:Audit Host 06')).toBe(false)
   })
 })

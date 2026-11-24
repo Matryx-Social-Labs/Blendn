@@ -172,7 +172,7 @@ describe('the paged viewer', () => {
 
 describe('Me’s name line', () => {
   it('sets only the digits of the age in mono (the same as the hero)', async () => {
-    await render(<MeIdentity name="Rd Four" age={28} onEdit={jest.fn()} onPhoto={jest.fn()} />)
+    await render(<MeIdentity name="Rd Four" age={28} onEdit={jest.fn()} onPhoto={jest.fn()} onPreview={jest.fn()} />)
     expect(String(StyleSheet.flatten(screen.getByText('28').props.style).fontFamily)).toMatch(/Mono/i)
     expect(screen.queryByText(', 28')).toBeNull()
     expect(screen.getByRole('header', { name: 'Rd Four, 28' })).toBeTruthy()

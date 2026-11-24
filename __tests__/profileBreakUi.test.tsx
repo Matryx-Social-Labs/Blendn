@@ -23,7 +23,7 @@ const LONG = 'Venkataramanan-Subramanian-Iyer-Krishnamurthy-Bhattacharya'
 it('the name on Me is never cut and never split inside a word (Me + settings A 01)', async () => {
   const window = Dimensions.get('window')
   await act(async () => Dimensions.set({ window: { ...window, fontScale: 2 }, screen: { ...window, fontScale: 2 } }))
-  await render(<MeIdentity name={LONG} age={27} location="Saint-Jean-sur-Richelieu, QC" memberSince="2025-03-04T00:00:00Z" onEdit={jest.fn()} onPhoto={jest.fn()} />)
+  await render(<MeIdentity name={LONG} age={27} location="Saint-Jean-sur-Richelieu, QC" memberSince="2025-03-04T00:00:00Z" onEdit={jest.fn()} onPhoto={jest.fn()} onPreview={jest.fn()} />)
   const name = screen.getByTestId('me-name')
   // Never clamped: a 3-line name shows all three lines (today it was "Marc-André Lefebvre-D…" and the age was lost).
   expect(name.props.numberOfLines).toBeUndefined()

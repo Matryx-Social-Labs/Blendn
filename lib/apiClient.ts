@@ -3081,6 +3081,11 @@ class ApiClientClass {
 
   // === USER ENDPOINTS ===
 
+  /** Your own card as a room reads it, before and after you show who you are (read through `mePreviewFrom`). */
+  async getMePreview(): Promise<ApiResponse<unknown>> {
+    return this.queuedRequest<unknown>('/api/mobile/me/preview')
+  }
+
   async getPublicProfile(userId: string): Promise<ApiResponse<PublicProfile>> {
     return this.queuedRequest<PublicProfile>(`/api/mobile/users/${pathSegment(userId)}`)
   }
