@@ -9,13 +9,11 @@ import { ACHIEVEMENT, AchievementBadge, type AchievementKind } from './Achieveme
 import { Button } from './Button'
 import { CountTicks } from './CountTicks'
 import { CrewEmblem, type CrewScene } from './CrewEmblem'
-import { CONTROL_FONT_CAP, font, IC_HAIRLINE, minTarget, PRESSED_WASH, useBoldText, useIncreaseContrast } from './shared'
+import { CONTROL_FONT_CAP, font, IC_HAIRLINE, PRESSED_WASH, useBoldText, useIncreaseContrast } from './shared'
 import { Title } from './Title'
 
 /** The emblem: 96 on a card, 56 compact (the page); 40 in a row. */
 const EMBLEM = { full: 96, compact: 56, row: 40 } as const
-/** The ⋯ in the card's corner: a 32 pt raised circle, 12 in, reaching the target through slop. */
-const MORE = SIZE.tag
 const ROW_MIN_HEIGHT = SIZE.primary + SPACE.sm
 
 export type CrewCardCrew = {
@@ -39,6 +37,8 @@ export type CrewWave = {
    * the card is lit and the button is Wave back (board crews/05-room A, advisor Q4 2026-11-25).
    */
   state: 'idle' | 'waved' | 'waveBack'
+  /** A `waveBack` card drawn lit (rose wash, "Waved at…"); default true. The Room lights only the first three (advisor Q4). */
+  lit?: boolean
   /** The crew you're waving as; absent (null) for a solo person's plain Wave. */
   as?: string | null
   onPress: () => void
@@ -62,7 +62,6 @@ export function CrewCard({
   compact = false,
   onSheet = false,
   onPress,
-  onMore,
   emblemScene,
   testID,
 }: {
@@ -76,10 +75,8 @@ export function CrewCard({
    * sunken on Android's solid sheet, the frame's `field_bg`. Not for lists.
    */
   onSheet?: boolean
-  /** Opens the crew's sheet. */
+  /** Opens the crew's sheet (Hide tonight, Block, Report live there). */
   onPress?: () => void
-  /** The ⋯: report or hide. */
-  onMore?: () => void
   /** Make a crew's preview only (Shuffle dances): never on a card in a list. */
   emblemScene?: CrewScene
   testID?: string
@@ -90,8 +87,7 @@ export function CrewCard({
   const hashtags = crew.tags.map((t) => `#${t}`)
   const label = [crew.name, `crew of ${crew.size}`, here ? `${here} here` : null, crew.bio, ...hashtags, crew.intent, crew.badge ? `Badge: ${ACHIEVEMENT[crew.badge].label}` : null].filter(Boolean).join(', ')
   const detail = contrast ? COLOR.textPrimary : COLOR.textSecondary
-  const slop = (minTarget() - MORE) / 2
-  const lit = wave?.state === 'waveBack'
+  const lit = wave?.state === 'waveBack' && wave.lit !== false
 
   return (
     <View
@@ -118,7 +114,7 @@ export function CrewCard({
             <CountTicks size={crew.size} here={here} />
           </View>
           <View style={styles.text}>
-            <Title variant={compact ? 'heading' : 'title'} style={[styles.ink, onMore ? styles.clearMore : null]}>
+            <Title variant={compact ? 'heading' : 'title'} style={styles.ink}>
               {crew.name}
             </Title>
             {lit ? (
@@ -155,18 +151,6 @@ export function CrewCard({
         ) : null}
       </Pressable>
       {wave ? <WaveButton wave={wave} /> : null}
-      {onMore ? (
-        <Pressable
-          onPress={onMore}
-          hitSlop={slop}
-          accessibilityRole="button"
-          accessibilityLabel={`More, ${crew.name}`}
-          android_ripple={{ color: PRESSED_WASH.android, borderless: true }}
-          style={styles.more}
-        >
-          <Icon name="ellipsis" size={ICON.inline} />
-        </Pressable>
-      ) : null}
     </View>
   )
 }
@@ -186,7 +170,7 @@ export const popIn = (reduceMotion: boolean) => () => {
   }
 }
 
-function WaveButton({ wave }: { wave: CrewWave }) {
+export function WaveButton({ wave }: { wave: CrewWave }) {
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const reduceMotion = useReducedMotion()
@@ -289,7 +273,6 @@ const styles = StyleSheet.create({
   ink: { color: COLOR.textPrimary },
   atYou: { color: COLOR.selectionRoseGlyph },
   lit: { backgroundColor: COLOR.selectionRoseFill, borderWidth: 1, borderColor: COLOR.brandRose },
-  clearMore: { paddingRight: MORE },
   meta: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: SPACE.sm },
   liked: {
     minHeight: SIZE.primary,
@@ -304,17 +287,6 @@ const styles = StyleSheet.create({
   },
   likedText: { flexShrink: 1, textAlign: 'center' },
   overlap: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
-  more: {
-    position: 'absolute',
-    top: SPACE.md,
-    right: SPACE.md,
-    width: MORE,
-    height: MORE,
-    borderRadius: RADIUS.capsule,
-    backgroundColor: COLOR.surfaceRaised,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   row: {
     minHeight: ROW_MIN_HEIGHT,
     flexDirection: 'row',

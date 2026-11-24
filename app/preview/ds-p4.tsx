@@ -241,28 +241,28 @@ function Crews() {
   return (
     <Section title="CrewCard · CrewRow" note="Counts, never people · Wave: H.select · waved keeps its check">
       <Cell label="default" testID="ds-crewcard-default">
-        <CrewCard crew={NEBULA} wave={{ state: 'idle', onPress: noop }} onMore={noop} onPress={noop} />
+        <CrewCard crew={NEBULA} wave={{ state: 'idle', onPress: noop }} onPress={noop} />
       </Cell>
       <Cell label="2 here · live Wave" testID="ds-crewcard-here">
-        <CrewCard crew={two} wave={{ state: liked ? 'waved' : 'idle', onPress: () => setLiked(true) }} onMore={noop} onPress={noop} />
+        <CrewCard crew={two} wave={{ state: liked ? 'waved' : 'idle', onPress: () => setLiked(true) }} onPress={noop} />
       </Cell>
       <Cell label="waved" testID="ds-crewcard-liked">
-        <CrewCard crew={two} wave={{ state: 'waved', onPress: noop }} onMore={noop} />
+        <CrewCard crew={two} wave={{ state: 'waved', onPress: noop }} />
       </Cell>
       <Cell label="sending as my crew" testID="ds-crewcard-as">
-        <CrewCard crew={two} wave={{ state: 'idle', as: 'Orbit', onPress: noop }} onMore={noop} />
+        <CrewCard crew={two} wave={{ state: 'idle', as: 'Orbit', onPress: noop }} />
       </Cell>
       <Cell label="waved at my crew · Wave back" testID="ds-crewcard-likedas">
-        <CrewCard crew={two} wave={{ state: 'waveBack', as: 'Orbit', onPress: noop }} onMore={noop} />
+        <CrewCard crew={two} wave={{ state: 'waveBack', as: 'Orbit', onPress: noop }} />
       </Cell>
       <Cell label="no Wave · your own crew" testID="ds-crewcard-own">
-        <CrewCard crew={{ ...NEBULA, here: 3 }} onMore={noop} />
+        <CrewCard crew={{ ...NEBULA, here: 3 }} />
       </Cell>
       <Cell label="with overlap" testID="ds-crewcard-overlap">
-        <CrewCard crew={two} overlap="Both crews: Techno heads · out for friendship" wave={{ state: 'idle', onPress: noop }} onMore={noop} />
+        <CrewCard crew={two} overlap="Both crews: Techno heads · out for friendship" wave={{ state: 'idle', onPress: noop }} />
       </Cell>
       <Cell label="compact" testID="ds-crewcard-compact">
-        <CrewCard crew={two} compact wave={{ state: 'idle', onPress: noop }} onMore={noop} />
+        <CrewCard crew={two} compact wave={{ state: 'idle', onPress: noop }} />
       </Cell>
       <Cell label="rows · 40 emblem · the crew badge (G4)" testID="ds-crewrow" style={styles.surface}>
         <CrewRow name="Nebula" emblemSeed="nebula" size={4} onPress={noop} />

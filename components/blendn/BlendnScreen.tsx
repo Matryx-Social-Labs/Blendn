@@ -26,7 +26,7 @@ import { blendnClosed, getLeftNotice, isLiveHint, openPass, setDoor, setLeftNoti
 import type { RoomTab } from '../../lib/roomTab'
 import { useChatTabUnread } from '../../lib/useChatTabUnread'
 import { RoomChat } from '../chat/RoomChat'
-import { crewsThatMayLikePeople, crewMessage, type BlendRef, type CrewsAtEvent } from '../../lib/crews'
+import { crewsThatMayLikePeople, crewMessage, crewWaveState, type BlendRef, type CrewsAtEvent } from '../../lib/crews'
 import { crewsApi } from '../../lib/crewsApi'
 import { COLOR, DURATION, EASING, MATERIAL, RADIUS, REDUCE_MOTION, SIZE, SPACE } from '../../lib/design/tokens'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
@@ -54,6 +54,7 @@ import { markSeed } from '../../lib/creatureSeed'
 import { myRoomFace, roomSettingsRoute } from '../../lib/roomState'
 import { useTonight, type TonightEvent } from '../../lib/useTonight'
 import { isNightRated, markNightRated, useRatedNights } from '../../lib/ratedNights'
+import { CrewSheet } from '../crews/CrewSheet'
 import { crewCards, openBlend, useCrewActions, useCrewsHere } from '../crews/CrewsView'
 import type { Visibility } from '../ds/Banner'
 import type { Face } from '../ds/Facepile'
@@ -587,6 +588,15 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
       })
     },
   })
+  /** The crew whose sheet is open (board crews/05-room A), read live from the list so a wave or a block shows at once. */
+  const [sheetCrewId, setSheetCrewId] = useState<string | null>(null)
+  const sheetCrew = crewCards(crews).find((c) => c.crewId === sheetCrewId) ?? null
+  /** Each row closes the sheet first: its next step (a confirm, the report) is a sheet of its own. */
+  const fromCrewSheet = (then: (card: NonNullable<typeof sheetCrew>) => void) => () => {
+    if (!sheetCrew) return
+    setSheetCrewId(null)
+    then(sheetCrew)
+  }
   /** The chip's menu: your crews here and "Just me". Cancel changes nothing. */
   const chooseLikingAs = async (among = myCrewsHere, title = 'Sending as…', justMe = true) => {
     const answer = await chooseAs(among, title, justMe)
@@ -1086,7 +1096,13 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
             }
             crewCards={crewCards(crews)}
             renderCrew={(crewCard, index) => (
-              <RoomCrewCard card={crewCard} actions={crewActions} as={crewCardAs && crewCardAs !== 'ask' ? crewCardAs.name : null} index={index} />
+              <RoomCrewCard
+                card={crewCard}
+                actions={crewActions}
+                as={crewCardAs && crewCardAs !== 'ask' ? crewCardAs.name : null}
+                index={index}
+                onOpen={() => setSheetCrewId(crewCard.crewId)}
+              />
             )}
             crewsFoot={<CrewsFoot crews={crews} />}
             picks={heldPicks}
@@ -1163,6 +1179,17 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
           onDone={() => waves.toast && waveShown(waves.toast)}
         />
       ) : null}
+
+      <CrewSheet
+        visible={sheetCrew !== null}
+        card={sheetCrew}
+        wave={{ state: sheetCrew ? crewWaveState(sheetCrew) : 'idle', as: crewCardAs && crewCardAs !== 'ask' ? crewCardAs.name : null }}
+        onClose={() => setSheetCrewId(null)}
+        onWave={fromCrewSheet((c) => void crewActions.wave(c))}
+        onHideTonight={fromCrewSheet((c) => crews.hideTonight(c.crewId))}
+        onBlock={fromCrewSheet(crewActions.block)}
+        onReport={fromCrewSheet(crewActions.report)}
+      />
 
       <PersonCard
         visible={open !== null}

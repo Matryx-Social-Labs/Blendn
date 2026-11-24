@@ -175,30 +175,35 @@ function Line({ text }: { text: string }) {
   return <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.secondary]}>{text}</Text>
 }
 
+/** Lit Wave back cards, pinned first by the server (advisor Q4): at most this many; past them a card keeps Wave back, unlit. */
+export const LIT_WAVE_BACKS = 3
+
 /**
- * One crew here, as strangers see it: the compact CrewCard, liked as your side.
- * ponytail: no tap yet — R2-D1's "crew detail as a stranger" has no screen
- * (`/crews/[crewId]` is a member's); add `onPress` when one exists.
+ * One crew here, as strangers see it: the compact CrewCard, waved at as your side. A tap on the card opens the crew's
+ * sheet (board crews/05-room A); Wave is its own target.
  */
 export function RoomCrewCard({
   card,
   actions,
   as,
   index,
+  onOpen,
 }: {
   card: CrewCardData
   actions: CrewActions
   as: string | null
   index: number
+  onOpen: () => void
 }) {
+  const state = crewWaveState(card)
   return (
     <View style={styles.gutter}>
       <CrewCard
         compact
         crew={{ name: card.name, emblemSeed: card.emblemSeed, size: card.size, here: card.presentCount, bio: card.bio, tags: card.tags.map(tagText), badge: crewBadge(card.badges) }}
         overlap={card.overlaps?.[0]?.text ?? null}
-        wave={{ state: crewWaveState(card), as, onPress: () => void actions.wave(card) }}
-        onMore={() => actions.report(card)}
+        wave={{ state, lit: state === 'waveBack' && index < LIT_WAVE_BACKS, as, onPress: () => void actions.wave(card) }}
+        onPress={onOpen}
         testID={`room-crew-${index}`}
       />
     </View>

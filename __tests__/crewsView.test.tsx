@@ -317,11 +317,11 @@ describe('the crews here, a page at a time (M9)', () => {
 describe('the Room crew card’s badge (YOU-06)', () => {
   const actions = { wave: jest.fn(), report: jest.fn() } as never
   it('draws “Out together often” once when the server sends the tier, and nothing when it does not', async () => {
-    await render(<RoomCrewCard card={{ ...card('nebula'), badges: [{ kind: 'nights_together', label: 'Out together often' }] }} actions={actions} as={null} index={0} />)
+    await render(<RoomCrewCard card={{ ...card('nebula'), badges: [{ kind: 'nights_together', label: 'Out together often' }] }} actions={actions} as={null} index={0} onOpen={jest.fn()} />)
     expect(screen.getAllByLabelText('Badge: Out together often')).toHaveLength(1)
   })
   it('no badge key, no pill', async () => {
-    await render(<RoomCrewCard card={card('orbit')} actions={actions} as={null} index={0} />)
+    await render(<RoomCrewCard card={card('orbit')} actions={actions} as={null} index={0} onOpen={jest.fn()} />)
     expect(screen.queryByLabelText(/^Badge:/)).toBeNull()
   })
 })

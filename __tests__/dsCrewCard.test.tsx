@@ -113,11 +113,12 @@ describe('<CrewCard>', () => {
     expect(flat('k').borderRadius).toBe(RADIUS.sheet)
   })
 
-  it('⋯ is its own button', async () => {
-    const onMore = jest.fn()
-    await render(<CrewCard crew={NEBULA} onMore={onMore} />)
-    await fireEvent.press(screen.getByRole('button', { name: 'More, Nebula' }))
-    expect(onMore).toHaveBeenCalledTimes(1)
+  it('no ⋯ any more: Hide tonight, Block and Report live in the crew’s sheet, opened by a tap on the card', async () => {
+    const onPress = jest.fn()
+    await render(<CrewCard crew={NEBULA} onPress={onPress} wave={{ state: 'idle', onPress: jest.fn() }} />)
+    expect(screen.queryByLabelText('More, Nebula')).toBeNull()
+    await fireEvent.press(screen.getByLabelText(/^Nebula, crew of 4/))
+    expect(onPress).toHaveBeenCalledTimes(1)
   })
 })
 
