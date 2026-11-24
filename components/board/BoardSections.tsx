@@ -7,7 +7,8 @@ import { GlyphWell } from '../ds/StateScreen'
 import { monoCaption } from '../ds/MonoFamily'
 import { CONTROL_FONT_CAP, font, minTarget, SELECTION, useBoldText } from '../ds/shared'
 import { Icon, type IconName } from '../ui/Icon'
-import { boardMarkSeed } from '../../lib/board'
+import { boardMarkSeed, NAMES_ON_ACCEPT } from '../../lib/board'
+import { EyeNote } from '../banter/BanterParts'
 import { asksWords, isFull, kindGlyph, kindWords, postAction, postAge, spotsWords } from '../../lib/lobby'
 import { Label } from './LobbyParts'
 import { PostPhoto } from './PostPhoto'
@@ -196,6 +197,9 @@ function MineFooter({ count, onSeeAsks }: { count: number; onSeeAsks?: () => voi
 function AskFooter({ ask, label, icon, author, onAsk }: { ask: AskState; label: string; icon: IconName; author: string; onAsk: () => void }) {
   const bold = useBoldText()
   return (
+    <View style={styles.askBlock}>
+    {/* Said before the tap (L-A): the screen's ask sends `namesOnAccept` because this line is drawn here. */}
+    <EyeNote text={NAMES_ON_ACCEPT.ask} testID="lobby-post-consent" />
     <View style={styles.footer}>
       <Swap style={styles.footerLine}>
         {ask.kind === 'refused' ? (
@@ -217,6 +221,7 @@ function AskFooter({ ask, label, icon, author, onAsk }: { ask: AskState; label: 
         style={styles.askButton}
         testID="lobby-post-action"
       />
+    </View>
     </View>
   )
 }
@@ -294,6 +299,7 @@ const styles = StyleSheet.create({
 
   footer: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: SPACE.md, marginTop: SPACE.xxs },
   footerTop: { marginTop: SPACE.xxs },
+  askBlock: { gap: SPACE.sm, marginTop: SPACE.xxs },
   footerLine: { flex: 1 },
   askButton: { marginLeft: 'auto' },
 

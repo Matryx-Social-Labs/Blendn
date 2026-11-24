@@ -80,23 +80,27 @@ it('posts an offer with its spaces, and a seeking without', async () => {
   ])
 })
 
-it('asks with no message, takes a post down, and answers by PATCH', async () => {
+it('asks with no message, takes a post down, and answers by PATCH; namesOnAccept only where the line was shown, and only on accept', async () => {
   const seen = server(ok({}))
-  await apiClient.askOnBoard('e1', 'p1')
+  await apiClient.askOnBoard('e1', 'p1', true)
+  await apiClient.askOnBoard('e1', 'p1', false)
   await apiClient.withdrawBoardPost('e1', 'p1')
-  for (const action of ['accept', 'decline', 'withdraw'] as const) await apiClient.answerBoardRequest('r1', action)
+  for (const action of ['accept', 'decline', 'withdraw'] as const) await apiClient.answerBoardRequest('r1', action, true)
+  await apiClient.answerBoardRequest('r1', 'accept')
   expect(seen.map((s) => [`${s.method} ${s.path}`, s.body])).toEqual([
+    ['POST /api/mobile/events/e1/board/p1/requests', { namesOnAccept: true }],
     ['POST /api/mobile/events/e1/board/p1/requests', {}],
     ['DELETE /api/mobile/events/e1/board/p1', undefined],
-    ['PATCH /api/mobile/board/requests/r1', { action: 'accept' }],
+    ['PATCH /api/mobile/board/requests/r1', { action: 'accept', namesOnAccept: true }],
     ['PATCH /api/mobile/board/requests/r1', { action: 'decline' }],
     ['PATCH /api/mobile/board/requests/r1', { action: 'withdraw' }],
+    ['PATCH /api/mobile/board/requests/r1', { action: 'accept' }],
   ])
 })
 
 it('escapes what it puts in a path', async () => {
   const seen = server(ok({}))
-  await apiClient.askOnBoard('e/1', 'p?1')
+  await apiClient.askOnBoard('e/1', 'p?1', true)
   expect(seen[0].path).toBe('/api/mobile/events/e%2F1/board/p%3F1/requests')
 })
 

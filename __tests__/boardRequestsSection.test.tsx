@@ -6,6 +6,7 @@
  * in a toast, not in a withdrawal that fails.
  */
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native'
+import { NAMES_ON_ACCEPT } from '../lib/board'
 
 jest.mock('expo-router', () => ({
   router: { back: jest.fn(), push: jest.fn() },
@@ -81,6 +82,8 @@ describe('answering an ask', () => {
     api.answerBoardRequest.mockResolvedValue({ success: true, data: { id: 'r-in', status: 'accepted', conversationId: 'conv-1' } })
     await render(<BoardRequestsSection refreshKey={0} onCount={jest.fn()} seatedPosts={new Set()} />)
 
+    // Said before Accept (identity model): with the asker's own, the chat opens swapped.
+    expect(await screen.findByText(NAMES_ON_ACCEPT.accept)).toBeTruthy()
     await fireEvent.press(await screen.findByLabelText('Accept the request from Arctic Falcon'))
 
     await waitFor(() =>
@@ -89,7 +92,7 @@ describe('answering an ask', () => {
         params: { conversationId: 'conv-1' },
       })
     )
-    expect(api.answerBoardRequest).toHaveBeenCalledWith('r-in', 'accept')
+    expect(api.answerBoardRequest).toHaveBeenCalledWith('r-in', 'accept', true)
     expect(screen.queryByText('Arctic Falcon')).toBeNull()
   })
 
@@ -104,6 +107,8 @@ describe('answering an ask', () => {
     api.answerBoardRequest.mockResolvedValue({ success: false, errorCode: 'CONFLICT', error })
     await render(<BoardRequestsSection refreshKey={0} onCount={jest.fn()} seatedPosts={new Set()} />)
 
+    // Said before Accept (identity model): with the asker's own, the chat opens swapped.
+    expect(await screen.findByText(NAMES_ON_ACCEPT.accept)).toBeTruthy()
     await fireEvent.press(await screen.findByLabelText('Accept the request from Arctic Falcon'))
 
     expect(await screen.findByText(line)).toBeTruthy()
@@ -119,6 +124,8 @@ describe('answering an ask', () => {
     api.answerBoardRequest.mockResolvedValue({ success: false, errorCode: 'CONFLICT', error: 'That event has ended' })
     await render(<BoardRequestsSection refreshKey={0} onCount={jest.fn()} seatedPosts={new Set()} />)
 
+    // Said before Accept (identity model): with the asker's own, the chat opens swapped.
+    expect(await screen.findByText(NAMES_ON_ACCEPT.accept)).toBeTruthy()
     await fireEvent.press(await screen.findByLabelText('Accept the request from Arctic Falcon'))
     await waitFor(() => expect(screen.queryByText('Arctic Falcon')).toBeNull())
   })
@@ -132,6 +139,8 @@ describe('answering an ask', () => {
     })
     await render(<BoardRequestsSection refreshKey={0} onCount={jest.fn()} seatedPosts={new Set()} />)
 
+    // Said before Accept (identity model): with the asker's own, the chat opens swapped.
+    expect(await screen.findByText(NAMES_ON_ACCEPT.accept)).toBeTruthy()
     await fireEvent.press(await screen.findByLabelText('Accept the request from Arctic Falcon'))
 
     await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('Only the person who was asked can answer', 'error', { haptic: 'error' }))

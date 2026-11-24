@@ -1,7 +1,6 @@
 import {
   BLUR_WIDTH,
   leaveConfirmation,
-  revealConfirmation,
   revealView,
   type ConversationRevealState,
   revealPanelKey,
@@ -27,79 +26,42 @@ const state = (over: Partial<ConversationRevealState> = {}): ConversationRevealS
   ...over,
 })
 
-describe('revealView (Flow 5 DM #01–#05)', () => {
-  it('both revealed: no bar, unless the server offers Add friend, which keeps the bar as `both`', () => {
+describe('revealView: Swap names (identity model, task 17 a, advisor pick A)', () => {
+  /*
+   * The server's fields, under the identity model (admin #1001): `youRevealed` = you tapped Swap names; `theyRevealed` = BOTH
+   * tapped (a one-sided tap never makes it true); `revealRequested` = they tapped and you have not.
+   */
+  it('neither tapped: Swap names', () => {
+    expect(revealView(state())).toEqual({ bar: 'none', line: { seen: false, text: 'Both anonymous' } })
+  })
+
+  it('you tapped: waiting, with Cancel; nothing shows yet', () => {
+    expect(revealView(state({ youRevealed: true }))).toEqual({ bar: 'mine', line: { seen: false, text: 'Waiting for them' } })
+  })
+
+  it('they tapped: their ask leads, with Swap names', () => {
+    expect(revealView(state({ revealRequested: true }))).toEqual({ bar: 'theirs', line: { seen: false, text: 'They want to swap' } })
+  })
+
+  it('both tapped: the strip folds, unless the server offers Add friend', () => {
     const both = state({ youRevealed: true, theyRevealed: true })
-    expect(revealView(both).bar).toBeNull()
-    expect(revealView(both, false, true)).toEqual({ bar: 'both', line: { seen: true, text: 'You see each other' }, nudge: null })
+    expect(revealView(both)).toEqual({ bar: null, line: { seen: true, text: 'You see each other' } })
+    expect(revealView(both, true).bar).toBe('both')
   })
 
-  it('an offer changes nothing before you have both revealed, or for a conversation that was never pseudonymous', () => {
-    expect(revealView(state({ youRevealed: true }), false, true).bar).toBe('youOnly')
-    expect(revealView(state({ theyRevealed: true }), false, true).bar).toBe('theyOnly')
-    expect(revealView(state({ pseudonymous: false }), false, true).bar).toBeNull()
+  it('`theyRevealed` alone is both (the server sends it only once both tapped)', () => {
+    expect(revealView(state({ theyRevealed: true })).bar).toBeNull()
+    expect(revealView(state({ theyRevealed: true })).line?.seen).toBe(true)
   })
 
-  it('shows nothing on a conversation that was never pseudonymous', () => {
-    // An accepted message request has shown real names since it existed.
-    expect(revealView(state({ pseudonymous: false }))).toEqual({ bar: null, line: null, nudge: null })
+  it('an offer changes nothing before you have both tapped, or on a conversation that was never pseudonymous', () => {
+    expect(revealView(state({ youRevealed: true }), true).bar).toBe('mine')
+    expect(revealView(state({ revealRequested: true }), true).bar).toBe('theirs')
+    expect(revealView(state({ pseudonymous: false }), true)).toEqual({ bar: null, line: null })
   })
 
-  it('both anonymous: Show them and Ask them, and the eye-off line', () => {
-    expect(revealView(state())).toEqual({ bar: 'none', line: { seen: false, text: 'Both anonymous' }, nudge: null })
-  })
-
-  it('once you ask, the Asked state — never a declined one', () => {
-    expect(revealView(state(), true)).toEqual({ bar: 'asked', line: { seen: false, text: 'Both anonymous · asked' }, nudge: null })
-  })
-
-  it('surfaces that they asked, without making it a demand', () => {
-    const v = revealView(state({ revealRequested: true }))
-    expect(v.nudge).toBe('Wandering Kestrel asked to know who you are')
-    expect(v.nudge).not.toMatch(/must|need|waiting|\d/i)
-  })
-
-  it('they revealed, you have not: Show them, and their side seen', () => {
-    expect(revealView(state({ theyRevealed: true })).bar).toBe('theyOnly')
-    expect(revealView(state({ theyRevealed: true })).line?.text).toBe('You see them · they don’t see you')
-  })
-
-  it('you revealed, they have not: no button, they decide', () => {
-    const v = revealView(state({ youRevealed: true, revealRequested: true }))
-    expect(v.bar).toBe('youOnly')
-    expect(v.line?.text).toBe('They see you · you don’t see them')
-    // Nothing left for you to answer.
-    expect(v.nudge).toBeNull()
-  })
-
-  it('both revealed: the bar goes for good and the line says so', () => {
-    expect(revealView(state({ youRevealed: true, theyRevealed: true }))).toEqual({
-      bar: null,
-      line: { seen: true, text: 'You see each other' },
-      nudge: null,
-    })
-  })
-})
-
-describe('revealConfirmation', () => {
-  it('states plainly that it cannot be undone, before the tap', () => {
-    /*
-     * The load-bearing sentence. A control that reads like a toggle implies it
-     * can be toggled back, and nothing can unsee a name and a face. The server
-     * has no path back to false, so the copy has to carry the whole warning.
-     */
-    const c = revealConfirmation('Wandering Kestrel')
-    expect(c.body.toLowerCase()).toContain('can’t be undone')
-    expect(c.title).toContain('Wandering Kestrel')
-  })
-
-  it('names what is actually shown', () => {
-    // "Reveal" is abstract. Name and photos is what happens.
-    expect(revealConfirmation('X').body).toMatch(/name and photos/)
-  })
-
-  it('offers blocking as the real remedy rather than pretending to undo', () => {
-    expect(revealConfirmation('X').body.toLowerCase()).toContain('block')
+  it('a stale revealRequested after your own tap reads as yours: you are waiting, not asked', () => {
+    expect(revealView(state({ youRevealed: true, revealRequested: true })).bar).toBe('mine')
   })
 })
 
@@ -166,16 +128,15 @@ describe('the blur derivative is small enough to be a blur', () => {
 })
 
 describe('the reveal panel’s key (what a fold is remembered against)', () => {
-  it('is the state plus whether somebody asked, and null with no panel', () => {
+  it('is the state, and null with no panel', () => {
     expect(revealPanelKey(null)).toBeNull()
-    expect(revealPanelKey({ bar: null, nudge: null })).toBeNull()
-    expect(revealPanelKey({ bar: 'none', nudge: null })).toBe('none:')
-    expect(revealPanelKey({ bar: 'none', nudge: 'Mika asked to know who you are' })).toBe('none:Mika asked to know who you are')
+    expect(revealPanelKey({ bar: null })).toBeNull()
+    expect(revealPanelKey({ bar: 'none' })).toBe('none')
   })
 
-  it('changes with the state and with a new ask, so a fold does not outlive what it folded', () => {
-    expect(revealPanelKey({ bar: 'none', nudge: null })).not.toBe(revealPanelKey({ bar: 'asked', nudge: null }))
-    expect(revealPanelKey({ bar: 'none', nudge: null })).not.toBe(revealPanelKey({ bar: 'none', nudge: 'x' }))
+  it('changes with the state, so a fold does not outlive what it folded (their tap brings the strip back)', () => {
+    expect(revealPanelKey({ bar: 'none' })).not.toBe(revealPanelKey({ bar: 'theirs' }))
+    expect(revealPanelKey({ bar: 'mine' })).not.toBe(revealPanelKey({ bar: 'none' }))
   })
 })
 
@@ -184,9 +145,8 @@ it('every header line fits the header: short, each side said once', () => {
   const base = { pseudonymous: true, youRevealed: false, theyRevealed: false, revealRequested: false, displayName: 'Plover' }
   const lines = [
     revealView({ ...base }),
-    revealView({ ...base }, true),
     revealView({ ...base, youRevealed: true }),
-    revealView({ ...base, theyRevealed: true }),
+    revealView({ ...base, revealRequested: true }),
     revealView({ ...base, youRevealed: true, theyRevealed: true }),
   ].map((v) => v.line?.text ?? '')
   for (const line of lines) expect(line.length).toBeLessThanOrEqual(REVEAL_LINE_MAX)
@@ -198,6 +158,8 @@ it('the anonymous header line fits one line at 1.3 text on a 360 dp phone', () =
   const base = { pseudonymous: true, youRevealed: false, theyRevealed: false, revealRequested: false, displayName: 'Plover' }
   const lead = revealView({ ...base }).line?.text ?? ''
   expect(lead.length).toBeLessThanOrEqual(ANON_LINE_MAX)
-  // Once asked there is a second clause; the lead still reads whole before it.
-  expect(revealView({ ...base }, true).line?.text.startsWith(lead)).toBe(true)
+  // The other states sit in the same slot, about as short (checked on device at 1.3 / 360, task 17 drive).
+  for (const over of [{ youRevealed: true }, { revealRequested: true }]) {
+    expect((revealView({ ...base, ...over }).line?.text ?? '').length).toBeLessThanOrEqual(ANON_LINE_MAX + 2)
+  }
 })

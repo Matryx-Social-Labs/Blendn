@@ -10,6 +10,7 @@ import { useToast } from '../Toast'
 import { Text } from '../ui/Text'
 import { apiClient } from '../../lib/apiClient'
 import {
+  NAMES_ON_ACCEPT,
   acceptConflictLine,
   boardMarkSeed,
   boardMessage,
@@ -151,7 +152,8 @@ export function BoardRequestsSection({
 
     let result: Awaited<ReturnType<typeof apiClient.answerBoardRequest>>
     try {
-      result = await apiClient.answerBoardRequest(request.id, action)
+      // The row says NAMES_ON_ACCEPT.accept above Accept, so the accept carries the flag (the chat opens swapped if the ask did too).
+      result = action === 'accept' ? await apiClient.answerBoardRequest(request.id, action, true) : await apiClient.answerBoardRequest(request.id, action)
     } catch (error) {
       result = { success: false, error: String(error) }
     } finally {
@@ -220,6 +222,7 @@ export function BoardRequestsSection({
             foot={notes[r.id]}
             time={inboxTimeLabel(r.createdAt)}
             pending={busy.has(r.id)}
+            consent={NAMES_ON_ACCEPT.accept}
             onAccept={() => void answer(r, 'accept')}
             onDecline={() => void answer(r, 'decline')}
             onMore={() => more(r)}
