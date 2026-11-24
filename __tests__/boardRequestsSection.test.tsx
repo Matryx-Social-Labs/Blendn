@@ -7,6 +7,8 @@
  */
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native'
 import { NAMES_ON_ACCEPT } from '../lib/board'
+import { SPACE } from '../lib/design/tokens'
+import { StyleSheet } from 'react-native'
 
 jest.mock('expo-router', () => ({
   router: { back: jest.fn(), push: jest.fn() },
@@ -117,6 +119,15 @@ describe('answering an ask', () => {
     expect(router.push).not.toHaveBeenCalled()
     // And it reads again, so an ask that can no longer be answered goes.
     await waitFor(() => expect(api.getBoardRequests).toHaveBeenCalledTimes(2))
+  })
+
+  it('sets the names line apart as board 06 draws it: 20 pt above, 22 below (with the card gap 8)', async () => {
+    api.getBoardRequests.mockResolvedValue(listing([INCOMING]))
+    await render(<BoardRequestsSection refreshKey={0} onCount={jest.fn()} seatedPosts={new Set()} />)
+
+    const line = StyleSheet.flatten((await screen.findByTestId('board-request-r-in-consent')).props.style)
+    expect(line.marginTop + SPACE.sm).toBe(20)
+    expect(line.marginBottom + SPACE.sm).toBe(22)
   })
 
   it('an ask the reload no longer lists goes, note and all', async () => {

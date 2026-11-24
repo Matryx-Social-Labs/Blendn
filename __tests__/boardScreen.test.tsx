@@ -7,6 +7,7 @@
  */
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native'
 import { NAMES_ON_ACCEPT } from '../lib/board'
+import { SPACE } from '../lib/design/tokens'
 import { AccessibilityInfo, StyleSheet } from 'react-native'
 
 const mockParams: Record<string, string> = {}
@@ -362,6 +363,15 @@ describe('asking', () => {
     expect(screen.queryByText(NAMES_ON_ACCEPT.ask)).toBeNull()
     expect(api.askOnBoard).toHaveBeenCalledWith('e1', 'p-offer', true)
     expect(AccessibilityInfo.announceForAccessibility).toHaveBeenCalledWith('Waiting on them')
+  })
+
+  it('spaces the names line as board L-A: 10 pt under the post, 12 over Ask to join', async () => {
+    api.getBoard.mockResolvedValue(board([OFFER]))
+    await render(<BoardScreen />)
+
+    const block = StyleSheet.flatten((await screen.findByTestId('lobby-post-consent')).parent?.props.style)
+    expect(block.marginTop ?? 0).toBe(0)
+    expect(block.gap + SPACE.xxs).toBe(12)
   })
 
   it.each(['You have already asked — give them a moment', 'They have already answered this one'])(

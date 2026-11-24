@@ -299,7 +299,7 @@ const styles = StyleSheet.create({
 
   footer: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: SPACE.md, marginTop: SPACE.xxs },
   footerTop: { marginTop: SPACE.xxs },
-  askBlock: { gap: SPACE.sm, marginTop: SPACE.xxs },
+  askBlock: { gap: SPACE.sm + SPACE.xxs },
   footerLine: { flex: 1 },
   askButton: { marginLeft: 'auto' },
 
