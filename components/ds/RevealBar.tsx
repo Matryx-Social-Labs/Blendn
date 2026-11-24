@@ -86,8 +86,8 @@ export function RevealBar({
             You
           </Text>
         ) : null}
-        {/* Each name may take two lines rather than be cut to a few letters (C26, C27). */}
-        <Text numberOfLines={2} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('caption', bold), styles.ink]}>
+        {/* A name wraps as far as it needs and is never cut (advisor A; C26, C27): "Albat…" hid who it was. */}
+        <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('caption', bold), styles.ink]}>
           {mine ? (yourName ? (narrow ? yourName : `You · ${yourName}`) : YOU) : who.name}
         </Text>
         {narrow ? null : eyeLine(mine, id)}

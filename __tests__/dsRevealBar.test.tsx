@@ -161,3 +161,10 @@ describe('rc8 10d: the eye line at 360 dp', () => {
     expect(within(names).getByTestId('r-you-eye', { includeHiddenElements: true })).toBeTruthy()
   })
 })
+
+it('never cuts a long pseudonym: each side name wraps as far as it needs (advisor A, "never truncate")', async () => {
+  const long = 'Luminous Wandering Albatross 999'
+  await draw({ state: 'theirs', them: { face: { kind: 'creature', pseudonym: long }, name: long } })
+  expect(screen.getByText(long).props.numberOfLines).toBeUndefined()
+  expect(screen.getByText('You · Night Cat').props.numberOfLines).toBeUndefined()
+})
