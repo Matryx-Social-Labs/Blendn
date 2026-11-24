@@ -40,7 +40,7 @@ import { subscribeCheckInChanged } from '../../lib/checkIn'
 import { notOpenYetAt, opensInSpoken } from '../../lib/preEventRoom'
 import { useOpensAt, usePreEventRoom } from '../../lib/usePreEventRoom'
 import { newClientId } from '../../lib/clientId'
-import { waveBackFromChat, type WaveBackOutcome } from '../../lib/crewWaveBack'
+import { useHiddenCrewIds, waveBackFromChat, withoutBlockedCrews, type WaveBackOutcome } from '../../lib/crewWaveBack'
 import { openBlend } from '../crews/CrewsView'
 import { BLEND_CLOSED_LINE, defaultRoomName, roomClosedLine, roomKindParam, UNKNOWN_ROOM_NAME } from '../../lib/crews'
 import { crewsApi } from '../../lib/crewsApi'
@@ -843,7 +843,11 @@ function RoomChatInner({ params, embedded }: { params: RoomChatParams; embedded?
     else router.push(`/venue/${venueId}` as never)
   }
 
-  const visible = useMemo(() => messages.filter((m) => !blocked.has(m.sender_id)), [messages, blocked])
+  const hiddenCrews = useHiddenCrewIds(roomKind === 'crew')
+  const visible = useMemo(
+    () => withoutBlockedCrews(messages.filter((m) => !blocked.has(m.sender_id)), hiddenCrews),
+    [messages, blocked, hiddenCrews]
+  )
   const chatItems: ChatListItem[] = useMemo(() => withDaySeparators(visible, (m) => m.created_at), [visible])
   /* The skeleton is the list's empty slot, so the first messages fade in as cells; later ones arrive as they do (the hook's window). */
   const arrive = useSkeletonCrossfade(loading && !chatItems.length)

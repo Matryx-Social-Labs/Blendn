@@ -3,13 +3,13 @@
  * with one text action, Wave back; after it "Waved back" and no action; a crew or person who has gone, "They've left the
  * room", never an error. A crewmate's own "waved at Orbit for the crew" stays a centred line naming who.
  */
-import { act, fireEvent, render, screen } from '@testing-library/react-native'
+import { act, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react-native'
 
-jest.mock('../lib/crewsApi', () => ({ crewsApi: { waveCrew: jest.fn(), likePersonAsCrew: jest.fn() } }))
+jest.mock('../lib/crewsApi', () => ({ crewsApi: { waveCrew: jest.fn(), likePersonAsCrew: jest.fn(), hiddenCrews: jest.fn() } }))
 
 import { CrewWavedNotice } from '../components/chat/CrewWavedNotice'
 import { crewLikeLine } from '../lib/crews'
-import { waveBackFromChat } from '../lib/crewWaveBack'
+import { useHiddenCrewIds, waveBackFromChat, withoutBlockedCrews } from '../lib/crewWaveBack'
 import { crewsApi } from '../lib/crewsApi'
 import { roomMessagesFrom } from '../lib/roomMessages'
 
@@ -99,5 +99,24 @@ describe('<CrewWavedNotice>', () => {
   it('without a way to answer (a live line with no metadata): the sentence alone', async () => {
     await render(<CrewWavedNotice id="m-e" text="Nebula waved at your crew" />)
     expect(screen.queryByRole('button', { name: 'Wave back' })).toBeNull()
+  })
+})
+
+describe('a crew you blocked draws no notice (advisor Q2)', () => {
+  const line = (id: string, from?: object) => ({ message_id: id, sender_id: 's', sender_name: 'x', message_text: 't', message_type: 'system', reply_to_message_id: null, created_at: '2026-11-25T10:00:00Z', ...(from ? { crewWave: from } : {}) }) as never
+
+  it('drops only that crew’s line; a person’s wave and everything else stay', () => {
+    const list = [line('a', { eventId: 'e', fromCrewId: 'blocked' }), line('b', { eventId: 'e', fromCrewId: 'ok' }), line('c', { eventId: 'e', fromUserId: 'rh' }), line('d')]
+    expect(withoutBlockedCrews(list, new Set(['blocked'])).map((m: { message_id: string }) => m.message_id)).toEqual(['b', 'c', 'd'])
+    expect(withoutBlockedCrews(list, new Set())).toBe(list)
+  })
+
+  it('reads the blocked crews once for a crew chat, and not for any other room', async () => {
+    api.hiddenCrews.mockResolvedValue({ success: true, data: { crews: [{ crewId: 'c1' }], pagination: {} } } as never)
+    const { result, rerender } = await renderHook(({ on }: { on: boolean }) => useHiddenCrewIds(on), { initialProps: { on: false } })
+    expect(api.hiddenCrews).not.toHaveBeenCalled()
+    await rerender({ on: true })
+    await waitFor(() => expect(result.current.has('c1')).toBe(true))
+    expect(api.hiddenCrews).toHaveBeenCalledTimes(1)
   })
 })
