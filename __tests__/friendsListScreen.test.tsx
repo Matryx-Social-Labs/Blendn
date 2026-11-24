@@ -523,7 +523,28 @@ describe('A–Z (Flow 7 1-A)', () => {
     await act(async () => fireEvent(scrubber(), 'responderGrant', { nativeEvent: { pageY: 26 * 14 + 3 } }))
     expect(mockByName).toHaveBeenLastCalledWith('c1', null, 'name')
     const data = list().props.data as FriendItem[]
-    expect(scroll).toHaveBeenLastCalledWith({ index: data.findIndex((i) => i.kind === 'head' && i.title === 'Z'), animated: false })
+    const z = data.findIndex((i) => i.kind === 'head' && i.title === 'Z')
+    expect(scroll).toHaveBeenLastCalledWith({ index: z, animated: false })
+    // Seen on the sim (SCRUM-1099): that first scroll runs before iOS has the new rows' height, which clamps it short of Z. The
+    // jump lands again once the list grows, and only that once. Control: without the second scroll this fails.
+    scroll.mockClear()
+    await act(async () => fireEvent(list(), 'contentSizeChange', 402, 40000))
+    expect(scroll).toHaveBeenCalledWith({ index: z, animated: false })
+    await act(async () => fireEvent(list(), 'contentSizeChange', 402, 41000))
+    expect(scroll).toHaveBeenCalledTimes(1)
+    scroll.mockRestore()
+  })
+
+  it('a jump within what is read does not land again when a later page grows the list', async () => {
+    await atScale(1)
+    const scroll = jest.spyOn(FlatList.prototype, 'scrollToIndex').mockImplementation(() => {})
+    mockGetFriends.mockResolvedValueOnce(page(sixtyFour(), 64))
+    mockByName.mockResolvedValueOnce(named(sixtyFourByName(), 64))
+    await open()
+    await act(async () => fireEvent(scrubber(), 'responderGrant', { nativeEvent: { pageY: 14 + 3 } }))
+    expect(scroll).toHaveBeenCalledTimes(1)
+    await act(async () => fireEvent(list(), 'contentSizeChange', 402, 40000))
+    expect(scroll).toHaveBeenCalledTimes(1)
     scroll.mockRestore()
   })
 

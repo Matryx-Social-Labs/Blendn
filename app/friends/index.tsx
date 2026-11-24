@@ -125,18 +125,33 @@ function FriendsScreenContent() {
   const listRef = useRef<FlatList<FriendItem>>(null)
   // The head a scrubber letter asked for whose page has not been read yet.
   const seeking = useRef<string | null>(null)
+  // A jump that read pages on its way: its first scroll runs before iOS has the new rows' height and is clamped short, so it lands
+  // again once the list grows (`onContentSizeChange`), once.
+  const readOnWay = useRef(false)
+  const landing = useRef<number | null>(null)
   /** Jumps to the sought head, or reads the next page on the way to it. */
   const seek = () => {
     if (!seeking.current) return
     const index = headIndex(items, seeking.current)
     if (index >= 0) {
       listRef.current?.scrollToIndex({ index, animated: false })
+      landing.current = readOnWay.current ? index : null
       seeking.current = null
     } else if (!byName.hasMore || byName.moreFailed) seeking.current = null
-    else if (!byName.loadingMore) void byName.loadMore()
+    else if (!byName.loadingMore) {
+      readOnWay.current = true
+      void byName.loadMore()
+    }
+  }
+  const land = () => {
+    if (landing.current === null) return
+    listRef.current?.scrollToIndex({ index: landing.current, animated: false })
+    landing.current = null
   }
   const jumpTo = (letter: string) => {
     if (!letters || !heads) return
+    readOnWay.current = false
+    landing.current = null
     seeking.current = letter === '★' ? null : headFor(letters, letter, heads)
     // `ListHeaderComponent` sits above index 0, so ★ (the top) scrolls to the very top rather than to Recently added under it.
     if (letter === '★') listRef.current?.scrollToOffset({ offset: 0, animated: false })
@@ -222,6 +237,7 @@ function FriendsScreenContent() {
             getItemLayout={fixedRows ? (_data, index) => ({ length: items[index]?.kind === 'head' ? SECTION_HEAD : PERSON_ROW_HEIGHT, offset: offsets[index] ?? 0, index }) : undefined}
             // The heads stick under the bar; `ListHeaderComponent` (when drawn) is index 0 to the list, so they shift by one.
             stickyHeaderIndices={items.flatMap((item, i) => (item.kind === 'head' ? [i + (list.friends.length && header ? 1 : 0)] : []))}
+            onContentSizeChange={land}
             onEndReachedThreshold={1.5}
             onEndReached={() => void shown.loadMore()}
             initialNumToRender={12}
