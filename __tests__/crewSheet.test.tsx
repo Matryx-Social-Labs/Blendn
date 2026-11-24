@@ -1,7 +1,7 @@
 /**
  * Task 17 b1 (SCRUM-1105): the crew's sheet on a card tap (board crews/05-room A, advisor S-A 2026-11-25), Hide this crew
  * tonight (this session only), Block this crew (a confirm, then `POST /crews/:id/hide`, the card goes), and the lit Wave back
- * cards pinned first, at most three (advisor Q4).
+ * cards.
  */
 import { act, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react-native'
 
@@ -167,16 +167,20 @@ describe('Block this crew (B-A confirm)', () => {
   })
 })
 
-describe('Wave back cards (Q4): lit and pinned first, at most three', () => {
+describe('Wave back cards: lit by the flag, however many (advisor 2026-11-25, replaces the cap of three)', () => {
   const actions = { wave: jest.fn(), report: jest.fn() } as never
   const back = card('x', { name: 'Orbit', wavedAtYou: true })
 
-  it('the first three unanswered are lit; the fourth keeps Wave back, unlit', async () => {
-    await render(<RoomCrewCard card={back} actions={actions} as="Nebula" index={2} onOpen={jest.fn()} />)
+  it('the 41st unanswered card is lit as the first is: the line always comes with Wave back', async () => {
+    await render(<RoomCrewCard card={back} actions={actions} as="Nebula" index={40} onOpen={jest.fn()} />)
     expect(screen.getByText('Waved at Nebula')).toBeTruthy()
-    await render(<RoomCrewCard card={back} actions={actions} as="Nebula" index={3} onOpen={jest.fn()} />)
-    expect(screen.queryByText('Waved at Nebula')).toBeNull()
     expect(screen.getByText('Wave back')).toBeTruthy()
+  })
+
+  it('answered: the line goes and it reads Waved, in place', async () => {
+    await render(<RoomCrewCard card={{ ...back, youLiked: true, youWaved: true }} actions={actions} as="Nebula" index={0} onOpen={jest.fn()} />)
+    expect(screen.queryByText('Waved at Nebula')).toBeNull()
+    expect(screen.getByLabelText('Waved')).toBeTruthy()
   })
 
   it('a tap on the card body opens its sheet', async () => {

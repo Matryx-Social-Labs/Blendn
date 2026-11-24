@@ -38,8 +38,6 @@ export type CrewWave = {
    * the card is lit and the button is Wave back (board crews/05-room A, advisor Q4 2026-11-25).
    */
   state: 'idle' | 'waved' | 'waveBack'
-  /** A `waveBack` card drawn lit (rose wash, "Waved at…"); default true. The Room lights only the first three (advisor Q4). */
-  lit?: boolean
   /** The crew you're waving as; absent (null) for a solo person's plain Wave. */
   as?: string | null
   onPress: () => void
@@ -88,7 +86,7 @@ export function CrewCard({
   const hashtags = crew.tags.map((t) => `#${t}`)
   const label = [crew.name, `crew of ${crew.size}`, here ? `${here} here` : null, crew.bio, ...hashtags, crew.intent, crew.badge ? `Badge: ${ACHIEVEMENT[crew.badge].label}` : null].filter(Boolean).join(', ')
   const detail = contrast ? COLOR.textPrimary : COLOR.textSecondary
-  const lit = wave?.state === 'waveBack' && wave.lit !== false
+  const lit = wave?.state === 'waveBack'
 
   return (
     <View
