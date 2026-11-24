@@ -226,7 +226,10 @@ export function CrewRow({
   emblemSeed: string
   size: number
   sub?: string
-  /** A control at the row's end in the chevron's place (Settings → Blocked's Unblock). */
+  /**
+   * A control at the row's end in the chevron's place (Settings → Blocked's Unblock). Such a row is in a list on the
+   * gutter, not in a card, and groups nothing for a screen reader, so the control is reached on its own.
+   */
   trailing?: ReactNode
   /** The crew's tier badge, drawn and read in the chevron's place. */
   badge?: AchievementKind
@@ -241,10 +244,11 @@ export function CrewRow({
       testID={testID}
       onPress={onPress}
       disabled={!onPress}
+      accessible={!trailing}
       accessibilityRole={onPress ? 'button' : undefined}
-      accessibilityLabel={[name, line, badge ? `Badge: ${ACHIEVEMENT[badge].label}` : null].filter(Boolean).join(', ')}
+      accessibilityLabel={trailing ? undefined : [name, line, badge ? `Badge: ${ACHIEVEMENT[badge].label}` : null].filter(Boolean).join(', ')}
       android_ripple={{ color: PRESSED_WASH.android }}
-      style={({ pressed }) => [styles.row, pressed && Platform.OS === 'ios' ? { backgroundColor: PRESSED_WASH.ios } : null]}
+      style={({ pressed }) => [styles.row, trailing ? styles.flush : null, pressed && Platform.OS === 'ios' ? { backgroundColor: PRESSED_WASH.ios } : null]}
     >
       <CrewEmblem seed={emblemSeed} size={EMBLEM.row} />
       <View style={styles.text}>
@@ -293,6 +297,7 @@ const styles = StyleSheet.create({
   },
   likedText: { flexShrink: 1, textAlign: 'center' },
   overlap: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
+  flush: { paddingHorizontal: 0 },
   row: {
     minHeight: ROW_MIN_HEIGHT,
     flexDirection: 'row',

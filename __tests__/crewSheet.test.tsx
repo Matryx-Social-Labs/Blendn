@@ -68,7 +68,7 @@ describe('the crew’s sheet (S-A)', () => {
     await render(<CrewSheet visible card={orbit} wave={{ state: 'idle', as: 'Nebula' }} {...handlers()} />)
     expect(screen.getByText('Orbit')).toBeTruthy()
     expect(screen.getByText('Crew of 5 · 3 here now · Out together often')).toBeTruthy()
-    expect(screen.getByText('Techno heads')).toBeTruthy()
+    expect(screen.getByText('#Technoheads')).toBeTruthy()
     expect(screen.getByText('About them')).toBeTruthy()
     expect(screen.getByText('“Here till the last track.”')).toBeTruthy()
     expect(screen.getByText('Both crews are into techno')).toBeTruthy()

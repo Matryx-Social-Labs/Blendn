@@ -2,7 +2,7 @@ import { useRef, type ComponentRef } from 'react'
 import { ScrollView, StyleSheet, Text, View } from 'react-native'
 
 import { COLOR, FONT_FAMILY, MAX_FONT_SCALE, RADIUS, SPACE } from '../../lib/design/tokens'
-import { crewBadge, type CrewCard } from '../../lib/crews'
+import { crewBadge, tagText, type CrewCard } from '../../lib/crews'
 import { ACHIEVEMENT } from '../ds/AchievementBadge'
 import { Chip } from '../ds/Chip'
 import { CrewEmblem } from '../ds/CrewEmblem'
@@ -61,7 +61,7 @@ export function CrewSheet({
 
         {card.tags.length ? (
           <View style={styles.chips}>
-            {card.tags.map((t) => <Chip key={t.slug} label={t.label} lines={2} />)}
+            {card.tags.map((t) => <Chip key={t.slug} label={`#${tagText(t)}`} lines={2} />)}
           </View>
         ) : null}
 

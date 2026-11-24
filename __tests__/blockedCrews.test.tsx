@@ -4,6 +4,7 @@
  * few. Nothing at all when you blocked no crew.
  */
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native'
+import { StyleSheet } from 'react-native'
 
 jest.mock('../lib/crewsApi', () => ({ crewsApi: { hiddenCrews: jest.fn(), unhideCrew: jest.fn() } }))
 jest.mock('../lib/sheet', () => ({ showSheet: jest.fn() }))
@@ -37,6 +38,15 @@ it('the group: Crews · N, the caption, a row per crew with Unblock', async () =
   expect(screen.getAllByText(/^Crew · blocked /)).toHaveLength(2)
   expect(screen.getByLabelText('Unblock Orbit')).toBeTruthy()
   expect(screen.queryByText(/^Show all/)).toBeNull()
+})
+
+it('Unblock is its own element to a screen reader (drive: VoiceOver could not reach it), and the row sits on the gutter', async () => {
+  api.hiddenCrews.mockResolvedValue(answer([crew('orbit', 'Orbit')], 1, false))
+  await render(<BlockedCrews />)
+  await screen.findByText('Orbit')
+  const row = screen.getByTestId('blocked-crew-orbit')
+  expect(row.props.accessible).toBe(false)
+  expect(StyleSheet.flatten(row.props.style).paddingHorizontal).toBe(0)
 })
 
 it('Unblock asks first; confirming unhides it and the row goes', async () => {
