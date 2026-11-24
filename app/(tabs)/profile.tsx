@@ -599,7 +599,6 @@ function ProfileInner() {
         visible={previewing}
         onClose={() => setPreviewing(false)}
         onEdit={openEdit}
-        onFullProfile={() => user && router.push({ pathname: '/user/[id]', params: { id: user.id } })}
       />
     </View>
   )

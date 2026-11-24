@@ -51,8 +51,7 @@ const sparse = { ...payload, named: { ...payload.named, image: null, photos: [],
 const ok = (data: unknown) => ({ success: true, data })
 const onClose = jest.fn()
 const onEdit = jest.fn()
-const onFullProfile = jest.fn()
-const sheet = (visible = true) => <SeeAsOthersSheet visible={visible} onClose={onClose} onEdit={onEdit} onFullProfile={onFullProfile} />
+const sheet = (visible = true) => <SeeAsOthersSheet visible={visible} onClose={onClose} onEdit={onEdit} />
 const open = async (data: unknown = ok(payload)) => {
   mockPreview.mockResolvedValue(data)
   await render(sheet())
@@ -103,21 +102,15 @@ describe('the sheet', () => {
     expect(screen.queryByLabelText(/Wave|Message|Block or report/)).toBeNull()
   })
 
-  it('Full profile, on Shown only, opens once the sheet has left', async () => {
+  it('has no way to a whole page of yourself (Me is that page), and no actions with something to show', async () => {
     await open()
-    expect(screen.queryByText('Full profile')).toBeNull()
     await show()
-    await act(async () => fireEvent.press(screen.getByText('Full profile')))
-    expect(onClose).toHaveBeenCalledTimes(1)
-    expect(onFullProfile).not.toHaveBeenCalled()
-    await act(async () => mockDismissed())
-    expect(onFullProfile).toHaveBeenCalledTimes(1)
+    expect(screen.queryByText(/Full profile|Edit profile/)).toBeNull()
   })
 
   it('a plain close opens nothing', async () => {
     await open()
     await act(async () => mockDismissed())
-    expect(onFullProfile).not.toHaveBeenCalled()
     expect(onEdit).not.toHaveBeenCalled()
   })
 
@@ -125,8 +118,10 @@ describe('the sheet', () => {
     await open(ok(sparse))
     await show()
     expect(screen.getByText('Your photo, bio, interests and work show here once you add them.')).toBeTruthy()
-    expect(screen.queryByText('Full profile')).toBeNull()
     await act(async () => fireEvent.press(screen.getByText('Edit profile')))
+    // Only once the sheet has left.
+    expect(onClose).toHaveBeenCalledTimes(1)
+    expect(onEdit).not.toHaveBeenCalled()
     await act(async () => mockDismissed())
     expect(onEdit).toHaveBeenCalledTimes(1)
   })

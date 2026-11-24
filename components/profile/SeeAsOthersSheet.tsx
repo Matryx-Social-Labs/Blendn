@@ -29,9 +29,8 @@ const SPARSE = 'Your photo, bio, interests and work show here once you add them.
 export interface SeeAsOthersSheetProps {
   visible: boolean
   onClose: () => void
+  /** Offered when there is nothing but a name to show. */
   onEdit: () => void
-  /** Your own profile page, with the photos a sheet has no room for. */
-  onFullProfile: () => void
 }
 
 /**
@@ -39,9 +38,10 @@ export interface SeeAsOthersSheetProps {
  * before and after you show who you are. Both cards are the server's own (`GET /me/preview`), read afresh at every opening, so
  * an edit made in between shows. What one room adds (an answer, things in common) has no place here and is said in words.
  *
- * The two ways out open once this sheet has left the screen: iOS refuses to present over a Modal that is still leaving.
+ * Edit profile opens once this sheet has left the screen: iOS refuses to present over a Modal that is still leaving. There is no
+ * way to a whole page of yourself: Me is that page (`chatRoom.test.ts`).
  */
-export function SeeAsOthersSheet({ visible, onClose, onEdit, onFullProfile }: SeeAsOthersSheetProps) {
+export function SeeAsOthersSheet({ visible, onClose, onEdit }: SeeAsOthersSheetProps) {
   const [side, setSide] = useState(0)
   const [preview, setPreview] = useState<MePreview | 'failed' | null>(null)
   // Each opening starts over: Anonymous first, and nothing from last time.
@@ -54,7 +54,7 @@ export function SeeAsOthersSheet({ visible, onClose, onEdit, onFullProfile }: Se
     }
   }
   const ask = useRef(0)
-  const next = useRef<(() => void) | null>(null)
+  const editing = useRef(false)
 
   const load = useCallback(async () => {
     const mine = ++ask.current
@@ -78,25 +78,20 @@ export function SeeAsOthersSheet({ visible, onClose, onEdit, onFullProfile }: Se
     setPreview(null)
     void load()
   }
-  const leaveFor = (then: () => void) => {
-    next.current = then
+  const edit = () => {
+    editing.current = true
     onClose()
   }
   const onDismissed = () => {
-    const then = next.current
-    next.current = null
-    then?.()
+    if (!editing.current) return
+    editing.current = false
+    onEdit()
   }
 
   const ready = preview !== null && preview !== 'failed' ? preview : null
   const named = ready?.named
   const sparse = !!named && !named.photo && !named.about && !named.work && !named.interests.length
-  const actions: SheetAction[] =
-    !named || side === 0
-      ? []
-      : sparse
-        ? [{ label: 'Edit profile', kind: 'lit', icon: 'pencil', onPress: () => leaveFor(onEdit), testID: 'see-as-edit' }]
-        : [{ label: 'Full profile', kind: 'secondary', onPress: () => leaveFor(onFullProfile), testID: 'see-as-full' }]
+  const actions: SheetAction[] = sparse && side === 1 ? [{ label: 'Edit profile', kind: 'lit', icon: 'pencil', onPress: edit, testID: 'see-as-edit' }] : []
 
   return (
     <Sheet visible={visible} onClose={onClose} onDismissed={onDismissed} title="See as others do" actions={actions} testID="see-as-others">
