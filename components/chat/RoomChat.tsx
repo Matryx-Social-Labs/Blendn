@@ -49,6 +49,7 @@ import { H } from '../../lib/haptics'
 import { useKeyboardShown } from '../../lib/keyboard'
 import { markDomainsDirty } from '../../lib/liveSyncState'
 import { Logger } from '../../lib/logger'
+import { insertInOrder } from '../../lib/insertInOrder'
 import { mergeNewestPage } from '../../lib/mergeNewestPage'
 import { messageMenu, type MessageMenu } from '../../lib/messageMenu'
 import { useActiveThread } from '../../lib/notifications'
@@ -506,7 +507,13 @@ function RoomChatInner({ params, embedded }: { params: RoomChatParams; embedded?
           prev.some((m) => m.message_id === incoming.message_id)
             ? prev
             : // The quote resolves here: its parent is already in the list.
-              [...prev, { ...incoming, replyTo: incoming.reply_to_message_id ? prev.find((m) => m.message_id === incoming.reply_to_message_id) : undefined }]
+              insertInOrder(
+                prev,
+                { ...incoming, replyTo: incoming.reply_to_message_id ? prev.find((m) => m.message_id === incoming.reply_to_message_id) : undefined },
+                (m) => m.created_at,
+                (m) => m.message_id,
+                isTemp
+              )
         )
         setTypingUsers((prev) => {
           if (!prev.has(data.message.userId)) return prev
