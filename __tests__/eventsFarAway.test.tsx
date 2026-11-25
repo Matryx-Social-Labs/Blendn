@@ -12,6 +12,7 @@ const mockVisible = true
 const mockFull = false
 let mockNear: object | undefined
 const SOON = new Date(Date.now() + 2 * 86_400_000).toISOString()
+let mockCheckedIn = false
 const mockFeatured = ['e1', 'e2'].map((id, i) => ({ id, title: `Event ${id}`, start_time: SOON, end_time: null, cover_image_url: `https://img/${i}.jpg`, city: 'Bengaluru', venue_name: 'Olive Beach', latitude: 12.97, longitude: 77.6, is_featured: true, featured: { kind: 'editorial' as const, rank: i + 1 } }))
 jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock')
@@ -25,7 +26,7 @@ jest.mock('expo-router', () => ({
 jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }))
 jest.mock('expo-location', () => ({
   Accuracy: { Balanced: 3 },
-  getForegroundPermissionsAsync: jest.fn(async () => ({ status: 'granted' })),
+  getForegroundPermissionsAsync: jest.fn(async () => ({ status: 'granted', granted: true })),
   requestForegroundPermissionsAsync: jest.fn(async () => ({ status: 'granted' })),
   // Saarbrücken: outside every served city.
   getLastKnownPositionAsync: jest.fn(async () => ({ coords: { latitude: 49.2402, longitude: 6.9969, accuracy: 10 }, timestamp: Date.now() })),
@@ -97,7 +98,10 @@ jest.mock('../components/motion/FadeInUp', () => ({ children }: { children: Reac
 jest.mock('../components/pulse/CityPicker', () => ({ CityPicker: () => null }))
 jest.mock('../components/pulse/PulsePeek', () => ({ PulsePeek: () => null }))
 jest.mock('../lib/api', () => ({
-  getEvents: jest.fn(async (q: { featured?: boolean }) => ({ data: q?.featured ? mockFeatured : [], error: null })),
+  getEvents: jest.fn(async (q: { featured?: boolean }) => ({
+    data: q?.featured ? mockFeatured.map((e) => (mockCheckedIn && e.id === 'e1' ? { ...e, user_checkin: { status: 'checked_in' } } : e)) : [],
+    error: null,
+  })),
 }))
 const mockCities = [
   { city: 'Bengaluru', slug: 'bengaluru', country: 'IN', eventCount: 9, centre: { latitude: 12.9716, longitude: 77.5946 }, isDefault: true },
@@ -113,13 +117,13 @@ jest.mock('../lib/apiClient', () => ({
     getCategories: jest.fn(async () => ({ success: false })),
     recordCityDemand: jest.fn(async () => ({ success: true })),
     toggleInterest: jest.fn(async () => ({ success: false })),
+    sendPresencePing: jest.fn(async () => ({ success: true, data: { status: 'inside', nextPingInSeconds: 300 } })),
   },
 }))
 jest.mock('../lib/cityStorage', () => ({ readStoredCity: jest.fn(async () => null), storeCity: jest.fn(async () => {}) }))
 jest.mock('../lib/roomSignal', () => ({ publishRoomSignal: jest.fn() }))
 jest.mock('../lib/checkIn', () => ({ checkOutOf: jest.fn() }))
 jest.mock('../lib/blendnOverlay', () => ({ openBlendn: jest.fn() }))
-jest.mock('../lib/usePresence', () => ({ usePresence: () => ({ finished: false }) }))
 jest.mock('../lib/useLiveSync', () => ({ useLiveSync: () => 'connected' }))
 jest.mock('../lib/photoUtils', () => ({ getOptimizedImageUrl: (url: string) => url }))
 jest.mock('../lib/logger', () => ({
@@ -132,6 +136,7 @@ jest.mock('../lib/useAuth', () => ({
 
 /* eslint-disable import/first */
 import Events from '../app/(tabs)/events'
+import { apiClient } from '../lib/apiClient'
 import { setLocationSharing } from '../lib/shareLocation'
 /* eslint-enable import/first */
 
@@ -145,6 +150,7 @@ beforeEach(() => {
   setLocationSharing(true)
   mockPlace = null
   mockNear = FAR
+  mockCheckedIn = false
 })
 
 it('nothing within 25 km: the far line (In Bengaluru), no away notice, the lap waits, the distance said once', async () => {
@@ -218,4 +224,16 @@ it('denied on the way back: no position goes with the Featured read, the lap see
   expect(featuredAt().at(-1)).toEqual([null, null])
   Location.getForegroundPermissionsAsync.mockResolvedValue({ status: 'granted' })
   sub.mockRestore()
+})
+
+/*
+ * One presence loop in the app, at the root (`PresenceMonitor`, SCRUM-1327): the Pulse used to run a second one for the
+ * checked-in event in its feed, so an event in the feed was pinged twice an interval and one outside it never.
+ */
+it('the Pulse pings nobody, even with the checked-in event in its feed', async () => {
+  mockCheckedIn = true
+  mockNear = { reachKm: 25, empty: false, nearestCity: null }
+  await render(<Events />)
+  await settle()
+  expect(apiClient.sendPresencePing).not.toHaveBeenCalled()
 })
