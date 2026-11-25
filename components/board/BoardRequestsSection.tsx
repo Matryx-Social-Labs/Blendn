@@ -22,6 +22,7 @@ import {
   type BoardRequests,
 } from '../../lib/board'
 import { refreshInboxBadge } from '../../lib/inboxBadge'
+import { isGone } from '../../lib/loadFailure'
 import { Logger } from '../../lib/logger'
 import { boardSafetySheet } from '../../lib/safetyUtils'
 import { showSheet } from '../../lib/sheet'
@@ -175,6 +176,13 @@ export function BoardRequestsSection({
       return
     }
 
+    // Gone (404): the server silenced it once the pair had a chat (`silenced_at`). Nothing to say; it just goes (SCRUM-1107).
+    if (isGone(result)) {
+      setRequests((prev) => without(prev, request.id))
+      if (action !== 'withdraw') void refreshInboxBadge()
+      void load()
+      return
+    }
     if (isSettled(result)) {
       if (action === 'accept') setNotes((prev) => ({ ...prev, [request.id]: acceptConflictLine(result) }))
       void load()
