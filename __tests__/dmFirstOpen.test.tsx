@@ -281,4 +281,30 @@ describe('a long DM, opened with nothing cached (SCRUM-1321)', () => {
     await act(async () => fireEvent(feed(), 'contentSizeChange', 393, CONTENT + 300))
     expect(scrollToEnd).toHaveBeenCalled()
   })
+
+  /* Review: each way a gesture comes to rest, on its own. */
+  it('a slow drag let go at the newest message (no momentum) follows the next arrival', async () => {
+    await render(<PrivateChat />)
+    await flush()
+    await firstFrame()
+    await act(async () => fireEvent(feed(), 'scrollBeginDrag', scrolled(CONTENT - VIEW)))
+    await act(async () => fireEvent.scroll(feed(), scrolled(1200)))
+    await act(async () => fireEvent(feed(), 'scrollEndDrag', scrolled(CONTENT - VIEW)))
+    scrollToEnd.mockClear()
+    await act(async () => fireEvent(feed(), 'contentSizeChange', 393, CONTENT + 120))
+    expect(scrollToEnd).toHaveBeenCalled()
+  })
+
+  it('a fling that comes to rest at the newest message follows the next arrival', async () => {
+    await render(<PrivateChat />)
+    await flush()
+    await firstFrame()
+    const fling = (y: number) => ({ nativeEvent: { ...scrolled(y).nativeEvent, velocity: { x: 0, y: -2.4 } } })
+    await act(async () => fireEvent(feed(), 'scrollBeginDrag', scrolled(1200)))
+    await act(async () => fireEvent(feed(), 'scrollEndDrag', fling(1300)))
+    await act(async () => fireEvent(feed(), 'momentumScrollEnd', scrolled(CONTENT - VIEW)))
+    scrollToEnd.mockClear()
+    await act(async () => fireEvent(feed(), 'contentSizeChange', 393, CONTENT + 120))
+    expect(scrollToEnd).toHaveBeenCalled()
+  })
 })

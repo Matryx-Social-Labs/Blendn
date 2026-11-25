@@ -716,6 +716,46 @@ describe('a long room, opened: older pages wait for the reader (SCRUM-1321)', ()
     expect(older()).toEqual(['551', '501'])
   })
 
+  /* A fling that reaches the top: its drag and its momentum are one gesture of the reader, so one page (review). */
+  it('a fling that reaches the top reads one older page', async () => {
+    await render(<GroupChat />)
+    await flush()
+    await firstFrame()
+    const list = screen.getByTestId('room-feed')
+    const fling = (y: number) => ({ nativeEvent: { ...scrolled(y).nativeEvent, velocity: { x: 0, y: 2.4 } } })
+    await act(async () => fireEvent.scroll(list, scrolled(CONTENT - VIEW)))
+    await act(async () => fireEvent(list, 'scrollBeginDrag', scrolled(CONTENT - VIEW)))
+    // The drag itself reaches the top and asks; then the finger lifts and momentum carries on at the top.
+    await act(async () => fireEvent.scroll(list, scrolled(0)))
+    await flush()
+    await act(async () => fireEvent(list, 'scrollEndDrag', fling(0)))
+    await act(async () => fireEvent(list, 'momentumScrollBegin', scrolled(0)))
+    await act(async () => fireEvent(list, 'contentSizeChange', 393, CONTENT + 2000))
+    await act(async () => fireEvent.scroll(list, { nativeEvent: { ...scrolled(0).nativeEvent, contentSize: { width: 393, height: CONTENT + 2000 } } }))
+    await flush()
+    expect(older()).toEqual(['551'])
+  })
+
+  /* The pill from far up: its jump lands short of rows not yet measured, and Android reports the jump's own momentum (review). */
+  it.each([['at rest', false], ['tapped mid-fling', true]])('the pill, %s, follows the end until it gets there', async (_n, midFling) => {
+    await render(<GroupChat />)
+    await flush()
+    await firstFrame()
+    const list = screen.getByTestId('room-feed')
+    const fling = (y: number) => ({ nativeEvent: { ...scrolled(y).nativeEvent, velocity: { x: 0, y: midFling ? 2.4 : 0 } } })
+    await act(async () => fireEvent(list, 'scrollBeginDrag', scrolled(CONTENT - VIEW)))
+    await act(async () => fireEvent.scroll(list, scrolled(600)))
+    await act(async () => fireEvent(list, 'scrollEndDrag', fling(400)))
+    if (!midFling) await act(async () => fireEvent(list, 'momentumScrollEnd', scrolled(200)))
+    await act(async () => fireEvent.scroll(list, scrolled(200)))
+    await act(async () => fireEvent.press(screen.getByTestId('chat-newest')))
+    await act(async () => fireEvent(list, 'momentumScrollBegin', scrolled(900)))
+    await act(async () => fireEvent(list, 'momentumScrollEnd', scrolled(CONTENT - VIEW - 300)))
+    mockToEnd.mockClear()
+    await act(async () => fireEvent(list, 'contentSizeChange', 393, CONTENT + 900))
+    expect(mockToEnd).toHaveBeenCalled()
+  })
+
   /* Android, driven: a fling's last scroll event came 144 px short of the top; the one at 0 was throttled away. */
   it('asks from near the top, not only at its very first pixel', async () => {
     await render(<GroupChat />)
