@@ -84,6 +84,8 @@ export interface RoomAttendee {
   /** SCRUM-1042: you waved at them here; they waved at you here (waves only, never a like). */
   youWaved?: boolean
   wavedAtYou?: boolean
+  /** When they waved at you here (`MatchCard.wavedAtYouAt`, ISO), or null. */
+  wavedAtYouAt?: string | null
   /** The conversation your mutual here opened (Say hi), or null. */
   conversationId?: string | null
   /** Matching v2: display-only shared lines, the sign chip and badges (see `MatchCard`). */

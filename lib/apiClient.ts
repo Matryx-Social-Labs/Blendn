@@ -655,6 +655,8 @@ export interface MatchCard {
   youWaved?: boolean
   /** They waved at you in this room and it is yours to answer: "Wave back". Waves only, never a like. */
   wavedAtYou?: boolean
+  /** When they waved at you here (ISO), so "Waved at you · 4 min" survives a restart (SCRUM-1092). Null to a host; absent from an older server. */
+  wavedAtYouAt?: string | null
   /** The conversation your mutual here opened: Say hi reaches it after a restart. Null otherwise; absent from an older server. */
   conversationId?: string | null
   /**

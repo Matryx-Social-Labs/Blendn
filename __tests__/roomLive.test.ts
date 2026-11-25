@@ -187,7 +187,8 @@ describe('attendeeFromMatch', () => {
         insideNow: true,
         youLiked: true,
         youWaved: true,
-        wavedAtYou: false,
+        wavedAtYou: true,
+        wavedAtYouAt: '2026-11-12T11:20:00.000Z',
         conversationId: 'c-mutual',
         overlaps: [{ kind: 'ipl', text: 'Both CSK — in RCB country 💛' }],
         sign: 'Leo ♌',
@@ -212,7 +213,9 @@ describe('attendeeFromMatch', () => {
       insideNow: true,
       // Waves only: an installed build's hidden like is never carried (SCRUM-1042).
       youWaved: true,
-      wavedAtYou: false,
+      wavedAtYou: true,
+      // When they waved, from the deck (SCRUM-1092): "Waved at you · 4 min" survives a restart.
+      wavedAtYouAt: '2026-11-12T11:20:00.000Z',
       // The conversation the mutual opened (SCRUM-1042): Say hi reaches it after a restart.
       conversationId: 'c-mutual',
       overlaps: [{ kind: 'ipl', text: 'Both CSK — in RCB country 💛' }],
@@ -226,13 +229,14 @@ describe('attendeeFromMatch', () => {
 
   it('reads an older server with no matching v2 fields as none of them', () => {
     const a = attendeeFromMatch({ userId: 'u', displayName: 'Blue Heron', photo: null, sharedInterests: [] })
-    expect([a.overlaps, a.sign, a.badges, a.checkInTime, a.youWaved, a.wavedAtYou, a.conversationId, a.revealed]).toEqual([
+    expect([a.overlaps, a.sign, a.badges, a.checkInTime, a.youWaved, a.wavedAtYou, a.wavedAtYouAt, a.conversationId, a.revealed]).toEqual([
       [],
       null,
       [],
       null,
       false,
       false,
+      null,
       null,
       false,
     ])
