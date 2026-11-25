@@ -863,6 +863,8 @@ function RoomChatInner({ params, embedded }: { params: RoomChatParams; embedded?
     enabled: !!chatRoomId && !!currentUser && !outside,
     onSync: () => loadMessages(false, true),
     domains: ['chat'],
+    // The socket handlers above apply every message, removal, reaction, mute and removal-from-room; a `chat` mark is any room's message (SCRUM-1173).
+    syncOnDirty: false,
     syncOnReconnect: true,
     disconnectedIntervalMs: 15000,
   })

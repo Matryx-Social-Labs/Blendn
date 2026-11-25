@@ -346,6 +346,8 @@ export function BoardScreen() {
       await fetchBoard('hold')
     },
     syncOnFocus: false,
+    // Posts are on no dirty domain: no chat, check-in or interest mark is about them; the poll reads them (SCRUM-1173).
+    syncOnDirty: false,
     connectedIntervalMs: BOARD_POLL_MS,
     disconnectedIntervalMs: BOARD_POLL_MS,
   })

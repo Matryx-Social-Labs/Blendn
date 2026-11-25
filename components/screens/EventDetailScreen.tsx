@@ -508,8 +508,10 @@ export default function EventDetail() {
       if (user && data.userId === user.id) {
         setCheckInStatus({ success: true, checked_in: true })
       }
-      // Refresh attendee count
-      fetchEventDetails()
+      // The server counts who is inside: no re-read of the page per arrival (SCRUM-1173). An older server sends no count.
+      if (typeof data.hereCount !== 'number') return void fetchEventDetails()
+      setHereNow(data.hereCount)
+      setDetailHere(data.hereCount)
     }
 
     // Handle interest updates
@@ -810,9 +812,9 @@ export default function EventDetail() {
   const away = useDistanceAway(event?.latitude, event?.longitude)
 
   /*
-   * "N here now", from the room itself while the event runs. Re-read when the
-   * check-in count moves (the socket refetches the detail on every check-in),
-   * so the two numbers on the page never disagree for long. An older server
+   * "N here now", from the room itself while the event runs. Re-read when a
+   * detail read moves the check-in count; between reads each check-in's own
+   * here-count sets it (the socket handler above). An older server
    * 404s the preview; the byline then falls back to the detail's own count.
    */
   useEffect(() => {
