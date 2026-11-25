@@ -99,7 +99,7 @@ jest.mock('../components/pulse/CityPicker', () => ({ CityPicker: () => null }))
 jest.mock('../components/pulse/PulsePeek', () => ({ PulsePeek: () => null }))
 jest.mock('../lib/api', () => ({
   getEvents: jest.fn(async (q: { featured?: boolean }) => ({
-    data: q?.featured ? mockFeatured.map((e) => (mockCheckedIn && e.id === 'e1' ? { ...e, user_checkin: { status: 'checked_in' } } : e)) : [],
+    data: q?.featured || mockCheckedIn ? mockFeatured.map((e) => (mockCheckedIn && e.id === 'e1' ? { ...e, user_checkin: { status: 'checked_in' } } : e)) : [],
     error: null,
   })),
 }))
@@ -122,7 +122,14 @@ jest.mock('../lib/apiClient', () => ({
 }))
 jest.mock('../lib/cityStorage', () => ({ readStoredCity: jest.fn(async () => null), storeCity: jest.fn(async () => {}) }))
 jest.mock('../lib/roomSignal', () => ({ publishRoomSignal: jest.fn() }))
-jest.mock('../lib/checkIn', () => ({ checkOutOf: jest.fn() }))
+let mockOnCheckInChanged: (() => void) | null = null
+jest.mock('../lib/checkIn', () => ({
+  checkOutOf: jest.fn(),
+  subscribeCheckInChanged: (fn: () => void) => {
+    mockOnCheckInChanged = fn
+    return () => {}
+  },
+}))
 jest.mock('../lib/blendnOverlay', () => ({ openBlendn: jest.fn() }))
 jest.mock('../lib/useLiveSync', () => ({ useLiveSync: () => 'connected' }))
 jest.mock('../lib/photoUtils', () => ({ getOptimizedImageUrl: (url: string) => url }))
@@ -201,6 +208,30 @@ it('something near (the control): no far line, the lap runs', async () => {
 })
 
 /*
+ * One presence loop in the app, at the root (`PresenceMonitor`, SCRUM-1327): the Pulse used to run a second one for the
+ * checked-in event in its feed, so an event in the feed was pinged twice an interval and one outside it never.
+ */
+it('the Pulse pings nobody, even with the checked-in event in its feed', async () => {
+  mockCheckedIn = true
+  mockNear = { reachKm: 25, empty: false, nearestCity: null }
+  await render(<Events />)
+  await settle()
+  expect(apiClient.sendPresencePing).not.toHaveBeenCalled()
+})
+
+it('a check-in or check-out made anywhere else (the monitor’s check-out for leaving) re-reads the Pulse’s chips', async () => {
+  mockCheckedIn = true
+  mockNear = { reachKm: 25, empty: false, nearestCity: null }
+  await render(<Events />)
+  await settle()
+  const before = (apiClient.getBatchCheckinStatuses as jest.Mock).mock.calls.length
+  await act(async () => mockOnCheckInChanged?.())
+  await settle()
+  expect((apiClient.getBatchCheckinStatuses as jest.Mock).mock.calls.length).toBeGreaterThan(before)
+})
+
+// Leaves the permission mock and AppState as it found them only in part: keep it last.
+/*
  * Location turned off in Settings while away: the fix goes (`fixAfterPermission`, the 7.3 km bug), and so must the
  * last-known position that orders the lap (SCRUM-1077). It stayed, so a denied phone kept sending a position with the
  * Featured read and the server measured every card from it.
@@ -224,16 +255,4 @@ it('denied on the way back: no position goes with the Featured read, the lap see
   expect(featuredAt().at(-1)).toEqual([null, null])
   Location.getForegroundPermissionsAsync.mockResolvedValue({ status: 'granted' })
   sub.mockRestore()
-})
-
-/*
- * One presence loop in the app, at the root (`PresenceMonitor`, SCRUM-1327): the Pulse used to run a second one for the
- * checked-in event in its feed, so an event in the feed was pinged twice an interval and one outside it never.
- */
-it('the Pulse pings nobody, even with the checked-in event in its feed', async () => {
-  mockCheckedIn = true
-  mockNear = { reachKm: 25, empty: false, nearestCity: null }
-  await render(<Events />)
-  await settle()
-  expect(apiClient.sendPresencePing).not.toHaveBeenCalled()
 })

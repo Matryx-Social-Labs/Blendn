@@ -25,7 +25,6 @@ jest.mock('../lib/checkIn', () => ({
     }
   }),
 }))
-jest.mock('../lib/toast', () => ({ toast: jest.fn() }))
 jest.mock('expo-location', () => ({
   getForegroundPermissionsAsync: jest.fn(),
   getLastKnownPositionAsync: jest.fn(),
@@ -53,7 +52,7 @@ import * as Location from 'expo-location'
 import { PresenceMonitor } from '../components/PresenceMonitor'
 import { apiClient } from '../lib/apiClient'
 import { checkInChanged, checkOutOf } from '../lib/checkIn'
-import { toast } from '../lib/toast'
+import { ToastContext } from '../components/toastDock'
 /* eslint-enable import/first */
 
 const api = apiClient as unknown as Record<'getActiveCheckins' | 'getEvent' | 'sendPresencePing', jest.Mock>
@@ -234,7 +233,7 @@ describe('"Still at the event?" only on the server’s word, never a check-out w
     await render(<PresenceMonitor />)
     await settle()
     for (let t = 0; t < 12 && !screen.queryByTestId('ask'); t += 2) await advance(2 * MIN)
-    fireEvent.press(screen.getByTestId('stay'))
+    await fireEvent.press(screen.getByTestId('stay'))
     await settle()
     for (let t = 0; t < 40; t += 2) await advance(2 * MIN)
     expect(checkOutOf).not.toHaveBeenCalled()
@@ -259,7 +258,7 @@ describe('"Still at the event?" only on the server’s word, never a check-out w
     expect(screen.queryByTestId('ask')).toBeNull()
     await advance(5 * MIN)
     expect(screen.getByTestId('ask')).toBeTruthy()
-    fireEvent.press(screen.getByTestId('stay'))
+    await fireEvent.press(screen.getByTestId('stay'))
     await settle()
     expect(screen.queryByTestId('ask')).toBeNull()
     // Still outside: the same departure is not asked about again, and the app does nothing on its own.
@@ -271,13 +270,18 @@ describe('"Still at the event?" only on the server’s word, never a check-out w
   it('"Check me out" that fails keeps the question open and says so', async () => {
     api.sendPresencePing.mockResolvedValue(ping('outside', { reason: 'grace_expired' }))
     ;(checkOutOf as jest.Mock).mockResolvedValue({ success: false, error: 'Network request failed' })
-    await render(<PresenceMonitor />)
+    const showToast = jest.fn()
+    await render(
+      <ToastContext.Provider value={{ showToast }}>
+        <PresenceMonitor />
+      </ToastContext.Provider>
+    )
     await settle()
-    fireEvent.press(screen.getByTestId('leave'))
+    await fireEvent.press(screen.getByTestId('leave'))
     await settle()
     expect(checkOutOf).toHaveBeenCalledWith('e-unlisted')
     expect(screen.getByTestId('ask')).toBeTruthy()
-    expect(toast).toHaveBeenCalledWith(expect.any(String), 'error')
+    expect(showToast).toHaveBeenCalledWith('Network request failed', 'error', { haptic: 'error' })
     expect(screen.queryByTestId('notice')).toBeNull()
   })
 
@@ -285,7 +289,7 @@ describe('"Still at the event?" only on the server’s word, never a check-out w
     api.sendPresencePing.mockResolvedValue(ping('outside', { reason: 'grace_expired' }))
     await render(<PresenceMonitor />)
     await settle()
-    fireEvent.press(screen.getByTestId('leave'))
+    await fireEvent.press(screen.getByTestId('leave'))
     await settle()
     expect(screen.queryByTestId('ask')).toBeNull()
     expect(screen.queryByTestId('notice')).toBeNull()

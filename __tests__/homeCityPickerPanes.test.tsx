@@ -141,9 +141,8 @@ jest.mock('../lib/cityStorage', () => ({
   storeCity: jest.fn(async () => {}),
 }))
 jest.mock('../lib/roomSignal', () => ({ publishRoomSignal: jest.fn() }))
-jest.mock('../lib/checkIn', () => ({ checkOutOf: jest.fn() }))
+jest.mock('../lib/checkIn', () => ({ checkOutOf: jest.fn(), subscribeCheckInChanged: () => () => {} }))
 jest.mock('../lib/blendnOverlay', () => ({ openBlendn: jest.fn() }))
-jest.mock('../lib/usePresence', () => ({ usePresence: () => ({ finished: false }) }))
 jest.mock('../lib/useLiveSync', () => ({ useLiveSync: () => 'connected' }))
 jest.mock('../lib/photoUtils', () => ({ getOptimizedImageUrl: (url: string) => url }))
 jest.mock('../lib/logger', () => ({

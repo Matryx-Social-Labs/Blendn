@@ -130,8 +130,8 @@ import { shareEvent } from '../../lib/shareRow'
 import { PulseArrival } from '../../components/share/PulseArrival'
 import { openBlendn } from '../../lib/blendnOverlay'
 import { apiClient } from '../../lib/apiClient'
+import { subscribeCheckInChanged } from '../../lib/checkIn'
 import { Logger } from '../../lib/logger'
-import { usePresence } from '../../lib/usePresence'
 import { getOptimizedImageUrl } from '../../lib/photoUtils'
 import { useLiveSync } from '../../lib/useLiveSync'
 import { useAuth } from '../../lib/useAuth'
@@ -378,23 +378,6 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
   const latestInterestStatusesRef = useLatest(interestStatuses)
   const latestInterestCountsRef = useLatest(interestCounts)
 
-  const checkedInEventId =
-    Object.keys(checkinStatuses).find((id) => checkinStatuses[id]?.status === 'checked_in') ?? null
-  const presence = usePresence(checkedInEventId)
-
-  // The server has ended this check-in -- the user walked out and the grace
-  // period expired, or the sweeper got there first. Reflect it rather than
-  // leaving a stale "checked in" chip on screen.
-  //
-  // Done during render, not in an effect, so the stale chip is never painted.
-  // It cannot loop: marking the event checked out takes it out of
-  // `checkedInEventId`, and that is the condition that brought us here.
-  if (presence.finished && checkedInEventId) {
-    setCheckinStatuses((prev) => ({
-      ...prev,
-      [checkedInEventId]: { ...prev[checkedInEventId], status: 'checked_out' },
-    }))
-  }
   /*
    * Browse scope, and the two things that are *not* it.
    *
@@ -724,6 +707,9 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
       interestInFlightRef.current.delete(event.id)
     }
   }, [user, showToast, latestInterestStatusesRef, latestInterestCountsRef])
+
+  // Checked in or out anywhere else — the presence monitor's check-out for leaving among them — re-reads the chips (SCRUM-1327).
+  useEffect(() => subscribeCheckInChanged(() => void loadCheckinStatusesBatch()), [loadCheckinStatusesBatch])
 
   /** The room's sheet said yes (it toasted the yes; `useCheckOut` toasts a refusal): out of the checked-in state, then refetch. */
   const onCheckedOut = useCallback(() => {

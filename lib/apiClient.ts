@@ -779,7 +779,8 @@ export interface ReactionTally {
 export { CHAT_REACTIONS, type ChatReaction } from './chatReactions'
 
 export interface PresencePing {
-  status: 'inside' | 'outside' | 'prompt' | 'checked_out' | 'not_checked_in'
+  /** `unknown`: a fix worse than the door's 150 m that reads outside, which places nobody (server SCRUM-1326). */
+  status: 'inside' | 'outside' | 'unknown' | 'checked_out' | 'not_checked_in'
   reason?: string
   shortfallMetres?: number | null
   graceEndsAt?: string | null

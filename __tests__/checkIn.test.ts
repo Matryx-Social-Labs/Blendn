@@ -264,7 +264,8 @@ describe('checkOutOf', () => {
 
 describe('every check-out goes through checkOutOf', () => {
   // The room checks out through `useRoomControls` (see the next test).
-  it.each(['lib/useRoomControls.ts', 'components/PresenceMonitor.tsx'])('%s', (file) => {
+  // "Check me out" in the presence sheet goes through the room's `useCheckOut` (SCRUM-1327).
+  it.each(['lib/useRoomControls.ts'])('%s', (file) => {
     const src = readFileSync(join(__dirname, '..', file), 'utf8')
     expect(src).toContain('checkOutOf(')
     expect(src).not.toContain('apiClient.checkOut(')
