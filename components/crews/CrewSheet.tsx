@@ -59,15 +59,17 @@ export function CrewSheet({
 
   return (
     <Sheet visible={visible} onClose={onClose} onDismissed={onDismissed} focusRef={head} testID="crew-sheet">
-      <View style={styles.body}>
-        <View ref={head} accessible accessibilityRole="header" accessibilityLabel={`${card.name}, ${line}`} style={styles.head}>
-          <CrewEmblem seed={card.emblemSeed} size={EMBLEM} />
+      <View>
+        <View ref={head} accessible accessibilityRole="header" accessibilityLabel={`${card.name}, ${line}`} style={styles.head} testID="crew-sheet-head">
+          <View style={styles.emblem} testID="crew-sheet-emblem">
+            <CrewEmblem seed={card.emblemSeed} size={EMBLEM} />
+          </View>
           <Title style={[styles.ink, styles.center]}>{card.name}</Title>
           <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.center, { color: quiet }]}>{line}</Text>
         </View>
 
         {card.tags.length ? (
-          <View style={styles.chips}>
+          <View style={styles.chips} testID="crew-sheet-tags">
             {card.tags.map((t) => <Chip key={t.slug} label={`#${tagText(t)}`} lines={2} />)}
           </View>
         ) : null}
@@ -80,27 +82,35 @@ export function CrewSheet({
           </View>
         ) : null}
 
-        <WaveButton wave={{ ...wave, onPress: onWave }} />
+        <View style={styles.wave} testID="crew-sheet-wave">
+          <WaveButton wave={{ ...wave, onPress: onWave }} />
+        </View>
 
-        <OptionRows
-          rows={[
-            { key: 'hide', label: 'Hide this crew tonight', onPress: onHideTonight },
-            { key: 'block', label: 'Block this crew', onPress: onBlock },
-            { key: 'report', label: 'Report this crew', onPress: onReport },
-          ]}
-        />
+        <View style={styles.rows} testID="crew-sheet-rows">
+          <OptionRows
+            rows={[
+              { key: 'hide', label: 'Hide this crew tonight', onPress: onHideTonight },
+              { key: 'block', label: 'Block this crew', onPress: onBlock },
+              { key: 'report', label: 'Report this crew', onPress: onReport },
+            ]}
+          />
+        </View>
       </View>
     </Sheet>
   )
 }
 
 const styles = StyleSheet.create({
-  body: { gap: SPACE.lg },
-  head: { alignItems: 'center', gap: SPACE.xs },
+  // The board's own gaps (05-room A, waves-b1 S-A): 12 under the emblem, 2, 10 to the tags, 14, 16 to Wave, 14 to the rows.
+  head: { alignItems: 'center', gap: SPACE.xxs },
+  emblem: { marginBottom: SPACE.md - SPACE.xxs },
   center: { textAlign: 'center' },
   ink: { color: COLOR.textPrimary },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: SPACE.sm },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: SPACE.sm, marginTop: SPACE.sm + SPACE.xxs },
+  wave: { marginTop: SPACE.lg },
+  rows: { marginTop: SPACE.md + SPACE.xxs },
   about: {
+    marginTop: SPACE.md + SPACE.xxs,
     borderRadius: RADIUS.rowInCard,
     // The sheet's own fill: 8% white on iOS glass, sunken on Android's solid sheet (CrewCard onSheet).
     backgroundColor: Platform.OS === 'android' ? COLOR.surfaceSunken : MATERIAL.fillOnGlass,

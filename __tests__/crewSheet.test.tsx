@@ -21,6 +21,8 @@ jest.mock('../lib/sheet', () => ({ showSheet: jest.fn() }))
 jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: jest.fn() }) }))
 jest.mock('../lib/logger', () => ({ Logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() } }))
 
+import { StyleSheet } from 'react-native'
+
 import { RoomCrewCard } from '../components/blendn/RoomCrews'
 import { CrewSheet } from '../components/crews/CrewSheet'
 import { crewCards, useCrewActions, useCrewsHere } from '../components/crews/CrewsView'
@@ -73,6 +75,17 @@ describe('the crew’s sheet (S-A)', () => {
     expect(screen.getByText('“Here till the last track.”')).toBeTruthy()
     expect(screen.getByText('Both crews are into techno')).toBeTruthy()
     expect(screen.getByText('Wave for Nebula')).toBeTruthy()
+  })
+
+  it('sits where the board puts it (05-room A / waves-b1 S-A): 12 under the emblem, 2, 10 to the tags, 14, 16 to Wave, 14 to the rows', async () => {
+    await render(<CrewSheet visible card={orbit} wave={{ state: 'idle', as: 'Nebula' }} {...handlers()} />)
+    const flat = (id: string) => StyleSheet.flatten(screen.getByTestId(id, { includeHiddenElements: true }).props.style)
+    expect(flat('crew-sheet-head').gap).toBe(2)
+    expect(flat('crew-sheet-emblem').marginBottom).toBe(10)
+    expect(flat('crew-sheet-tags').marginTop).toBe(10)
+    expect(flat('crew-sheet-about').marginTop).toBe(14)
+    expect(flat('crew-sheet-wave').marginTop).toBe(16)
+    expect(flat('crew-sheet-rows').marginTop).toBe(14)
   })
 
   it('no bio and no overlap: no About them block', async () => {
