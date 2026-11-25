@@ -196,8 +196,8 @@ export function WaveButton({ wave }: { wave: CrewWave }) {
       accessibilityLabel="Waved"
       style={[styles.liked, contrast && IC_HAIRLINE]}
     >
-      <Icon name="check" size={ICON.control} active />
-      <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('button', bold), styles.ink, styles.likedText]}>
+      <Icon name="check" size={ICON.control} color={COLOR.selectionRoseGlyph} active />
+      <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('button', bold), styles.likedText]}>
         Waved
       </Text>
     </Animated.View>
@@ -291,9 +291,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: SPACE.sm,
     borderRadius: RADIUS.button,
-    backgroundColor: COLOR.surface,
+    // Board crews/05-room A's still state: the rose rim and no fill (the card's own fill drew nothing on the card).
+    borderWidth: 1,
+    borderColor: COLOR.brandRose,
   },
-  likedText: { flexShrink: 1, textAlign: 'center' },
+  likedText: { flexShrink: 1, textAlign: 'center', color: COLOR.selectionRoseGlyph },
   overlap: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
   flush: { paddingHorizontal: 0 },
   row: {

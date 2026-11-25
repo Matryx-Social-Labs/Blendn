@@ -68,6 +68,11 @@ describe('<CrewCard>', () => {
   it('waved: “Waved” with its check in the button’s place, not a button', async () => {
     await render(<CrewCard crew={NEBULA} wave={{ state: 'waved', as: 'Orbit', onPress: jest.fn() }} testID="k" />)
     expect(screen.getByLabelText('Waved')).toBeTruthy()
+    // Board crews/05-room A: the rose rim, the check and the word in the rose's light tone; never the card's own fill on the card.
+    const plate = StyleSheet.flatten(screen.getByTestId('crew-waved').props.style)
+    expect(plate).toMatchObject({ borderWidth: 1, borderColor: COLOR.brandRose })
+    expect(plate.backgroundColor).toBeUndefined()
+    expect(StyleSheet.flatten(screen.getByText('Waved').props.style).color).toBe(COLOR.selectionRoseGlyph)
     expect(screen.queryByRole('button', { name: /Wave/ })).toBeNull()
   })
 
