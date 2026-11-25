@@ -32,18 +32,22 @@ export interface FollowEnd {
   /** Stop following — the thread opened somewhere else, at its first unread. */
   stop: () => void
   /**
-   * Whether the reader has scrolled the list by hand. The list's top (`onStartReached`) asks for older pages only then: a
-   * first page paints at offset 0, the top, before the jump to the newest lands, and a long chat opened with nothing cached
-   * read page after page above the reader and flickered until it had them all (SCRUM-1321).
+   * The list's top (`onStartReached`) reached by the reader's own gesture: true once per drag or fling, then false until the
+   * next. A first page paints at offset 0, the top, before the jump to the newest lands, so the top asked for an older page
+   * that nobody scrolled to, and it landed under a list still following its end (SCRUM-1321). One per gesture: a list with
+   * no `maintainVisibleContentPosition` (the room) leaves the reader at the top after a page, and the top would ask again.
+   * ponytail: the list asks once per content length while it stays near its top, so an ask refused here is spent until the
+   * reader moves half a screen down and back; "Load older" above the feed covers it. Pass `onStartReached` only while a
+   * gesture is live if that ever reads as stuck.
    */
-  touched: () => boolean
+  readerAsksOlder: () => boolean
 }
 
 export function followEnd(scrollToEnd: () => void): FollowEnd {
   let following = true
   let held = false
   let gesture = false
-  let touched = false
+  let asked = false
   return {
     onContentSizeChange: () => {
       if (following) scrollToEnd()
@@ -52,7 +56,7 @@ export function followEnd(scrollToEnd: () => void): FollowEnd {
       following = false
       held = false
       gesture = true
-      touched = true
+      asked = true
     },
     onGestureEnd: (atEnd) => {
       gesture = false
@@ -71,7 +75,11 @@ export function followEnd(scrollToEnd: () => void): FollowEnd {
       following = false
       held = true
     },
-    touched: () => touched,
+    readerAsksOlder: () => {
+      const now = asked
+      asked = false
+      return now
+    },
   }
 }
 

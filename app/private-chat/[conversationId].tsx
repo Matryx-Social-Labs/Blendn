@@ -859,7 +859,9 @@ function PrivateChatInner() {
               maxToRenderPerBatch={12}
               windowSize={10}
               initialNumToRender={25}
-              onStartReached={() => follow.touched() && void loadOlderMessages()}
+              onStartReached={() => follow.readerAsksOlder() && void loadOlderMessages()}
+              // From half a screen short of the top: a fling's last scroll event lands short of it (Android, SCRUM-1321).
+              onStartReachedThreshold={0.5}
               // Older pages go in above the reader: the row in view stays in view, so the unread rule stays under the thumb (SCRUM-958).
               maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
               ListHeaderComponent={

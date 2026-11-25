@@ -1080,7 +1080,9 @@ function RoomChatInner({ params, embedded }: { params: RoomChatParams; embedded?
               windowSize={10}
               initialNumToRender={25}
               // "Load older" on pull at the top (Flow 5 room annotation); the button below is its accessible twin.
-              onStartReached={() => follow.touched() && void loadOlderMessages()}
+              onStartReached={() => follow.readerAsksOlder() && void loadOlderMessages()}
+              // From half a screen short of the top: a fling's last scroll event lands short of it (Android, SCRUM-1321).
+              onStartReachedThreshold={0.5}
               ListHeaderComponent={
                 <View style={styles.listHead}>
                   {/* Event rooms are anonymous; a crew's people are named, so the notice would not be true there. */}
