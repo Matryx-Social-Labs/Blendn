@@ -294,10 +294,27 @@ project, so prefer disabling it.
 The runtime DSN is separate and unaffected: it is `EXPO_PUBLIC_SENTRY_DSN`, and
 crash reporting works without any of the above.
 
-### One file that does not matter
+### Firebase on Android (push)
 
-There is no `google-services.json` or `GoogleService-Info.plist` in this repo and
-none is needed; push goes through Expo's service.
+Push goes through Expo's service, which delivers to Android through FCM, so the
+Android app must be registered with Firebase (project `blend-n`):
+
+- `android/app/google-services.json` is committed. It holds public client
+  identifiers, not a secret. The Google services Gradle plugin
+  (`android/build.gradle` classpath, applied in `android/app/build.gradle`)
+  turns it into resources at build time; `app.json`
+  `android.googleServicesFile` mirrors it for a prebuild.
+  `__tests__/storeReviewNative.test.ts` fails if any of the three goes.
+- The **FCM V1 service-account key** is the secret half. It never enters the
+  repo: it is uploaded once at expo.dev → project → Credentials → Android →
+  FCM V1 service account key, and Expo's push service uses it at send time.
+- If the `api_key` in `google-services.json` is restricted in Google Cloud
+  Console, it must allow the FCM Registration API and the Firebase
+  Installations API, and an app restriction must use the Play **app signing**
+  SHA-1, not the upload key's; otherwise the device never gets a token.
+
+Without either half, `getExpoPushTokenAsync` throws on Android and no token is
+stored. iOS needs no Firebase file; there is no `GoogleService-Info.plist`.
 
 ### Building a branch other than `stage` or `prod`
 

@@ -81,3 +81,29 @@ describe('no location foreground service on Android (Play: FGS and background-lo
     expect(read('android/app/src/main/AndroidManifest.xml')).not.toContain('android.permission.FOREGROUND_SERVICE')
   })
 })
+
+describe('Android push has Firebase (SCRUM-1188: without it getExpoPushTokenAsync throws and no Android token is ever stored)', () => {
+  /*
+   * Expo's push service delivers to Android through FCM, and the device can only get an FCM token if the app is
+   * registered with Firebase: google-services.json plus the Google services Gradle plugin, which turns it into
+   * resources at build time. The FCM V1 service-account key is a separate thing; it lives in EAS credentials, never
+   * here. The api_key in this file is a public client identifier that Firebase intends to ship in the app.
+   */
+  const PACKAGE = 'com.matryxsociallabs.blendn'
+
+  it('the committed config is for this app', () => {
+    const json = JSON.parse(read('android/app/google-services.json'))
+    const packages = json.client.map((c: { client_info: { android_client_info: { package_name: string } } }) => c.client_info.android_client_info.package_name)
+    expect(packages).toContain(PACKAGE)
+    expect(read('android/app/build.gradle')).toContain(`applicationId '${PACKAGE}'`)
+  })
+
+  it('the Google services plugin is on the classpath and applied to the app', () => {
+    expect(read('android/build.gradle')).toMatch(/classpath\(?['"]com\.google\.gms:google-services:[\d.]+['"]\)?/)
+    expect(read('android/app/build.gradle')).toMatch(/apply plugin: ['"]com\.google\.gms\.google-services['"]/)
+  })
+
+  it('app.json points a prebuild at the same file', () => {
+    expect(expoConfig().android.googleServicesFile).toBe('./android/app/google-services.json')
+  })
+})

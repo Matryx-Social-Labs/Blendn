@@ -49,6 +49,7 @@
         "backgroundColor": "#F05524"
       },
       "package": "com.matryxsociallabs.blendn",
+      "googleServicesFile": "./android/app/google-services.json",
       "blockedPermissions": [
         "android.permission.RECORD_AUDIO",
         "android.permission.SYSTEM_ALERT_WINDOW"
