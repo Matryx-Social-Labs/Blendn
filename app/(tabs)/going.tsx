@@ -67,6 +67,7 @@ import { useAuth } from '../../lib/useAuth'
 import { useReducedMotion } from '../../lib/motion'
 import { openInMaps } from '../../lib/openInMaps'
 import { LobbyRowNews, NewInLobbyRow } from '../../components/board/LobbyPreview'
+import { postPhoneLobbyMarkers } from '../../lib/lobbySeen'
 import { addToCalendar } from '../../lib/calendar'
 import { openTonight } from '../../lib/paywall'
 import { shareEvent } from '../../lib/shareRow'
@@ -198,6 +199,8 @@ function GoingScreenInner() {
     [uid]
   )
   const readGoing = useCallback(async (ask: PageAsk): Promise<PageRead<RsvpEventRow, ApiResult>> => {
+    // The Lobby markers this phone kept go up first, so a Lobby read before the upgrade is not counted new (SCRUM-1115).
+    await postPhoneLobbyMarkers()
     const res = await apiClient.getMyRsvps(ask.page, ask.cursor)
     return res.success && res.data ? { ok: true, rows: rsvpEventRows(res.data), meta: pageMeta(res.data.pagination) } : { ok: false, failure: res }
   }, [])
@@ -598,7 +601,7 @@ function GoingScreenInner() {
           </View>
 
           {/* The Lobby line (L2, owner 2026-11-17): while the Lobby is open, news or quiet; gone at the doors (`boardOpen`). */}
-          {boardOpen(row) ? <NewInLobbyRow eventId={row.id} style={styles.heroLobby} /> : null}
+          {boardOpen(row) ? <NewInLobbyRow eventId={row.id} count={row.lobbyNew} style={styles.heroLobby} /> : null}
 
           {/*
            * Directions (or Open Blend'n) keeps its word and is the card's one positive action, so it is the world's lit button

@@ -28,9 +28,14 @@ jest.mock('../lib/apiClient', () => ({
     getEventChat: jest.fn(),
   },
 }))
+const mockRsvpListeners: ((d: { eventId: string; rsvpCount: number }) => void)[] = []
 jest.mock('../lib/socketClient', () => ({
   subscribeToEventCheckIn: () => () => {},
   subscribeToEventInterest: () => () => {},
+  subscribeToEventRsvp: (_: string, cb: (d: { eventId: string; rsvpCount: number }) => void) => {
+    mockRsvpListeners.push(cb)
+    return () => mockRsvpListeners.splice(mockRsvpListeners.indexOf(cb), 1)
+  },
 }))
 jest.mock('../lib/useAuth', () => ({ useAuth: () => ({ user: { id: 'me' } }) }))
 const mockShowToast = jest.fn()
@@ -96,7 +101,7 @@ const detail = (over: Record<string, unknown> = {}, status: Record<string, unkno
     maxCapacity: 0,
     latitude: 12.9,
     longitude: 77.6,
-    organizer: { id: 'org', name: 'Toit' },
+    organizer: { id: 'org', name: 'Toit', kind: 'org' },
     stats: { rsvpCount: 42, favoriteCount: 0, checkInCount: 0 },
     userStatus: { isFavorited: false, isCheckedIn: false, rsvpStatus: null, ...status },
     media: [],
@@ -490,6 +495,15 @@ describe('leaving once the doors are open, and from the ⋯ (SCRUM-1074, sheet 0
     expect(screen.getByRole('button', { name: 'I’m going' })).toBeTruthy()
   })
 
+  // SCRUM-1115: the server keeps a late cancel as not_going (admin #1005), so the page opened again still says it.
+  it('opened again after a late cancel (the server reads not_going): "Not going" with I’m going, not the bare hold', async () => {
+    api.getEvent.mockResolvedValue(live({ rsvpStatus: 'not_going' }) as never)
+    await open()
+    expect(await screen.findByLabelText(/^Not going\./)).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'I’m going' })).toBeTruthy()
+    expect(screen.queryByTestId('scene-hold-leave')).toBeNull()
+  })
+
   it('live and not going: nothing under the hold (control)', async () => {
     api.getEvent.mockResolvedValue(live({}) as never)
     await open()
@@ -697,6 +711,35 @@ describe('no people count under five is printed (the Pulse\'s rule)', () => {
     const row = screen.getByTestId('scene-guide-who')
     expect(within(row).getAllByText(/./)).toHaveLength(1)
     expect(StyleSheet.flatten(within(row).getByText('By Toit').props.style).color).toBe(COLOR.textPrimary)
+  })
+  // SCRUM-1115: event:rsvpUpdate (admin #1005) carries the count after every RSVP and withdrawal; the page follows it.
+  it('"N going" follows the room’s RSVPs live, with no refetch (control: before the update it is the detail’s count)', async () => {
+    api.getEvent.mockResolvedValue(detail() as never)
+    await open()
+    expect(await who()).toBe('42 going · 18+. By Toit')
+    const reads = api.getEvent.mock.calls.length
+    await act(async () => mockRsvpListeners.forEach((fn) => fn({ eventId: 'e1', rsvpCount: 12480 })))
+    expect(await who()).toBe('12,480 going · 18+. By Toit')
+    expect(api.getEvent.mock.calls.length).toBe(reads)
+  })
+  // SCRUM-1115, decided per advisor: "By" is attribution, so a venue's day and Blendn standing in sign it, a person's own
+  // event (their own name) does not, and nor does a server that does not say whose event it is.
+  it.each([
+    ['venue', 'Toit', '42 going · 18+. By Toit'],
+    ['platform', 'Blendn', '42 going · 18+. By Blendn'],
+  ])('a %s event signs "By {name}"', async (kind, name, label) => {
+    api.getEvent.mockResolvedValue(detail({ organizer: { id: null, name, kind } }) as never)
+    await open()
+    expect(await who()).toBe(label)
+  })
+  it.each([
+    ['a person’s own event', { id: 'u-7', name: 'Priya Raman', kind: 'person' }],
+    ['no kind (an older server)', { id: 'org', name: 'Priya Raman' }],
+  ])('%s: no "By" line, the name nowhere on the page', async (_, organizer) => {
+    api.getEvent.mockResolvedValue(detail({ organizer }) as never)
+    await open()
+    expect(await who()).toBe('42 going · 18+')
+    expect(screen.queryByText(/Priya Raman/)).toBeNull()
   })
   it('live, not checked in, under five here: "Be one of the first" (control)', async () => {
     api.getEvent.mockResolvedValue(liveNoFacts(2, {}) as never)
