@@ -501,18 +501,18 @@ export const HomeMap = memo(function HomeMap({
     // What the person can see: under the capsule and the bell, over the drawer (a name outside it, or on their dot, is not drawn).
     visible: chipZoneOf({ height, padding, lift }),
     userAt: center ? [center.longitude, center.latitude] : null,
-    // No name under the edge marker (drive 2026-11-19: it covered a chip).
-    edge: edgeTarget ? { at: edgeTarget.at, box: edgeBox } : null,
+    // No name under the edge marker as drawn (drive 2026-11-19: it covered a chip; SCRUM-1096: and at AX5).
+    edge: edgeRect ? { left: edgeRect.left, top: edgeRect.top, right: edgeRect.left + edgeRect.width, bottom: edgeRect.top + edgeRect.height } : null,
     // No name under the stale callout either (map-finish drive: a chip sat 3 pt off it).
     stale: you.kind === 'stale' ? { room: STALE_CALLOUT, below: staleBelow } : null,
     // The lead's chip says its card's distance (Android drive: 800 m over a card reading 850 m), as the edge marker does.
     knownDistance: focus?.pin && typeof focus.km === 'number' ? { id: focus.pin.id, km: focus.km } : null,
     reading,
   })
-  // The dot going grey (or violet again) moves no camera: the names are placed again around the callout. So does a
-  // banner lifting the edge marker (SCRUM-1096).
+  // The dot going grey (or violet again) moves no camera: the names are placed again around the callout. So do a
+  // banner lifting the edge marker and the marker drawn somewhere new (SCRUM-1096).
   const isStale = you.kind === 'stale'
-  useEffect(() => relight(), [isStale, staleBelow, reading, lift]) // eslint-disable-line react-hooks/exhaustive-deps -- only the stale flip or its side, the fix turning precise, or the lift
+  useEffect(() => relight(), [isStale, staleBelow, reading, lift, edgeRect?.left, edgeRect?.top, edgeRect?.width, edgeRect?.height]) // eslint-disable-line react-hooks/exhaustive-deps -- by value: the stale flip or its side, the fix turning precise, the lift, the marker as drawn
 
   // New pins re-cluster the numbers: a screen reader hears them afresh.
   useEffect(() => {

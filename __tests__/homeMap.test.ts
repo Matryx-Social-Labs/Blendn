@@ -282,10 +282,10 @@ describe('the check-in boundary is never drawn (HM-CU01, plan v2 §4)', () => {
 
   it('keeps every name out from under the edge marker (part 2 drive: it covered a chip)', () => {
     const lighting = code('components/home/useMapLighting.ts')
-    expect(lighting).toMatch(/const marker = edgeAt \? edgeMarker\(edgeAt, edge\?\.box \?\? zone, EDGE_BLOCK\) : null/)
-    expect(lighting).toMatch(/if \(marker\) blocked\.push\(/)
-    // The same box the marker itself keeps to.
-    expect(component).toMatch(/edge: edgeTarget \? \{ at: edgeTarget\.at, box: edgeBox \} : null/)
+    expect(lighting).toMatch(/if \(edge\) blocked\.push\(edge\)/)
+    // The marker as drawn (`onPlaced`), not a guess at its size (SCRUM-1096): the names keep off the real pill.
+    expect(component).toMatch(/onPlaced=\{setEdgeRect\}/)
+    expect(component).toMatch(/edge: edgeRect \? \{ left: edgeRect\.left, top: edgeRect\.top, right: edgeRect\.left \+ edgeRect\.width, bottom: edgeRect\.top \+ edgeRect\.height \} : null/)
     expect(component).toMatch(/box=\{edgeBox\}/)
   })
 
@@ -644,7 +644,7 @@ describe('"my location"', () => {
     expect(component).toMatch(/useAnimatedReaction\(\s*\(\) => locateLift\?\.get\(\) \?\? 0,/)
     // A banner landing after the map settled moves the marker with no camera move: the names are placed again (AX5 drive:
     // a chip stayed under the lifted marker).
-    expect(component).toMatch(/useEffect\(\(\) => relight\(\), \[isStale, staleBelow, reading, lift\]\)/)
+    expect(component).toMatch(/useEffect\(\(\) => relight\(\), \[isStale, staleBelow, reading, lift, edgeRect\?\.left, edgeRect\?\.top, edgeRect\?\.width, edgeRect\?\.height\]\)/)
   })
 
   it('keeps the names above a banner on the map, and gives them its strip back without one (SCRUM-1096, AX5: a chip stood under the banner)', () => {
