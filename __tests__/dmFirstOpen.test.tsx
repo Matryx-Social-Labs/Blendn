@@ -213,4 +213,19 @@ describe('a long DM, opened with nothing cached (SCRUM-1321)', () => {
     await act(async () => fireEvent(feed(), 'contentSizeChange', 393, CONTENT + 900))
     expect(scrollToEnd).toHaveBeenCalled()
   })
+
+  /*
+   * An older page keeps the reader on the message they were reading. Anchored on row 0, the day pill — whose key every
+   * older page of the same day keeps — the list held the pill in place, so the reader sat at the top of the new page with
+   * nothing to scroll up into, and paging stopped (driven, Android).
+   */
+  it('keeps the reader’s place by the first message, not by the day pill above it', async () => {
+    await render(<PrivateChat />)
+    await flush()
+    const data = feed().props.data as { kind: string }[]
+    expect(data[0].kind).toBe('separator')
+    expect(data[1].kind).toBe('message')
+    // FlatList moves the index past its header: row 1 of the data.
+    expect(feed().props.maintainVisibleContentPosition).toEqual({ minIndexForVisible: 2 })
+  })
 })
