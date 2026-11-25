@@ -4,7 +4,9 @@ import * as Location from 'expo-location'
 
 import { apiClient, type PresencePing } from './apiClient'
 import { validAccuracy } from './geo'
+import { LOCATION_FIX_TIMEOUT_MS, withDeadline } from './locationFix'
 import { Logger } from './logger'
+import { FIX_REUSE } from './useFixRefresh'
 
 /**
  * Keep the organiser's live occupancy number honest.
@@ -34,40 +36,42 @@ import { Logger } from './logger'
  * both passed. Better to skip a beat and send fresh truth.
  *
  * **Never block the UI.** Location or network failure just means no ping this
- * tick. The sweeper checks people out who go quiet, so the number self-heals.
+ * tick. Silence never checks anybody out; the presence sweeper closes the
+ * check-in at the event's end + 60 minutes.
  */
 
 /** Fallback if the server does not say. It always does; this is belt and braces. */
 const DEFAULT_INTERVAL_SECONDS = 300
+/** The floor under the server's `nextPingInSeconds`: a bad value must not spin the GPS. */
+const MIN_INTERVAL_SECONDS = 60
 
-/**
- * How long a ping waits for a fix. `getCurrentPositionAsync` has no timeout of
- * its own; a phone that cannot get one left the ping hanging and every later
- * ping with it (step 5 review, M9).
- */
-export const PING_FIX_TIMEOUT_MS = 15_000
+const intervalOf = (seconds: number | undefined) =>
+  typeof seconds === 'number' && Number.isFinite(seconds) ? Math.max(MIN_INTERVAL_SECONDS, seconds) : DEFAULT_INTERVAL_SECONDS
 
-const IDLE: PresenceStatus = { state: 'idle', shortfallMetres: null, finished: false }
+const IDLE: PresenceStatus = { state: 'idle', reason: null, shortfallMetres: null, finished: false }
 
 export interface PresenceStatus {
   state: PresencePing['status'] | 'idle'
+  /** The server's why (`left_area`, `grace_expired`, `occurrence_ended`…), for what to say about it. */
+  reason: string | null
   shortfallMetres: number | null
   /** True once the server says this check-in is over, so callers can stop asking. */
   finished: boolean
 }
 
-export function usePresence(eventId: string | null | undefined): PresenceStatus {
+/** `checkInId`, when known, restarts the loop for a new check-in at the same event (one that ended stops it for good). */
+export function usePresence(eventId: string | null | undefined, checkInId?: string): PresenceStatus {
   const [status, setStatus] = useState<PresenceStatus>(IDLE)
   // A new check-in starts from nothing: "finished" was about the last one (M9).
-  const [statusFor, setStatusFor] = useState(eventId)
-  if (statusFor !== eventId) {
-    setStatusFor(eventId)
+  const statusKey = `${eventId ?? ''}|${checkInId ?? ''}`
+  const [statusFor, setStatusFor] = useState(statusKey)
+  if (statusFor !== statusKey) {
+    setStatusFor(statusKey)
     setStatus(IDLE)
   }
 
   // Refs, not state: changing these must not re-run the effect and restart the
   // timer, which would reset the interval on every ping.
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const stopped = useRef(false)
   const appState = useRef<AppStateStatus>(AppState.currentState)
 
@@ -75,23 +79,29 @@ export function usePresence(eventId: string | null | undefined): PresenceStatus 
     if (!eventId) return
 
     stopped.current = false
+    // What the app is doing now, not when the last loop ended (it may have gone to the background with no loop running).
+    appState.current = AppState.currentState
     let cancelled = false
+    // Effect-local: a late ping from the last event must not clear this one's timer.
+    let timer: ReturnType<typeof setTimeout> | null = null
+    // One ping at a time: a return to the app while one waits for its fix must not send a second.
+    let busy = false
 
     const clear = () => {
-      if (timer.current) {
-        clearTimeout(timer.current)
-        timer.current = null
+      if (timer) {
+        clearTimeout(timer)
+        timer = null
       }
     }
 
     const schedule = (seconds: number) => {
-      clear()
       if (cancelled || stopped.current) return
-      timer.current = setTimeout(ping, seconds * 1000)
+      clear()
+      timer = setTimeout(ping, seconds * 1000)
     }
 
     const ping = async () => {
-      if (cancelled || stopped.current) return
+      if (cancelled || stopped.current || busy) return
 
       // Backgrounded: skip this tick rather than send a stale fix. Resuming
       // reschedules from the AppState listener below.
@@ -100,8 +110,9 @@ export function usePresence(eventId: string | null | undefined): PresenceStatus 
         return
       }
 
+      busy = true
       try {
-        const permission = await Location.getForegroundPermissionsAsync()
+        const permission = await withDeadline(Location.getForegroundPermissionsAsync(), LOCATION_FIX_TIMEOUT_MS)
         if (!permission.granted) {
           // Without location we cannot prove presence. Ask again next tick
           // rather than never: permission can be granted in Settings while the
@@ -111,13 +122,10 @@ export function usePresence(eventId: string | null | undefined): PresenceStatus 
           return
         }
 
-        let fixTimer: ReturnType<typeof setTimeout> | undefined
-        const position = await Promise.race([
-          Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
-          new Promise<never>((_, reject) => {
-            fixTimer = setTimeout(() => reject(new Error('Location timed out')), PING_FIX_TIMEOUT_MS)
-          }),
-        ]).finally(() => clearTimeout(fixTimer))
+        // The Pulse's budget (`FIX_REUSE`): a last-known fix ≤ 2 min / 150 m first, else one Balanced ask, both capped.
+        const position =
+          (await withDeadline(Location.getLastKnownPositionAsync(FIX_REUSE), LOCATION_FIX_TIMEOUT_MS).catch(() => null)) ??
+          (await withDeadline(Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }), LOCATION_FIX_TIMEOUT_MS))
 
         const result = await apiClient.sendPresencePing(eventId, {
           latitude: position.coords.latitude,
@@ -128,7 +136,8 @@ export function usePresence(eventId: string | null | undefined): PresenceStatus 
         if (cancelled) return
 
         if (!result.success || !result.data) {
-          // A failed ping is not an error worth surfacing. Try again next tick.
+          // Not shown to the person; logged, and tried again next tick.
+          Logger.warn('presence', 'Ping refused', { error: result.error })
           schedule(DEFAULT_INTERVAL_SECONDS)
           return
         }
@@ -138,6 +147,7 @@ export function usePresence(eventId: string | null | undefined): PresenceStatus 
 
         setStatus({
           state: data.status,
+          reason: data.reason ?? null,
           shortfallMetres: data.shortfallMetres ?? null,
           finished,
         })
@@ -150,11 +160,13 @@ export function usePresence(eventId: string | null | undefined): PresenceStatus 
           return
         }
 
-        schedule(data.nextPingInSeconds ?? DEFAULT_INTERVAL_SECONDS)
+        schedule(intervalOf(data.nextPingInSeconds))
       } catch (error) {
         if (cancelled) return
         Logger.warn('presence', 'Ping failed', { error: String(error) })
         schedule(DEFAULT_INTERVAL_SECONDS)
+      } finally {
+        busy = false
       }
     }
 
@@ -179,7 +191,7 @@ export function usePresence(eventId: string | null | undefined): PresenceStatus 
       clear()
       subscription.remove()
     }
-  }, [eventId])
+  }, [eventId, checkInId])
 
   return status
 }
