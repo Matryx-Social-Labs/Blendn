@@ -756,37 +756,35 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
     [room, reduceMotion, reloadReceived, say]
   )
   /** A crew that waved at you, answered as yourself: a Mix when it was mutual; gone, off and errors each say so. */
-  const waveBackCrew = useCallback(
-    async (crew: { crewId: string; name: string; emblemSeed: string | null }) => {
-      if (!eventId || answering) return
-      const settled = (outcome: WaveBackOutcome) => {
-        reloadReceived()
-        if (outcome.kind === 'gone') return say('They’ve left the room')
-        if (outcome.kind === 'error') return say(outcome.text, 'error')
-        crews.markLiked(crew.crewId)
-        if (!outcome.blend) return
-        const here = crewCards(crews).find((c) => c.crewId === crew.crewId)
-        const seed = crew.emblemSeed ?? here?.emblemSeed
-        // The moment draws their emblem and how many are here; without both (not on the loaded page) the Mix opens itself.
-        if (!here || !seed) return openBlend(outcome.blend, blendWith(crew.name))
-        setBlend({
-          ref: outcome.blend,
-          title: blendWith(crew.name),
-          sides: { ours: { kind: 'person', pseudonym: myMarkSeed }, theirs: { kind: 'crew', name: crew.name, emblemSeed: seed, count: here.presentCount } },
-        })
-      }
-      setAnswering(`crew:${crew.crewId}`)
-      const outcome = await waveBackAtCrew(eventId, crew.crewId)
-      setAnswering(null)
-      if (outcome.kind === 'notOpen') return askOpenToCrews(eventId, crew, settled)
-      settled(outcome)
-    },
-    [eventId, answering, reloadReceived, say, crews, myMarkSeed]
-  )
-  const crewSafety = (crewId: string, name: string) => showCrewSafetyActions({ crewId, name }, () => {
-    crews.drop(crewId)
-    ignoreCrewWaves(crewId)
-  })
+  const waveBackCrew = async (crew: { crewId: string; name: string; emblemSeed: string | null }) => {
+    if (!eventId || answering) return
+    const settled = (outcome: WaveBackOutcome) => {
+      reloadReceived()
+      if (outcome.kind === 'gone') return say('They’ve left the room')
+      if (outcome.kind === 'error') return say(outcome.text, 'error')
+      crews.markLiked(crew.crewId)
+      if (!outcome.blend) return
+      const here = crewCards(crews).find((c) => c.crewId === crew.crewId)
+      const seed = crew.emblemSeed ?? here?.emblemSeed
+      // The moment draws their emblem and how many are here; without both (not on the loaded page) the Mix opens itself.
+      if (!here || !seed) return openBlend(outcome.blend, blendWith(crew.name))
+      setBlend({
+        ref: outcome.blend,
+        title: blendWith(crew.name),
+        sides: { ours: { kind: 'person', pseudonym: myMarkSeed }, theirs: { kind: 'crew', name: crew.name, emblemSeed: seed, count: here.presentCount } },
+      })
+    }
+    setAnswering(`crew:${crew.crewId}`)
+    const outcome = await waveBackAtCrew(eventId, crew.crewId)
+    setAnswering(null)
+    if (outcome.kind === 'notOpen') return askOpenToCrews(eventId, crew, settled)
+    settled(outcome)
+  }
+  const crewSafety = (crewId: string, name: string) =>
+    showCrewSafetyActions({ crewId, name }, () => {
+      crews.drop(crewId)
+      ignoreCrewWaves(crewId)
+    })
   /** A crew's emblem from the list or from its wave; the socket sends none. */
   const crewSeed = (crewId: string): string | null =>
     crewCards(crews).find((c) => c.crewId === crewId)?.emblemSeed ?? receivedPage?.crewWaves?.find((c) => c.crewId === crewId)?.emblemSeed ?? null

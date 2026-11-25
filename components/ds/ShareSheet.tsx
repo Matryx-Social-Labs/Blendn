@@ -16,6 +16,8 @@ export type ShareTarget =
   | { kind: 'event'; event: ShareEvent }
   | { kind: 'venue'; name: string; typeLabel: string; area: string; url: string }
   | { kind: 'invite'; url: string }
+  /** A crew's link (S7), shared with the system sheet (`shareNatively`). */
+  | { kind: 'crew'; name: string; url: string }
 
 /** #46: Copy reads "Copied" for 2 s; Android 13+ shows its own clipboard confirmation, so we skip ours. */
 const COPIED_MS = 2000

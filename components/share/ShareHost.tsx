@@ -136,7 +136,7 @@ function ShareFlow({ target, shown }: { target: ShareTarget; shown: boolean }) {
 
   // Mounted once, outside every screen's world: an invite is among people (Add friends, rose), an event or a place is going out (ember).
   return (
-    <HueProvider value={target.kind === 'invite' ? 'rose' : 'ember'}>
+    <HueProvider value={target.kind === 'invite' || target.kind === 'crew' ? 'rose' : 'ember'}>
       <ShareSheet
         visible={shown && stage === 'tray' && whatsApp !== null}
         onClose={finish}

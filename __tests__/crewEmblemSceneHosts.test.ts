@@ -20,7 +20,7 @@ const walk = (dir: string): string[] =>
 /** Each host, and the moment it plays on. */
 const HOSTS: Record<string, string> = {
   'components/crews/CrewHead.tsx': 'dance · the crew page, once on entry',
-  'app/crews/invite/[crewId].tsx': 'wave · "Priya asked you in"',
+  'components/crews/InviteCard.tsx': 'wave · "Priya asked you in"',
   'components/ds/MomentBlend.tsx': 'clink · the Mix, both emblems once they land',
   'components/ds/CrewCard.tsx': "forwards `emblemScene`, which only Make a crew's preview passes",
   'components/crews/MakeSteps.tsx': "dance · Make a crew's preview, on every Shuffle",

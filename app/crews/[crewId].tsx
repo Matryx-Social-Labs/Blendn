@@ -39,7 +39,7 @@ import { pickerView, useFriendsList } from '../../lib/useFriendsList'
 import { roomCardRoute } from '../../lib/roomCard'
 import { isMuted, rememberRoomMute, useRoomMute } from '../../lib/roomMembership'
 import { useRoomRow } from '../../lib/roomRow'
-import { shareMessage } from '../../lib/shareTray'
+import { shareNatively } from '../../lib/shareTray'
 import { showSheet, type SheetOutcome } from '../../lib/sheet'
 import { useAuth } from '../../lib/useAuth'
 import { userMessage } from '../../lib/userMessage'
@@ -185,7 +185,7 @@ function CrewScreenContent() {
     const result = await crewsApi.makeLink(crewId)
     setBusy(null)
     if (!result.success || !result.data) return showToast(crewMessage(result, 'crew', 'Couldn’t make the link. Try again.'), 'error', { haptic: 'error' })
-    if ((await shareMessage(`Join ${crew.name} on Blend’n\n${result.data.url}`)) === 'failed') showToast('Couldn’t open the share sheet. Try again.', 'error', { haptic: 'error' })
+    if ((await shareNatively({ kind: 'crew', name: crew.name, url: result.data.url })) === 'failed') showToast('Couldn’t open the share sheet. Try again.', 'error', { haptic: 'error' })
   }
 
   const saveEdit = async (patch: CrewPatch) => {
