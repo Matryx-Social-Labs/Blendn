@@ -9,7 +9,7 @@
  */
 import { fireEvent, render, screen } from '@testing-library/react-native'
 import React from 'react'
-import { StyleSheet } from 'react-native'
+import { Platform, StyleSheet } from 'react-native'
 
 import { fittedSize, splitWords, Title } from '../components/ds/Title'
 import { DoorTicket } from '../components/offer/OfferSections'
@@ -160,6 +160,64 @@ describe('<Title> at the default size', () => {
     await drawn('t', 120, 'Thiruvanan', 'thapuram')
     expect(measuring()).toBeNull()
     expect(style('t').fontSize).toBe(24)
+  })
+})
+
+/*
+ * SCRUM-1109: on Android 14+ the phone scales 24 sp to 26.4 dp at 1.3 but the 30 sp line only to 30 dp, under Satoshi's 1.25 em,
+ * so the last line lost its descenders ("Table 33 Regulars"). Android titles past 1× draw at the phone's own size in dp with the
+ * role's line height in proportion, as the shrink path already does.
+ */
+describe('<Title> on Android past the default size (SCRUM-1109)', () => {
+  const os = (value: string, version: number) => {
+    Object.defineProperty(Platform, 'OS', { value, configurable: true })
+    Object.defineProperty(Platform, 'Version', { value: version, configurable: true })
+  }
+  const was = { OS: Platform.OS, Version: Platform.Version }
+  afterEach(() => os(was.OS, was.Version as number))
+
+  it('at 1.3 draws the phone’s 26.4 dp with a 33 dp line, not a squeezed 30', async () => {
+    os('android', 34)
+    await atScale(1.3)
+    await render(<Title testID="t">Table 33 Regulars</Title>)
+    expect(style('t')).toMatchObject({ fontSize: 26.4, lineHeight: 33 })
+    expect(screen.getByTestId('t').props.allowFontScaling).toBe(false)
+  })
+
+  it('at 2.0: 36 dp on a 45 dp line', async () => {
+    os('android', 35)
+    await atScale(2)
+    await render(<Title testID="t">Hidden Tiger</Title>)
+    expect(style('t')).toMatchObject({ fontSize: 36, lineHeight: 45 })
+  })
+
+  it('a word fitted at 2.0 never draws bigger than the phone draws the title (36, not 40)', async () => {
+    os('android', 34)
+    await atScale(2)
+    await render(<Title testID="t">{WORST.city}</Title>)
+    await drawn('t', 360, 'Thiruvananthap', 'uram')
+    // At 1× the word is 216 wide, so it fits the 360 line at 40: bigger than the 36 the phone draws, so nothing changes.
+    await measured(216)
+    expect(style('t').fontSize).toBe(36)
+  })
+
+  it('negative controls: iOS at 1.3, Android at 1×, and Android 13 keep the platform’s own scaling', async () => {
+    os('ios', 18)
+    await atScale(1.3)
+    await render(<Title testID="t">Table 33 Regulars</Title>)
+    expect(style('t')).toMatchObject({ fontSize: 24, lineHeight: 30 })
+    expect(screen.getByTestId('t').props.allowFontScaling).not.toBe(false)
+
+    os('android', 34)
+    await atScale(1)
+    await screen.rerender(<Title testID="t">Table 33 Regulars</Title>)
+    expect(style('t')).toMatchObject({ fontSize: 24, lineHeight: 30 })
+
+    os('android', 33)
+    await atScale(1.3)
+    await screen.rerender(<Title testID="t">Table 33 Regulars</Title>)
+    expect(style('t')).toMatchObject({ fontSize: 24, lineHeight: 30 })
+    expect(screen.getByTestId('t').props.allowFontScaling).not.toBe(false)
   })
 })
 
