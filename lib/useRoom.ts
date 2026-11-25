@@ -24,7 +24,7 @@ import {
   withRoster,
   type LiveRoster,
 } from './roomLive'
-import { ignoreWavesFrom, listHostsMoments, useRoomWaves } from './roomWaves'
+import { ignoreWavesFrom, listHostsMoments, personWavedAt, useRoomWaves } from './roomWaves'
 import { recallRoster, rememberRoster } from './rosterMemory'
 import { getBlockedUsers } from './safetyUtils'
 import {
@@ -690,8 +690,7 @@ export function useRoom(): RoomState & RoomActions {
         insideNow: a.insideNow !== false,
         arrivedAt,
         wave,
-        // Heard live, else the received list's time (the deck carries none, so a restart lost "· 4 min").
-        wavedAt: heard[a.user_id]?.at ?? listedAt[a.user_id] ?? null,
+        wavedAt: personWavedAt(heard[a.user_id]?.at, a.wavedAtYouAt, listedAt[a.user_id]),
         matched: wave === 'mutual',
         conversationId,
         requested: !!requested[a.user_id],

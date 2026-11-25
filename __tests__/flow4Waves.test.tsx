@@ -10,7 +10,7 @@ import { AccessibilityInfo } from 'react-native'
 
 import { WaveToast } from '../components/blendn/WaveToast'
 import { H } from '../lib/haptics'
-import { ignoreWavesFrom, listenForWaves, useRoomWaves, WAVED_AT_YOU_MS, wavedAtYouLabel, waveShown } from '../lib/roomWaves'
+import { ignoreWavesFrom, listenForWaves, personWavedAt, useRoomWaves, WAVED_AT_YOU_MS, wavedAtYouLabel, waveShown } from '../lib/roomWaves'
 
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
 const mockWaveListeners = new Set<(d: { eventId: string; fromUserId: string; fromName: string }) => void>()
@@ -116,5 +116,25 @@ describe('the ✓ capsule (Room #07, R3-D4 13′)', () => {
     await act(async () => jest.advanceTimersByTime(1000))
     expect(onDone).toHaveBeenCalledTimes(1)
     jest.useRealTimers()
+  })
+})
+
+describe('when they waved at you (SCRUM-1092: the deck carries it, so a restart keeps "· 4 min")', () => {
+  const DECK = '2026-11-12T11:20:00.000Z'
+  const deckMs = Date.parse(DECK)
+
+  it('heard live wins: it is the freshest', () => {
+    expect(personWavedAt(deckMs + 5_000, DECK, deckMs - 60_000)).toBe(deckMs + 5_000)
+  })
+
+  it('after a restart nothing was heard: the deck’s own time, ahead of the received list', () => {
+    expect(personWavedAt(undefined, DECK, deckMs - 60_000)).toBe(deckMs)
+  })
+
+  it('negative control: an older server sends no time (or a host gets null), so the received list’s time stands, as before', () => {
+    expect(personWavedAt(undefined, undefined, deckMs - 60_000)).toBe(deckMs - 60_000)
+    expect(personWavedAt(undefined, null, deckMs - 60_000)).toBe(deckMs - 60_000)
+    expect(personWavedAt(undefined, 'not a date', deckMs - 60_000)).toBe(deckMs - 60_000)
+    expect(personWavedAt(undefined, null, undefined)).toBeNull()
   })
 })

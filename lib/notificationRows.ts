@@ -242,12 +242,6 @@ function changeTitle(data: NotificationItem['data']): string | null {
   return moved.size === 2 ? 'Time and place changed' : moved.has('time') ? 'Time changed' : 'Place changed'
 }
 
-/**
- * A crewmate's "We're here" push says "Asha is in." (blendn-admin `crewInBody`); a plan's says "… wants to go together". Both
- * are `crew_here`, and the server titles both as an arrival (SCRUM-1098): only an arrival takes its title.
- */
-const isArrival = (item: NotificationItem) => item.kind === 'crew_here' && /\b(?:is|are) in\.(?:\s|$)/.test(item.body)
-
 /** No emoji in a title ("Message request accepted 🎉", research §0.7). */
 const withoutEmoji = (title: string) => title.replace(/\s*\p{Extended_Pictographic}[\p{Extended_Pictographic}\u{FE0F}\u{200D}]*\s*$/u, '')
 
@@ -304,7 +298,7 @@ export function rowFor(item: NotificationItem, now: number = Date.now()): FeedRo
     id: item.id,
     item,
     visual: parseVisual(item.display?.visual) ?? fallbackVisual(item),
-    title: (item.kind !== 'crew_here' || isArrival(item) ? text(item.display?.title) : null) ?? fallback.title,
+    title: text(item.display?.title) ?? fallback.title,
     context: contextOf(item, when, fallback.context),
     actions: waiting ? (REQUEST_ACTIONS[item.kind] ?? []) : [],
     waiting,
