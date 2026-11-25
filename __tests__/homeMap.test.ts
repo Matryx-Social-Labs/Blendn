@@ -7,6 +7,9 @@ import {
   cameraMove,
   cityPickAction,
   edgeBoxOf,
+  bannerReach,
+  bannerRide,
+  chipZoneOf,
   boxAround,
   insideLastBox,
   lightCandidates,
@@ -28,8 +31,9 @@ import {
 } from '../lib/homeMap'
 import { drawerSnapPoints } from '../lib/home'
 import { edgeMarker } from '../lib/mapPresence'
-import { glowRadius } from '../lib/mapLit'
+import { chipBox, glowRadius, pickChips } from '../lib/mapLit'
 import { CITY_BUILDINGS, EMBER_MAP_STYLE, homeMapStyle, styleHost } from '../lib/mapStyleEmber'
+import { SPACE } from '../lib/design/tokens'
 import { MAP_THEME } from '../lib/mapTheme'
 
 /**
@@ -641,6 +645,27 @@ describe('"my location"', () => {
     // A banner landing after the map settled moves the marker with no camera move: the names are placed again (AX5 drive:
     // a chip stayed under the lifted marker).
     expect(component).toMatch(/useEffect\(\(\) => relight\(\), \[isStale, staleBelow, reading, lift\]\)/)
+  })
+
+  it('keeps the names above a banner on the map, and gives them its strip back without one (SCRUM-1096, AX5: a chip stood under the banner)', () => {
+    const drawer = { half: 420, full: 120 }
+    const drawerTop = 420
+    const padding = { top: 100, bottom: 800 - drawerTop }
+    const zoneOf = (lift: number) => ({ left: 16, right: 374, ...chipZoneOf({ height: 800, padding, lift }) })
+    const chipAt = (y: number) => ({ item: 'a', box: chipBox([200, y], 0, { width: 120, height: 52 }) })
+    // A short banner (its top at the board's 74) and a tall one (wrapped at large text): the zone ends at the banner's top.
+    for (const h of [40, 100]) {
+      const lift = bannerReach(h - SPACE.sm) // as HomeShell lifts "my location"
+      expect(chipZoneOf({ height: 800, padding, lift }).bottom).toBeLessThanOrEqual(bannerRide(drawerTop, drawer, h).translateY)
+      // A chip standing on a roof under the banner is not drawn...
+      expect(pickChips([chipAt(drawerTop - 30)], zoneOf(lift), [], 4)).toEqual([])
+    }
+    // ...and with no banner (negative control) the same chip is, as is one whose foot is just above the drawer.
+    expect(pickChips([chipAt(drawerTop - 30)], zoneOf(0), [], 4)).toEqual(['a'])
+    expect(pickChips([chipAt(drawerTop - SPACE.sm / 2)], zoneOf(0), [], 4)).toEqual(['a'])
+    expect(chipZoneOf({ height: 800, padding, lift: 0 })).toEqual({ top: 100, bottom: drawerTop })
+    // Wired: the names keep to that zone.
+    expect(component).toMatch(/visible: chipZoneOf\(\{ height, padding, lift \}\)/)
   })
 
   it('lands at its zoom on iOS when the ease also tilts the camera (review M2)', () => {

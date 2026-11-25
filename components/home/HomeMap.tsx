@@ -45,6 +45,7 @@ import {
   reachShapes,
   reachTarget,
   compassBelow,
+  chipZoneOf,
   edgeBoxOf,
 } from '../../lib/homeMap'
 import { getDistanceKm } from '../../lib/geo'
@@ -498,7 +499,7 @@ export const HomeMap = memo(function HomeMap({
     featureIds: ownTiles,
     litBy: OWN_BUILDINGS_LIT_BY,
     // What the person can see: under the capsule and the bell, over the drawer (a name outside it, or on their dot, is not drawn).
-    visible: { top: padding.top, bottom: height - padding.bottom },
+    visible: chipZoneOf({ height, padding, lift }),
     userAt: center ? [center.longitude, center.latitude] : null,
     // No name under the edge marker (drive 2026-11-19: it covered a chip).
     edge: edgeTarget ? { at: edgeTarget.at, box: edgeBox } : null,

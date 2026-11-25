@@ -1,5 +1,6 @@
 import type { MapRef } from '@maplibre/maplibre-react-native'
 import { useEffect, useRef, useState, type RefObject } from 'react'
+import { useWindowDimensions } from 'react-native'
 
 import { BUILDING_SEARCH_PX, LIGHT_MIN_ZOOM, lightCandidates, lightSignature, litPlaceFor, type Bounds, type Pin } from '../../lib/homeMap'
 import { Logger } from '../../lib/logger'
@@ -124,6 +125,8 @@ export function useMapLighting({
   reading?: DistanceReading
 }): { lit: Lit; onFrame: () => void; relight: () => void; passes: number } {
   const [litFor, setLitFor] = useState<{ segment: Segment; lit: Lit; key: string }>({ segment, lit: NO_LIT, key: '' })
+  // The OS text size: a chip's words grow with it, so its box does (SCRUM-1096).
+  const { fontScale } = useWindowDimensions()
   const needsLight = useRef(false)
   const lastLit = useRef('')
   const pass = useRef(0)
@@ -160,7 +163,7 @@ export function useMapLighting({
     const tiles = featureIds ? 'own' : 'openfreemap'
     // The lookup reads the layer the buildings are drawn in: ours has its own id, so OpenFreeMap's merged ids never come back here.
     const layer = featureIds ? OWN_BUILDINGS_LAYER_ID : BUILDING_LAYER_ID
-    const signature = `${tiles}|${lightSignature(candidates, { centre: v.centre, zoom: v.zoom, pitch: v.pitch })}|${visible ? `${visible.top}:${visible.bottom}` : ''}|${userAt ? userAt.join(',') : ''}|${edge ? `${edge.at.join(',')}@${Object.values(edge.box).join(',')}` : ''}|${stale ? `stale:${stale.below}` : ''}|${knownDistance ? `${knownDistance.id}=${knownDistance.km}` : ''}|${reading}`
+    const signature = `${tiles}|${lightSignature(candidates, { centre: v.centre, zoom: v.zoom, pitch: v.pitch })}|${visible ? `${visible.top}:${visible.bottom}` : ''}|${userAt ? userAt.join(',') : ''}|${edge ? `${edge.at.join(',')}@${Object.values(edge.box).join(',')}` : ''}|${stale ? `stale:${stale.below}` : ''}|${knownDistance ? `${knownDistance.id}=${knownDistance.km}` : ''}|${reading}|${fontScale}`
     if (signature === lastLit.current) {
       setPasses((n) => n + 1)
       return
@@ -251,7 +254,7 @@ export function useMapLighting({
         if (marker) blocked.push({ left: marker.left, right: marker.left + EDGE_BLOCK.width, top: marker.top, bottom: marker.top + EDGE_BLOCK.height })
         if (stale && dot) blocked.push(staleCalloutBox(dot, stale.room, stale.below))
         chips = pickChips(
-          nearest.map((c, i) => ({ item: c, box: chipBox(projected[i] as [number, number], c.lift, chipSizePx(c)) })),
+          nearest.map((c, i) => ({ item: c, box: chipBox(projected[i] as [number, number], c.lift, chipSizePx(c, fontScale)) })),
           zone,
           blocked,
           MAP_THEME.chip.max
