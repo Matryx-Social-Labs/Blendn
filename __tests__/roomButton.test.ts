@@ -422,14 +422,11 @@ describe('the callers hand the centre button the precise fix (SCRUM-744)', () =>
     expect(read('lib/roomButton.ts')).toMatch(/FIX_MAX_AGE_MS = 120_000/)
   })
 
-  it('the Pulse sets every position through fixOf (accuracy and time) and asks for fresh last-known fixes', () => {
+  it('the Pulse sets every position through fixOf (accuracy and time), in its one guarded ask (SCRUM-1324)', () => {
     const pulse = read('app/(tabs)/events.tsx')
     expect(pulse).not.toMatch(/setUserLocation\(\{/)
-    expect(pulse.match(/setUserLocation\(/g)?.length).toBeGreaterThan(2)
-    expect(pulse).not.toMatch(/getLastKnownPositionAsync\(\)/)
-    // Once, at mount. A return to the app asks a new fix (useFixRefresh): a recent last-known one kept its old time (SCRUM-1324).
-    expect(pulse.match(/getLastKnownPositionAsync\(\{ maxAge: FIX_MAX_AGE_MS \}\)/g)).toHaveLength(1)
-    expect(pulse).toMatch(/fix: setUserLocation/)
+    expect(pulse).not.toMatch(/getCurrentPositionAsync|getLastKnownPositionAsync\(\{ maxAge: FIX_MAX_AGE_MS/)
+    expect(read('lib/useFixRefresh.ts')).toMatch(/onRef\.current\.fix\(fixOf\(position\)\)/)
   })
 
   it('publishRoomSignal judges inside from the fix it is given', () => {
