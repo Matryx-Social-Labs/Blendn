@@ -644,3 +644,51 @@ describe('arrivals while you read back (Flow 5 F-A, "48 new messages")', () => {
     expect(screen.queryByRole('button', { name: /new message/ })).toBeNull()
   })
 })
+
+/*
+ * SCRUM-1321 (found in the DM, the same list here): the first page paints at offset 0, the list's top, before the jump to
+ * the newest lands, and the top asks for older pages. Nobody scrolled: the room must read its newest page only.
+ */
+describe('a long room, opened: older pages wait for the reader (SCRUM-1321)', () => {
+  const open = () => eventRow({}, { startTime: new Date(Date.now() - HOUR).toISOString() })
+  const row = (n: number) => ({ id: `m${n}`, content: `line ${n}`, user_id: 'u2', user: { name: 'Night Owl' }, type: 'text', created_at: new Date(Date.now() - (600 - n) * 60_000).toISOString() })
+  const page = (top: number) => ({
+    success: true,
+    data: { messages: Array.from({ length: 50 }, (_, i) => row(top - i)), pagination: { hasMore: true, nextCursor: String(top - 49) } },
+  })
+  const VIEW = 700
+  const CONTENT = 3200
+  const scrolled = (y: number) => ({ nativeEvent: { contentOffset: { x: 0, y }, contentSize: { width: 393, height: CONTENT }, layoutMeasurement: { width: 393, height: VIEW }, zoomScale: 1 } })
+  const older = () => (apiClient.getChatMessages as jest.Mock).mock.calls.filter(([, q]) => q?.before).map(([, q]) => q.before)
+  const firstFrame = async () => {
+    const list = screen.getByTestId('room-feed')
+    await act(async () => fireEvent(list, 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 393, height: VIEW } } }))
+    await act(async () => fireEvent(list, 'contentSizeChange', 393, CONTENT))
+    await flush()
+  }
+
+  beforeEach(() => {
+    ;(apiClient.getChatMessages as jest.Mock).mockReset()
+    ;(apiClient.getChatGroups as jest.Mock).mockResolvedValue({ success: true, data: { groups: [open()] } })
+    ;(apiClient.getChatMessages as jest.Mock).mockImplementation(async (_room: string, q: { before?: string }) => page(q?.before ? Number(q.before) - 1 : 600))
+  })
+
+  it('reads the newest page only on open', async () => {
+    await render(<GroupChat />)
+    await flush()
+    await firstFrame()
+    expect(older()).toEqual([])
+  })
+
+  it('reads the next older page when the reader scrolls up to the top', async () => {
+    await render(<GroupChat />)
+    await flush()
+    await firstFrame()
+    const list = screen.getByTestId('room-feed')
+    await act(async () => fireEvent.scroll(list, scrolled(CONTENT - VIEW)))
+    await act(async () => fireEvent(list, 'scrollBeginDrag', scrolled(CONTENT - VIEW)))
+    await act(async () => fireEvent.scroll(list, scrolled(0)))
+    await flush()
+    expect(older()).toEqual(['551'])
+  })
+})
