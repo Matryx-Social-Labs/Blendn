@@ -7,7 +7,7 @@ import { H } from '../../lib/haptics'
 import { Logger } from '../../lib/logger'
 import { isCrewWave, isWavesPage, listRows, wavedAgoLine, wavedAtYouLine, waveId, waveName, type AnyWave } from '../../lib/receivedWaves'
 import { Title } from '../ds/Title'
-import { CONTROL_FONT_CAP, font, minTarget, useBoldText, useIncreaseContrast } from '../ds/shared'
+import { CONTROL_FONT_CAP, font, minTarget, TWO_LINE_NAMES_FROM, useBoldText, useIncreaseContrast } from '../ds/shared'
 import { PagedFooter } from '../friends/PagedFooter'
 import { Button } from '../ds/Button'
 import { WaveFace } from '../ds/WaveFace'
@@ -15,8 +15,6 @@ import { WavingHand } from '../ds/PersonCard'
 
 /** A row: the 32 face, the name and "Waved at you · 4 min" (board 03 See all). */
 const ROW = 60
-/** At a larger text size the name and the line each take two lines: the row's height, per unit of text scale. */
-const ROW_LARGE = 76
 const FACE = 32
 /** The list's share of the screen inside the tall sheet; past that it scrolls (as the crew friend picker does). */
 const LIST_SHARE = 0.62
@@ -53,10 +51,8 @@ export function WavedAtYouList({
   const contrast = useIncreaseContrast()
   const secondary = contrast ? COLOR.textPrimary : COLOR.textSecondary
   const { height: windowHeight, fontScale } = useWindowDimensions()
-  // Fixed per text size, so the list still windows by `getItemLayout`.
-  const scale = Math.min(fontScale, CONTROL_FONT_CAP)
-  const large = scale > 1
-  const rowHeight = large ? Math.round(ROW_LARGE * scale) : ROW
+  // Past this the row is as tall as its words, with the pill under them; at the usual sizes it is ROW, and windows by `getItemLayout`.
+  const large = fontScale >= TWO_LINE_NAMES_FROM
   const [list, setList] = useState<Loaded | null | 'failed'>(null)
   const [loadingMore, setLoadingMore] = useState(false)
   const [moreFailed, setMoreFailed] = useState(false)
@@ -129,7 +125,7 @@ export function WavedAtYouList({
     )
   const rows = listRows(list, list.answeredBefore)
   const total = list.total + list.crewTotal
-  const listHeight = Math.min(Math.max(rows.length, 1) * rowHeight + (loadingMore || moreFailed ? ROW : 0), Math.round(windowHeight * LIST_SHARE))
+  const listHeight = Math.min(Math.max(rows.length, 1) * ROW + (loadingMore || moreFailed ? ROW : 0), Math.round(windowHeight * LIST_SHARE))
   return (
     <View style={styles.wrap}>
       <View style={styles.head} accessible accessibilityRole="header" accessibilityLabel={`Waved at you, ${total}`}>
@@ -148,9 +144,9 @@ export function WavedAtYouList({
           data={rows}
           extraData={[sending, gone]}
           keyExtractor={waveId}
-          style={{ height: listHeight }}
+          style={large ? { maxHeight: Math.round(windowHeight * LIST_SHARE), flexGrow: 0 } : { height: listHeight }}
           nestedScrollEnabled
-          getItemLayout={(_d, index) => ({ length: rowHeight, offset: rowHeight * index, index })}
+          getItemLayout={large ? undefined : (_d, index) => ({ length: ROW, offset: ROW * index, index })}
           initialNumToRender={FIRST_ROWS}
           windowSize={7}
           removeClippedSubviews
@@ -180,10 +176,10 @@ export function WavedAtYouList({
                   if (e.nativeEvent.actionName === 'block') return safety()
                   if (e.nativeEvent.actionName === 'waveBack' && sending !== id) void answer(w)
                 }}
-                style={[styles.row, { height: rowHeight }]}
+                style={[styles.row, large && styles.rowLarge]}
               >
                 <WaveFace size={FACE} wave={w} />
-                <View style={styles.text}>
+                <View style={[styles.text, large && styles.textLarge]}>
                   <Text numberOfLines={2} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold, FONT_FAMILY.brand[500]), styles.ink]}>
                     {name}
                   </Text>
@@ -203,12 +199,12 @@ export function WavedAtYouList({
                       if (sending !== id) void answer(w)
                     }}
                     accessibilityLabel={`Wave back at ${name}`}
-                    style={styles.pill}
+                    style={[styles.pill, large && styles.pillLarge]}
                     testID={`waved-row-${id}-wave`}
                   />
                 ) : w.wavedBack ? (
                   // ✓ Waved is still: the neutral, disabled (no Wave again), as the person page's.
-                  <Button kind="secondary" size="pill" icon="check" label="Waved" disabled accessibilityLabel={`Waved at ${name}`} style={styles.pill} />
+                  <Button kind="secondary" size="pill" icon="check" label="Waved" disabled accessibilityLabel={`Waved at ${name}`} style={[styles.pill, large && styles.pillLarge]} />
                 ) : null}
               </Pressable>
             )
@@ -225,8 +221,12 @@ const styles = StyleSheet.create({
   head: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
   ink: { color: COLOR.textPrimary },
   centre: { textAlign: 'center' },
-  row: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md },
+  row: { height: ROW, flexDirection: 'row', alignItems: 'center', gap: SPACE.md },
+  rowLarge: { height: undefined, minHeight: ROW, flexWrap: 'wrap', paddingVertical: SPACE.sm },
   text: { flex: 1, minWidth: 0, gap: SPACE.xxs },
+  // Wide enough that the pill wraps under it, beside the face.
+  textLarge: { flexBasis: '70%' },
+  pillLarge: { marginLeft: FACE + SPACE.md },
   // A pill starts at its row's top by default; the row is taller than it.
   pill: { alignSelf: 'center' },
   foot: { minHeight: ROW, justifyContent: 'center' },

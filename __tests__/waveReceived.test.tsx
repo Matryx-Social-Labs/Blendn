@@ -410,20 +410,19 @@ describe('a crew’s wave at you (S5 b2, advisor T-A / U-A / W-A / X-A 2026-11-2
     for (const name of ['Wave back at Crew 4', 'Waved at Person 21']) expect(aligned(screen.getByRole('button', { name }) as never)).toBe(true)
   })
 
-  it('a long crew name wraps in its row, and the row grows with the text so nothing is cut; control: 60 at the default size', async () => {
-    const heights: number[] = []
+  it('at a large text size a row is as tall as its words (nothing fixed to overlap); control: 60 and measured at the default', async () => {
+    const native = jest.requireActual<typeof import('react-native')>('react-native')
+    const rows: { height: unknown; layout: boolean; lines: unknown }[] = []
     for (const fontScale of [1, 1.3]) {
-      const spy = jest.spyOn(require('react-native'), 'useWindowDimensions').mockReturnValue({ width: 360, height: 800, scale: 3, fontScale })
+      const spy = jest.spyOn(native, 'useWindowDimensions').mockReturnValue({ width: 360, height: 800, scale: 3, fontScale })
       mockGetReceivedWaves.mockResolvedValueOnce({ success: true, data: page([], { crewWaves: [crew(4, { name: 'Saint-Jean-sur-Richelieu Runners' })], crewTotal: 1 }) })
       await render(<WavedAtYouList eventId="e1" now={NOW} onWaveBack={jest.fn()} onSafety={jest.fn()} />)
       const name = await screen.findByText('Saint-Jean-sur-Richelieu Runners', { includeHiddenElements: true })
-      expect(name.props.numberOfLines).toBe(2)
-      heights.push(StyleSheet.flatten(screen.getByTestId('waved-row-crew:c4').props.style).height)
+      rows.push({ height: StyleSheet.flatten(screen.getByTestId('waved-row-crew:c4').props.style).height, layout: !!screen.getByTestId('waved-list').props.getItemLayout, lines: name.props.numberOfLines })
       await screen.unmount()
       spy.mockRestore()
     }
-    expect(heights[0]).toBe(60)
-    expect(heights[1]).toBeGreaterThanOrEqual(76)
+    expect(rows).toEqual([expect.objectContaining({ height: 60, lines: 2 }), expect.objectContaining({ height: undefined, lines: 2 })])
   })
 
   it('a crew that left: the row stays, says so and offers nothing; control: a refusal keeps Wave back', async () => {
@@ -471,11 +470,12 @@ describe('a crew’s wave at you (S5 b2, advisor T-A / U-A / W-A / X-A 2026-11-2
     expect(seen.store!.version).toBe(before)
   })
 
-  it('a 32-character crew name wraps: "waved at you" is never cut; control: a person’s toast stays one line', async () => {
+  it('a 32-character crew name has its own line: "waved at you" is never cut; control: a person’s toast stays one line', async () => {
     jest.useFakeTimers({ now: NOW })
     const name = 'Saint-Jean-sur-Richelieu Runners'
     await render(<WaveToast toast={{ waves: [{ eventId: 'e1', fromCrewId: 'c1', fromName: name, at: NOW }] }} onOpen={jest.fn()} onWaveBack={jest.fn()} onSeeAll={jest.fn()} onSafety={jest.fn()} onDone={jest.fn()} />)
-    expect(screen.getByText(`${name} waved at you`).props.numberOfLines).toBe(2)
+    expect(screen.getByText(name).props.numberOfLines).toBe(1)
+    expect(screen.getByText('waved at you')).toBeTruthy()
     await screen.unmount()
     await render(<WaveToast toast={{ waves: [{ eventId: 'e1', fromUserId: 'p', fromName: 'Night Cat', at: NOW }] }} onOpen={jest.fn()} onWaveBack={jest.fn()} onSeeAll={jest.fn()} onSafety={jest.fn()} onDone={jest.fn()} />)
     expect(screen.getByText('Night Cat waved at you').props.numberOfLines).toBe(1)

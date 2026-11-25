@@ -62,6 +62,7 @@ export function WaveToast({
   const contrast = useIncreaseContrast()
   const text = toastTitle(toast)
   const one = toast.waves.length === 1 ? toast.waves[0] : null
+  const crew = one && 'fromCrewId' in one ? one : null
   const android = Platform.OS === 'android'
   const y = useSharedValue(reduceMotion ? 0 : ENTER_FROM)
   const opacity = useSharedValue(android ? 0 : 1)
@@ -138,10 +139,21 @@ export function WaveToast({
               <Facepile faces={toast.waves.slice(0, FOLD_FACES).map((w): PileFace => ('fromCrewId' in w ? { kind: 'crew', seed: emblemOf(w.fromCrewId) } : { kind: 'creature', pseudonym: w.fromName }))} total={Math.min(toast.waves.length, FOLD_FACES)} size={32} />
             )}
           </View>
-          {/* A crew's name runs to 32 characters: two lines, so "waved at you" is never what an ellipsis takes. */}
-          <Text numberOfLines={one && 'fromCrewId' in one ? 2 : 1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold, FONT_FAMILY.brand[500]), styles.text]}>
-            {text}
-          </Text>
+          {crew ? (
+            // A crew's name runs to 32 characters: on its own line, so "waved at you" is never what an ellipsis takes.
+            <View style={styles.text}>
+              <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold, FONT_FAMILY.brand[500]), styles.ink]}>
+                {crew.fromName}
+              </Text>
+              <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('note', bold), styles.ink]}>
+                waved at you
+              </Text>
+            </View>
+          ) : (
+            <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold, FONT_FAMILY.brand[500]), styles.ink, styles.text]}>
+              {text}
+            </Text>
+          )}
           {/* Wave back is the DS positive (buttons board C); the toast's has no hand (board 03 L-A). */}
           <Button
             kind="lit"
@@ -177,5 +189,6 @@ const styles = StyleSheet.create({
     gap: SPACE.sm,
     overflow: 'hidden',
   },
-  text: { color: COLOR.textPrimary, flex: 1 },
+  text: { flex: 1, minWidth: 0 },
+  ink: { color: COLOR.textPrimary },
 })
