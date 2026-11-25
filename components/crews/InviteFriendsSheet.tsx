@@ -3,6 +3,9 @@ import { useState } from 'react'
 import { CREW_MAX_MEMBERS } from '../../lib/crews'
 import type { Friend } from '../../lib/friends'
 import { Sheet } from '../ds/Sheet'
+import { useSelection } from '../ds/shared'
+import { Icon } from '../ui/Icon'
+import { ICON } from '../../lib/design/tokens'
 import { SettingsRow } from '../ds/SettingsRow'
 import { RowsCard } from './RowsCard'
 import { FriendsStep, type FriendsStepProps } from './MakeSteps'
@@ -44,6 +47,7 @@ export function InviteFriendsSheet({
   sharing: boolean
   onClose: () => void
 }) {
+  const sel = useSelection()
   const [picked, setPicked] = useState<string[]>([])
   const toggle = (userId: string) =>
     setPicked((p) => (p.includes(userId) ? p.filter((id) => id !== userId) : p.length < Math.min(room, CREW_MAX_MEMBERS - 1) ? [...p, userId] : p))
@@ -68,7 +72,7 @@ export function InviteFriendsSheet({
     >
       {/* Y-A (advisor 2026-11-25): above the friends, so it is there with none to ask too. */}
       <RowsCard testID="crew-link">
-        <SettingsRow icon="link" title="Share a crew link" hint={LINK_HINT} trail="chevron" disabled={sharing} onPress={onShareLink} testID="crew-link-row" />
+        <SettingsRow leading={<Icon name="link" size={ICON.nav} color={sel.glyph} />} title="Share a crew link" hint={LINK_HINT} trail="chevron" disabled={sharing} onPress={onShareLink} testID="crew-link-row" />
       </RowsCard>
       <FriendsStep friends={friends} picked={picked} onToggle={toggle} onRetry={onRetry} none={NONE_TO_ASK} limit={Math.min(room, CREW_MAX_MEMBERS - 1)} paging={paging} search={search} />
     </Sheet>

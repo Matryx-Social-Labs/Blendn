@@ -113,60 +113,58 @@ function CrewLinkScreen() {
   }
 
   return (
-    <HueProvider value="rose">
-      <SafeAreaView style={styles.container} edges={['top']}>
-        <Orbs set="feed" tint={sel.edge} />
-        <Grain />
-        <View style={styles.bar}>
-          <IconButton icon="x" accessibilityLabel="Close" onPress={close} />
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <Orbs set="feed" tint={sel.edge} />
+      <Grain />
+      <View style={styles.bar}>
+        <IconButton icon="x" accessibilityLabel="Close" onPress={close} />
+      </View>
+      {load.kind === 'ready' ? (
+        <FadeInUp style={styles.fill}>
+          <InviteCard
+            invite={load.link}
+            invitedBy={load.link.invitedBy.name}
+            invitedByPhoto={load.link.invitedBy.photoUrl}
+            consentMore={friendsToo(load.link.invitedBy.name)}
+            note={openForLine(load.link.expiresAt)}
+            keepAnonymous={keepAnonymous}
+            onKeepAnonymous={setKeepAnonymous}
+            joining={joining}
+            joined={!!joined}
+            refused={!!refusal}
+            onJoin={() => void join()}
+            onNotNow={close}
+          />
+        </FadeInUp>
+      ) : load.kind === 'loading' ? (
+        <View accessible testID="crew-link-loading" accessibilityLabel="Loading" accessibilityState={{ busy: true }} style={[styles.state, styles.stage]}>
+          <SkeletonBlock width={SKELETON.emblem} height={SKELETON.emblem} />
+          <SkeletonBlock width="70%" height={SKELETON.title} />
+          <SkeletonBlock width="80%" height={SKELETON.line} />
         </View>
-        {load.kind === 'ready' ? (
-          <FadeInUp style={styles.fill}>
-            <InviteCard
-              invite={load.link}
-              invitedBy={load.link.invitedBy.name}
-              invitedByPhoto={load.link.invitedBy.photoUrl}
-              consentMore={friendsToo(load.link.invitedBy.name)}
-              note={openForLine(load.link.expiresAt)}
-              keepAnonymous={keepAnonymous}
-              onKeepAnonymous={setKeepAnonymous}
-              joining={joining}
-              joined={!!joined}
-              refused={!!refusal}
-              onJoin={() => void join()}
-              onNotNow={close}
+      ) : (
+        <View style={styles.state}>
+          {load.kind === 'dead' ? (
+            <StateScreen
+              icon="link-2-off"
+              title="This invite link doesn’t work"
+              body="Ask the person who sent it for a new one."
+              actions={[{ label: 'Close', kind: 'secondary', onPress: close }]}
+              testID="crew-link-dead"
             />
-          </FadeInUp>
-        ) : load.kind === 'loading' ? (
-          <View accessible testID="crew-link-loading" accessibilityLabel="Loading" accessibilityState={{ busy: true }} style={[styles.state, styles.stage]}>
-            <SkeletonBlock width={SKELETON.emblem} height={SKELETON.emblem} />
-            <SkeletonBlock width="70%" height={SKELETON.title} />
-            <SkeletonBlock width="80%" height={SKELETON.line} />
-          </View>
-        ) : (
-          <View style={styles.state}>
-            {load.kind === 'dead' ? (
-              <StateScreen
-                icon="link-2-off"
-                title="This invite link doesn’t work"
-                body="Ask the person who sent it for a new one."
-                actions={[{ label: 'Close', kind: 'secondary', onPress: close }]}
-                testID="crew-link-dead"
-              />
-            ) : (
-              <StateScreen
-                icon="cloud-off"
-                title="This link didn’t open"
-                body="Check your connection and try again."
-                actions={[{ label: 'Try again', onPress: () => void retry(), loading: retrying }]}
-                testID="crew-link-failed"
-              />
-            )}
-          </View>
-        )}
-        <CrewRefusalSheet refusal={refusal} onClose={() => setRefusal(null)} />
-      </SafeAreaView>
-    </HueProvider>
+          ) : (
+            <StateScreen
+              icon="cloud-off"
+              title="This link didn’t open"
+              body="Check your connection and try again."
+              actions={[{ label: 'Try again', onPress: () => void retry(), loading: retrying }]}
+              testID="crew-link-failed"
+            />
+          )}
+        </View>
+      )}
+      <CrewRefusalSheet refusal={refusal} onClose={() => setRefusal(null)} />
+    </SafeAreaView>
   )
 }
 
@@ -182,7 +180,10 @@ const styles = StyleSheet.create({
 export default function CrewLinkRoute() {
   return (
     <RouteModal>
-      <CrewLinkScreen />
+      {/* Around the screen, not in it: the glow reads the world's hue (`useSelection`). */}
+      <HueProvider value="rose">
+        <CrewLinkScreen />
+      </HueProvider>
     </RouteModal>
   )
 }
