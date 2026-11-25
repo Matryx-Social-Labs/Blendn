@@ -40,6 +40,8 @@ export type CoachMarkId =
   | 'door_pass'
   /** A Blend, the first time anyone opens one: what it is, and that everyone is on tonight's names. */
   | 'blend_first_open'
+  /** The Banter: swiping a chat left to mute it. */
+  | 'banter_swipe_mute'
 
 type Phase = 'unseen' | 'showing' | 'done'
 
@@ -140,18 +142,22 @@ export function useCoachMark(id: CoachMarkId, { ready }: { ready: boolean }) {
 }
 
 /**
- * Every coach mark's sentence, grouped by the screen it appears on, for Settings › Help › Tips (R4-2): the same words,
- * for whoever dismissed one. Nothing replays from there; it is reading only. A mark that is not built yet (the Banter's
- * "Swipe a chat left to mute it.", whose rows have no swipe) is not listed: a tip for a thing the app cannot do is a promise.
+ * Every coach mark's sentence, grouped by the moment of the night it belongs to, for Settings › Help › Tips (R4-2): the same words,
+ * for whoever dismissed one. Nothing replays from there; it is reading only. A mark that is not built is not listed:
+ * a tip for a thing the app cannot do is a promise.
  *
  * The sentences live with their marks (`app/(tabs)/events.tsx`, `app/(tabs)/_layout.tsx`, `components/blendn/BlendnScreen.tsx`,
- * `app/offer/[id].tsx`, `components/crews/BlendRoom.tsx`); `__tests__/tipsScreen.test.tsx` fails when one drifts from this list.
+ * `app/offer/[id].tsx`, `app/(tabs)/chat.tsx`, `components/crews/BlendRoom.tsx`); `__tests__/tipsScreen.test.tsx` fails when one drifts from this list.
  */
-export const COACH_TIPS: readonly { id: CoachMarkId; screen: string; when: string; text: string }[] = [
-  { id: 'events_preview_hint', screen: 'The Pulse', when: 'When you first see an event', text: 'Hold an event to save, share or preview it.' },
+/** The moments of a night, in its order: Tips groups by these (board remaining-screens 04 A). */
+export const TIP_NIGHT = ['Before you go', 'At the door', 'Inside', 'After'] as const
+
+export const COACH_TIPS: readonly { id: CoachMarkId; night: (typeof TIP_NIGHT)[number]; screen: string; when: string; text: string }[] = [
+  { id: 'events_preview_hint', night: 'Before you go', screen: 'The Pulse', when: 'when you first see an event', text: 'Hold an event to save, share or preview it.' },
   // The mark names the place you are at; here it is the same sentence for any place.
-  { id: 'centre_button_checkin', screen: 'The centre button', when: 'When you first arrive somewhere you can check in', text: 'You’re at the venue. Tap the button, then hold to check in.' },
-  { id: 'room_reveal', screen: 'The Room', when: 'Your first time in a Room', text: 'People here can’t see your name or photo until you choose to show them. You decide, per event.' },
-  { id: 'door_pass', screen: 'A door pass', when: 'When you first have a pass to show', text: 'Show this to the staff. They type the code and tap Redeemed. It works once, today.' },
-  { id: 'blend_first_open', screen: 'A Blend', when: 'The first Blend you open', text: 'Everyone here is on tonight’s names until they reveal.' },
+  { id: 'centre_button_checkin', night: 'At the door', screen: 'The center button', when: 'when you can first check in', text: 'You’re at the venue. Tap the button, then hold to check in.' },
+  { id: 'door_pass', night: 'At the door', screen: 'An offer code', when: 'the first time you have one', text: 'Show this to the staff. They type the code and tap Redeemed. It works once, today.' },
+  { id: 'room_reveal', night: 'Inside', screen: 'The Room', when: 'your first time in one', text: 'People here can’t see your name or photo until you choose to show them. You decide, per event.' },
+  { id: 'blend_first_open', night: 'Inside', screen: 'A Mix', when: 'the first one you open', text: 'Everyone here is on tonight’s names until they reveal.' },
+  { id: 'banter_swipe_mute', night: 'After', screen: 'The Banter', when: 'when you first have a chat to mute', text: 'Swipe a chat left to mute it.' },
 ]

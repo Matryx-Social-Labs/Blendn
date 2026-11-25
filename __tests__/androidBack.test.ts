@@ -18,7 +18,7 @@ describe('isBackRoot', () => {
     expect(isBackRoot(path)).toBe(true)
   })
 
-  it.each(['/settings', '/event/abc', '/onboarding/journey', '/chat/abc', '/profile-edit'])('%s is not', (path) => {
+  it.each(['/settings', '/event/abc', '/onboarding/details', '/chat/abc', '/profile-edit'])('%s is not', (path) => {
     expect(isBackRoot(path)).toBe(false)
   })
 })

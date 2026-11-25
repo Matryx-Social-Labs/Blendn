@@ -52,7 +52,7 @@ export const COLOR = {
   selectionRoseGlyph: '#EB8EA1',
   selectionRoseFlare: '#653A43',
   selectionVioletFill: '#433247',
-  selectionVioletGlyph: '#B58FD0',
+  selectionVioletGlyph: '#BA96D3',
   selectionVioletFlare: '#523A5A',
   tabCapsule: 'rgba(255,255,255,0.22)',
   switchOffTrack: '#959090',
@@ -83,6 +83,21 @@ export const GRADIENT = {
   fill: {
     angle: 135,
     colors: ['#D83F0F', '#BB556B', '#925DA9'],
+    locations: [0, 0.5, 1],
+  },
+  text: {
+    angle: 90,
+    colors: ['#F05423', '#BE5C71', '#A47BBF'],
+    locations: [0, 0.5, 1],
+  },
+  lit: {
+    angle: 135,
+    colors: ['#772F19', '#693943', '#573D60'],
+    locations: [0, 0.5, 1],
+  },
+  litPressed: {
+    angle: 135,
+    colors: ['#973415', '#854250', '#6A4778'],
     locations: [0, 0.5, 1],
   },
 } as const
@@ -127,6 +142,22 @@ export const MATERIAL = {
     {
       radius: 28,
       color: 'rgba(190,92,113,0.40)',
+    },
+  ],
+  glowLead: [
+    {
+      offsetY: 18,
+      radius: 60,
+      spread: -18,
+      color: 'rgba(240,84,35,0.55)',
+    },
+  ],
+  glowHero: [
+    {
+      offsetY: 8,
+      radius: 22,
+      spread: -6,
+      color: 'rgba(187,85,107,0.55)',
     },
   ],
 } as const
@@ -189,6 +220,42 @@ export const TYPE = {
     lineHeight: 24,
     letterSpacing: 0,
   },
+  tab: {
+    fontFamily: 'Satoshi_700Bold',
+    fontSize: 22,
+    lineHeight: 28,
+    letterSpacing: -0.4,
+  },
+  control: {
+    fontFamily: 'Satoshi_500Medium',
+    fontSize: 15,
+    lineHeight: 20,
+    letterSpacing: 0,
+  },
+  rowTitle: {
+    fontFamily: 'Satoshi_500Medium',
+    fontSize: 17,
+    lineHeight: 22,
+    letterSpacing: 0,
+  },
+  group: {
+    fontFamily: 'Satoshi_700Bold',
+    fontSize: 17,
+    lineHeight: 22,
+    letterSpacing: 0,
+  },
+  note: {
+    fontFamily: 'Satoshi_400Regular',
+    fontSize: 13,
+    lineHeight: 18,
+    letterSpacing: 0,
+  },
+  lede: {
+    fontFamily: 'Satoshi_400Regular',
+    fontSize: 15,
+    lineHeight: 22,
+    letterSpacing: 0,
+  },
   meta: {
     fontFamily: 'Satoshi_400Regular',
     fontSize: 14,
@@ -225,6 +292,12 @@ export const MAX_FONT_SCALE = {
   button: 2,
   body: 2,
   bodyStrong: 2,
+  tab: 1.3,
+  control: 1.3,
+  rowTitle: 1.5,
+  group: 1.5,
+  note: 1.5,
+  lede: 2,
   meta: 2,
   caption: 1.3,
   label: 2,
@@ -265,6 +338,7 @@ export const RADIUS = {
   card: 32,
   mediaInCard: 24,
   rowInCard: 16,
+  tile: 20,
   thumb: 8,
   sheet: 24,
   dialogAndroid: 28,
@@ -277,9 +351,13 @@ export const SIZE = {
   input: 56,
   control: 48,
   tag: 32,
+  tagHeader: 36,
+  circleButtonSm: 40,
   badge: 18,
   tabBar: 64,
+  tabBarCompact: 52,
   disc: 56,
+  discCompact: 44,
   circleButton: 44,
   circleButtonAndroid: 48,
   topBarAndroid: 64,
@@ -382,6 +460,13 @@ export const GLYPH = {
   tilt: 14,
   flickerDips: [0.35, 0.6],
   flickerSteps: [0.25, 0.1875, 0.25, 0.3125],
+  blink: {
+    close: 100,
+    hold: 40,
+    open: 120,
+    closedScale: 0.1,
+    lidBelow: 0.15,
+  },
 } as const
 
 export const PRESS = {
@@ -452,4 +537,68 @@ export const VENUE_PLATES = {
 export const PALETTE_GLYPH = {
   creature: '#FFFFFF',
   plate: 'rgba(255,255,255,0.70)',
+} as const
+
+export const CREATURE_HUES = [
+  {
+    name: 'amber',
+    fill: '#4F3A1E',
+    edge: '#D98A2B',
+    glyph: '#F5BE7E',
+  },
+  {
+    name: 'ember',
+    fill: '#552D21',
+    edge: '#F05423',
+    glyph: '#FF8A5C',
+  },
+  {
+    name: 'coral',
+    fill: '#523029',
+    edge: '#D9604F',
+    glyph: '#F69C8C',
+  },
+  {
+    name: 'rose',
+    fill: '#4C3036',
+    edge: '#BE5C71',
+    glyph: '#EB8EA1',
+  },
+  {
+    name: 'orchid',
+    fill: '#4A2F43',
+    edge: '#B45C9A',
+    glyph: '#E39ACB',
+  },
+  {
+    name: 'violet',
+    fill: '#433247',
+    edge: '#925DA9',
+    glyph: '#B58FD0',
+  },
+  {
+    name: 'indigo',
+    fill: '#33304F',
+    edge: '#6F64BC',
+    glyph: '#ABA3EE',
+  },
+  {
+    name: 'stone',
+    fill: '#3A3533',
+    edge: '#8E8580',
+    glyph: '#D8CEC8',
+  },
+] as const
+
+export const CREATURE_ART = {
+  ink: '#0D0C0C',
+  cream: '#FFF6EF',
+  white: '#FFFFFF',
+  red: '#E5484D',
+  gold: '#FFC864',
+  char: '#2A2626',
+  pink: '#EB8EA1',
+  beak: '#FF8A5C',
+  ravenBeak: '#B3AEAD',
+  puffinBand: '#5A5655',
 } as const

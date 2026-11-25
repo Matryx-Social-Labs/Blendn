@@ -1,4 +1,7 @@
 /* global jest */
+// `lib/apiClient.ts` throws at import without a base URL, so a suite that reaches it (the landing screen) died on a
+// machine with no shell variable. A test that wants its own sets it before the import.
+process.env.EXPO_PUBLIC_API_BASE_URL ??= 'https://staging-api.blendn.app'
 // Reanimated 4 runs its animations on react-native-worklets, whose JS entry
 // calls into a native module at import time. Jest has no native side, so any
 // test that imports a module importing Reanimated dies before its first line
@@ -44,6 +47,21 @@ jest.mock('expo-web-browser', () => ({
 
 // The keyboard's frame is native; the package ships its own mock (plain Views, a no-op provider).
 jest.mock('react-native-keyboard-controller', () => require('react-native-keyboard-controller/jest'))
+
+// The video player is native. The room's chat (BroadcastNotice) now loads inside BlendnScreen, so every screen test
+// that renders the Room reaches it; a test that plays video mocks it itself and wins.
+jest.mock('expo-video', () => ({
+  useVideoPlayer: () => ({ addListener: () => ({ remove: () => {} }), play: () => {} }),
+  VideoView: () => null,
+}))
+
+// Battery and network state are native (the Pulse lead's media saver): not in Low Power, on Wi-Fi. A test that cares mocks
+// `lib/mediaSaver` (or these) itself and wins.
+jest.mock('expo-battery', () => ({ useLowPowerMode: () => false, isLowPowerModeEnabledAsync: async () => false }))
+jest.mock('expo-network', () => ({
+  NetworkStateType: { CELLULAR: 'CELLULAR', WIFI: 'WIFI', NONE: 'NONE', UNKNOWN: 'UNKNOWN' },
+  useNetworkState: () => ({ type: 'WIFI', isConnected: true, isInternetReachable: true }),
+}))
 
 // AsyncStorage is native. Screens that only reach it through `lib/pushAsk` (a like, an RSVP) should load without each
 // test mocking it; a test that cares mocks it itself and wins.

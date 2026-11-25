@@ -1,15 +1,17 @@
 import type { NotificationItem } from '../lib/notificationFormat'
 import {
   arrivedUnread,
+  askItems,
   closeAnsweredElsewhere,
   findLandingRow,
   groupFeed,
   isRequestKind,
+  isTalkAskKind,
   mergeFeed,
   notificationWhen,
   parseVisual,
   rowFor,
-  WAITING_DAYS,
+  withAsks,
 } from '../lib/notificationRows'
 
 const NOW = Date.parse('2026-10-22T12:00:00Z')
@@ -53,12 +55,25 @@ describe('a row from the stored push, which names nobody', () => {
     expect(row.context).toBe('5 min ago')
   })
 
-  it('asks Accept and Decline of a friend request, Join and Decline of an invite, View of the rest', () => {
+  // Requests placement A (owner 2026-11-15): every pill in Waiting on you answers; the asks that open a chat have none.
+  it('asks Accept and Decline of a friend request, Join and Decline of an invite, and nothing of a talk-ask', () => {
     const labels = (kind: NotificationItem['kind']) => rowFor(item({ id: kind, kind }), NOW).actions.map((a) => a.label)
     expect(labels('friend_request')).toEqual(['Accept', 'Decline'])
     expect(labels('crew_invite')).toEqual(['Join', 'Decline'])
-    for (const k of ['reveal_request', 'board_request', 'message_request'] as const) expect(labels(k)).toEqual(['View'])
+    for (const k of ['reveal_request', 'board_request', 'message_request'] as const) expect(labels(k)).toEqual([])
     for (const k of ['match', 'friend_accepted', 'crew_here', 'blend', 'announcement'] as const) expect(labels(k)).toEqual([])
+  })
+
+  it('draws a talk-ask as a plain line with a chevron, saying where it waits, whatever the server’s context', () => {
+    const row = (kind: NotificationItem['kind']) => rowFor(item({ id: kind, kind, display: { context: 'Met in the room' } }), NOW)
+    expect(row('message_request')).toMatchObject({ chevron: true, actions: [], waiting: false, context: 'Message requests · 5 min ago' })
+    expect(row('reveal_request')).toMatchObject({ chevron: true, context: 'In your chat · 5 min ago' })
+    expect(row('board_request')).toMatchObject({ chevron: true, context: 'The Lobby · 5 min ago' })
+    // Control: a join-ask has its pills and no chevron; a plain row neither.
+    expect(row('friend_request')).toMatchObject({ chevron: false, waiting: true })
+    expect(row('match')).toMatchObject({ chevron: false, context: 'Met in the room' })
+    expect(['message_request', 'board_request', 'reveal_request'].every(isTalkAskKind)).toBe(true)
+    expect(['friend_request', 'crew_invite', 'match'].some(isTalkAskKind)).toBe(false)
   })
 
   it('makes the first pill lit, with its glyph: Accept (user-check) and Join (users), nothing else', () => {
@@ -67,7 +82,6 @@ describe('a row from the stored push, which names nobody', () => {
       { key: 'decline', label: 'Decline', kind: 'secondary' },
     ])
     expect(rowFor(item({ id: 'c', kind: 'crew_invite' }), NOW).actions[0]).toEqual({ key: 'join', label: 'Join', kind: 'lit', icon: 'users' })
-    expect(rowFor(item({ id: 'b', kind: 'reveal_request' }), NOW).actions.map((a) => a.kind)).toEqual(['secondary'])
   })
 
   // A friend request comes only through your invite link (app/f/[token]), so it is a person and a time: never an event or a room.
@@ -143,8 +157,12 @@ describe('a row from the stored push, which names nobody', () => {
 
 // C34: a takedown of your post is told with the moderation shield, not the generic bell. Negative control: no GLYPH entry fails it.
 describe('a post of yours taken down', () => {
+  it('a report’s outcome draws the shield too, not the bell (SYS-06)', () => {
+    expect(rowFor(item({ id: 'r', kind: 'report_actioned', title: 'We reviewed your report' }), NOW).visual).toEqual({ type: 'glyph', icon: 'shield' })
+  })
+
   it('draws the shield glyph', () => {
-    const row = rowFor(item({ id: 'm', kind: 'board_post_removed' as NotificationItem['kind'], title: 'Your post was taken down' }), NOW)
+    const row = rowFor(item({ id: 'm', kind: 'board_post_removed', title: 'Your post was taken down' }), NOW)
     expect(row.visual).toEqual({ type: 'glyph', icon: 'shield' })
   })
 })
@@ -204,6 +222,13 @@ describe('parseVisual', () => {
     })
   })
 
+  // SCRUM-1088: a photo keeps the name the server sends (drawn under it while it loads); today's server sends none.
+  it('a photo keeps its name when the server sends one, and is still a photo when it does not', () => {
+    expect(parseVisual({ type: 'photo', uri: 'https://x/a.jpg', name: ' Asha ' })).toEqual({ type: 'photo', uri: 'https://x/a.jpg', name: 'Asha' })
+    expect(parseVisual({ type: 'photo', uri: 'https://x/a.jpg' })).toEqual({ type: 'photo', uri: 'https://x/a.jpg' })
+    expect(parseVisual({ type: 'photo', uri: 'https://x/a.jpg', name: 7 })).toEqual({ type: 'photo', uri: 'https://x/a.jpg' })
+  })
+
   it('refuses anything else rather than drawing it', () => {
     for (const bad of [null, 'photo', [], { type: 'glyph', icon: 'bell' }, { type: 'event', badge: 'skull' }, { type: 'stack', people: [] }, { type: 'emblem', seed: '' }]) {
       expect(parseVisual(bad)).toBeNull()
@@ -232,12 +257,54 @@ describe('groupFeed', () => {
     expect(g.earlier.map((r) => r.id)).toEqual(['o'])
   })
 
-  it('does not wait on a request that has lapsed, or that the server says is closed: it is history, with no pills', () => {
-    const lapsed = item({ id: 'l', kind: 'friend_request', createdAt: ago((WAITING_DAYS + 1) * DAY) })
-    const closed = item({ id: 'c', kind: 'friend_request', open: false })
-    const g = groupFeed([lapsed, closed], { fresh: none, resolved: none, now: NOW })
-    expect(g.waiting).toEqual([])
-    expect(g.earlier.map((r) => r.actions)).toEqual([[], []])
+  /*
+   * SCRUM-1062: a friend request has no lapse (Friends lists it until it is answered), and a crew invite's is the server's
+   * (`open: false` once it lapses). Aged out here at 14 days, Waiting on you said 8 while Friends said 14 waiting.
+   */
+  it('waits on an open request however old it is: the server says when one has closed, not its age', () => {
+    const old15 = item({ id: 'l', kind: 'friend_request', createdAt: ago(15 * DAY), data: { requestId: 'r15' } })
+    const oldInvite = item({ id: 'li', kind: 'crew_invite', createdAt: ago(15 * DAY), data: { crewId: 'c15' } })
+    const g = groupFeed([old15, oldInvite], { fresh: none, resolved: none, now: NOW })
+    expect(g.waiting.map((r) => r.id)).toEqual(['l', 'li'])
+    expect(g.waiting.map((r) => r.actions.map((a) => a.key))).toEqual([
+      ['accept', 'decline'],
+      ['join', 'decline'],
+    ])
+    expect(g.earlier).toEqual([])
+  })
+
+  it('orders Waiting on you newest first, whichever list a row came from', () => {
+    const recent = item({ id: 'n', kind: 'crew_invite', createdAt: ago(HOUR), data: { crewId: 'c1' } })
+    const older = item({ id: 'o2', kind: 'friend_request', createdAt: ago(9 * DAY), data: { requestId: 'r9' } })
+    const g = groupFeed([older, recent], { fresh: none, resolved: none, now: NOW })
+    expect(g.waiting.map((r) => r.id)).toEqual(['n', 'o2'])
+  })
+
+  // Requests placement A: Waiting on you is the join-asks only. A talk-ask, open and unseen, is a New line.
+  it('never puts a talk-ask in Waiting on you, however open and unseen', () => {
+    const talk = (['message_request', 'board_request', 'reveal_request'] as const).map((kind) => item({ id: kind, kind }))
+    const g = groupFeed([...talk, friend], { fresh: new Set(talk.map((t) => t.id)), resolved: none, now: NOW })
+    expect(g.waiting.map((r) => r.id)).toEqual(['fr'])
+    expect(g.fresh.map((r) => r.id)).toEqual(['message_request', 'board_request', 'reveal_request'])
+  })
+
+  /*
+   * SCRUM-1036: a friend request answered (Accept or Not now, here or on Friends › Requests) stayed in the feed as "New
+   * friend request": the server sends `open: false` and no `display` for it, so the row fell back to the push's title,
+   * which is the unanswered request's. It leaves the feed, as a request answered here does once its outcome has shown.
+   */
+  it('leaves out a friend request that is no longer open: it is not a "New friend request" any more', () => {
+    const answered = item({ id: 'a', kind: 'friend_request', title: 'New friend request', open: false, data: { requestId: 'r2' } })
+    const g = groupFeed([answered, friend, match], { fresh: new Set(['a', 'm']), resolved: none, now: NOW })
+    expect([...g.waiting, ...g.fresh, ...g.earlier].map((r) => r.id)).toEqual(['fr', 'm'])
+  })
+
+  // A crew invite joined or declined anywhere leaves too (board 05, A · 1: the row collapses); an open request still waits.
+  it('leaves out a crew invite that is no longer open, and keeps a request still open', () => {
+    const closedInvite = item({ id: 'x', kind: 'crew_invite', open: false, data: { crewId: 'c' } })
+    const g = groupFeed([closedInvite, friend, match], { fresh: none, resolved: none, now: NOW })
+    expect(g.waiting.map((r) => r.id)).toEqual(['fr'])
+    expect(g.earlier.map((r) => r.id)).toEqual(['m'])
   })
 
   it('leaves an answered request out of every section once it has left', () => {
@@ -294,13 +361,86 @@ describe('findLandingRow', () => {
 
 describe('closeAnsweredElsewhere', () => {
   const req = (id: string, requestId: string) => item({ id, kind: 'friend_request', data: { requestId } })
+  const inv = (id: string, crewId: string) => item({ id, kind: 'crew_invite', data: { crewId } })
+  const none = { open: null, left: new Set<string>() }
 
-  it('closes a friend request no longer among the incoming ones, and leaves the rest', () => {
-    const rows = closeAnsweredElsewhere([req('a', 'r1'), req('b', 'r2'), item({ id: 'c', kind: 'crew_invite', data: { crewId: 'x' } })], new Set(['r2']))
-    expect(rows.map((n) => n.open)).toEqual([false, undefined, undefined])
+  it('closes a friend request or crew invite no longer on its whole list, and leaves the rest', () => {
+    const rows = closeAnsweredElsewhere([req('a', 'r1'), req('b', 'r2'), inv('c', 'x'), inv('d', 'y'), item({ id: 'm', kind: 'match' })], {
+      friend_request: { open: new Set(['r2']), left: new Set() },
+      crew_invite: { open: new Set(['y']), left: new Set() },
+    })
+    expect(rows.map((n) => n.open)).toEqual([false, undefined, false, undefined, undefined])
   })
 
-  it('closes nothing when the list did not load', () => {
-    expect(closeAnsweredElsewhere([req('a', 'r1')], null)[0].open).toBeUndefined()
+  // One answer anywhere leaves every surface: a list read only in part cannot say an ask is gone, but an answer can.
+  it('closes what was answered this session even when the list is partial, and nothing else', () => {
+    const rows = closeAnsweredElsewhere([req('a', 'r1'), req('b', 'r2'), inv('c', 'x')], {
+      friend_request: { open: null, left: new Set(['r1']) },
+      crew_invite: { open: null, left: new Set(['x']) },
+    })
+    expect(rows.map((n) => n.open)).toEqual([false, undefined, false])
+  })
+
+  it('closes nothing when neither list has loaded', () => {
+    expect(closeAnsweredElsewhere([req('a', 'r1'), inv('c', 'x')], { friend_request: none, crew_invite: none }).map((n) => n.open)).toEqual([undefined, undefined])
+  })
+})
+
+/*
+ * SCRUM-1062: Waiting on you is the shared lists (`lib/friendRequests`, `lib/crewInvites`), not the notification rows. A request
+ * with no row in the feed (older than its first page, cleared, seeded, swept) is still waiting, and is drawn from the list.
+ */
+describe('askItems and withAsks', () => {
+  const none = new Set<string>()
+  const person = (name: string, photo: string | null = null) => ({ userId: `u_${name}`, name, photo })
+  const request = (id: string, days: number, name = 'Asha Rao') => ({ id, person: person(name), createdAt: ago(days * DAY) })
+  const crewInvite = (crewId: string, days: number) => ({
+    crewId,
+    name: `Crew ${crewId}`,
+    bio: null,
+    emblemSeed: `seed-${crewId}`,
+    tags: [],
+    size: 3,
+    invitedBy: 'Asha',
+    invitedAt: ago(days * DAY),
+  })
+
+  it('draws a request older than 7 days from the list, with its pills, the person and the time', () => {
+    const [row] = groupFeed(askItems([request('r8', 8)], []), { fresh: none, resolved: none, now: NOW }).waiting
+    expect(row.item.data).toEqual({ type: 'friend_request', requestId: 'r8' })
+    expect(row.title).toBe('Asha Rao wants to be friends')
+    expect(row.context).toBe(notificationWhen(ago(8 * DAY), NOW))
+    expect(row.actions.map((a) => a.key)).toEqual(['accept', 'decline'])
+  })
+
+  it('draws a crew invite older than 7 days from the list the same way: its emblem, its name, Join and Decline', () => {
+    const [row] = groupFeed(askItems([], [crewInvite('c9', 9)]), { fresh: none, resolved: none, now: NOW }).waiting
+    expect(row.item.data).toEqual({ type: 'crew_invite', crewId: 'c9' })
+    expect(row.visual).toEqual({ type: 'emblem', seed: 'seed-c9' })
+    expect(row.context).toBe('Crew c9')
+    expect(row.actions.map((a) => a.key)).toEqual(['join', 'decline'])
+  })
+
+  it('a photo the list has is the row’s face; a name it lacks is the push’s own words, never an invented one', () => {
+    const [withPhoto, nameless] = askItems([{ ...request('a', 1), person: person('Ravi', 'https://x/p.jpg') }, { ...request('b', 1), person: person('') }], [])
+    expect(rowFor(withPhoto, NOW).visual).toEqual({ type: 'photo', uri: 'https://x/p.jpg', name: 'Ravi' })
+    expect(rowFor(nameless, NOW).title).toBe('New friend request')
+    expect(rowFor(nameless, NOW).visual).toEqual({ type: 'glyph', icon: 'user-plus' })
+  })
+
+  it('keeps the notification row where the feed has one for the same ask, and adds the rest once each', () => {
+    const feedRow = item({ id: 'n1', kind: 'friend_request', data: { requestId: 'r1' } })
+    const asks = askItems([request('r1', 1), request('r2', 8)], [crewInvite('c1', 10)])
+    const merged = withAsks([feedRow], [...asks, ...asks])
+    expect(merged.map((n) => n.id)).toEqual(['n1', 'friend_request:r2', 'crew_invite:c1'])
+  })
+
+  // Negative control: 14 waiting on the list, 8 of them with a row in the feed, is 14 in Waiting on you, not 8.
+  it('14 on the list and 8 in the feed is 14 waiting', () => {
+    const list = Array.from({ length: 14 }, (_, i) => request(`r${i}`, i))
+    const feed = list.slice(0, 8).map((r) => item({ id: `n${r.id}`, kind: 'friend_request', createdAt: r.createdAt, data: { requestId: r.id } }))
+    const g = groupFeed(withAsks(feed, askItems(list, [])), { fresh: none, resolved: none, now: NOW })
+    expect(g.waiting).toHaveLength(14)
+    expect(groupFeed(feed, { fresh: none, resolved: none, now: NOW }).waiting).toHaveLength(8)
   })
 })

@@ -1,23 +1,33 @@
 import { router } from 'expo-router'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native'
+import { RefreshControl, StyleSheet, Text, View } from 'react-native'
+import Animated from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Button } from '../components/ds/Button'
+import { SearchField } from '../components/ds/SearchField'
 import { font, HueProvider, useBoldText } from '../components/ds/shared'
 import { StateScreen } from '../components/ds/StateScreen'
 import { TopBar } from '../components/ds/TopBar'
 import { PersonRow } from '../components/friends/PersonRow'
+import { SectionHeader } from '../components/ds/SectionHeader'
+import { BlockedCrews } from '../components/settings/BlockedCrews'
 import { SkeletonCircle, SkeletonLine } from '../components/Skeleton'
 import { COLOR, SIZE, SPACE, MAX_FONT_SCALE } from '../lib/design/tokens'
 import { Logger } from '../lib/logger'
-import { blockedLine } from '../lib/blockedLine'
-import { fetchBlockedPage } from '../lib/blockedUsersPage'
+import { blockedLine, blockedName } from '../lib/blockedLine'
+import { BLOCKED_SEARCH_FROM, BLOCKED_SEARCH_MAX, blockedCountLine, fetchBlockedPage } from '../lib/blockedUsersPage'
 import { unblockUser, type BlockedUser } from '../lib/safetyUtils'
 import { showSheet } from '../lib/sheet'
 import { useTopBarState } from '../lib/useTopBarState'
+import { emptyAfterRowOut, rowOut, rowReflow } from '../components/motion/presence'
+import { useReducedMotion } from '../lib/motion'
+import { useSkeletonCrossfade } from '../components/motion/useSkeletonCrossfade'
 
 /** Empty pages with a cursor after them, followed on in one go before the foot waits for the next end-reach. */
+const PEOPLE_LINE = 'They can’t see you or message you. They aren’t told.'
 const MAX_EMPTY_HOPS = 5
+/** A search asks the server once typing pauses this long. */
+const SEARCH_DEBOUNCE_MS = 300
 
 /**
  * The people you blocked, and a way to undo each.
@@ -29,19 +39,30 @@ const MAX_EMPTY_HOPS = 5
  *
  * Read a page at a time (`fetchBlockedPage`) and drawn by a FlatList that mounts only the rows near the screen, so a
  * long list costs the same as a short one. The next page is asked for as the end comes into view; a server that has no
- * cursors yet answers everyone at once, which is one page with no next.
+ * cursors yet answers everyone at once, which is one page with no next. A search is the server's (`?q=`), paged the same
+ * way, so a name further back than anything loaded is still found; the count is the server's total.
  */
 function BlockedUsersContent() {
   const bold = useBoldText()
   const [blockedUsers, setBlockedUsers] = useState<BlockedUser[]>([])
   const [loading, setLoading] = useState(true)
+  const arrive = useSkeletonCrossfade(loading)
   const [refreshing, setRefreshing] = useState(false)
   const [failed, setFailed] = useState(false)
   const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [loadingMore, setLoadingMore] = useState(false)
   const [moreFailed, setMoreFailed] = useState(false)
+  const [query, setQuery] = useState('')
+  /** The search the list on screen answers: `query` once typing pauses. */
+  const [searched, setSearched] = useState('')
+  /** The server's count: of everybody (for the Search placeholder), and of what the search found. */
+  const [total, setTotal] = useState(0)
+  const [found, setFound] = useState(0)
+  /** The crews you blocked (advisor B-A): their group goes first; with any, People gets its own heading and no empty state. */
+  const [crewCount, setCrewCount] = useState(0)
   const bar = useTopBarState()
   const insets = useSafeAreaInsets()
+  const reduceMotion = useReducedMotion()
   /** The read in force: a refresh or a page that lands after a newer read began is dropped. */
   const read = useRef(0)
 
@@ -53,13 +74,15 @@ function BlockedUsersContent() {
    *
    * State is set only in the callbacks, once the request has settled.
    */
-  const loadBlockedUsers = () => {
+  const loadBlockedUsers = (search = searched) => {
     const mine = ++read.current
-    return fetchBlockedPage()
+    return fetchBlockedPage(null, search)
       .then((result) => {
         if (read.current !== mine) return
         if (result.ok) {
           setBlockedUsers(result.page.users)
+          if (search.trim()) setFound(result.page.total)
+          else setTotal(result.page.total)
           setNextCursor(result.page.nextCursor)
           setLoadingMore(false)
           setMoreFailed(false)
@@ -92,7 +115,7 @@ function BlockedUsersContent() {
     const run = async () => {
       let cursor: string | null = nextCursor
       for (let hops = 0; cursor && hops < MAX_EMPTY_HOPS; hops += 1) {
-        const result = await fetchBlockedPage(cursor)
+        const result = await fetchBlockedPage(cursor, searched)
         if (read.current !== mine) return
         if (!result.ok) return setMoreFailed(true)
         setBlockedUsers((prev) => {
@@ -110,29 +133,40 @@ function BlockedUsersContent() {
         if (read.current === mine) setMoreFailed(true)
       })
       .finally(() => setLoadingMore(false))
-  }, [nextCursor, loadingMore, moreFailed])
+  }, [nextCursor, loadingMore, moreFailed, searched])
   const onEndReached = useCallback(() => loadMore(), [loadMore])
 
   useEffect(() => {
-    loadBlockedUsers()
-  }, [])
+    const next = query.trim()
+    if (next === searched) return
+    const timer = setTimeout(() => setSearched(next), next ? SEARCH_DEBOUNCE_MS : 0)
+    return () => clearTimeout(timer)
+  }, [query, searched])
+
+  // The first read, and again for every search (the rows on screen stay until the answer lands).
+  useEffect(() => {
+    loadBlockedUsers(searched)
+  }, [searched])
 
   const handleUnblock = (user: BlockedUser) => {
-    const name = user.blocked_user_name || 'this person'
+    const known = blockedName(user)
+    const name = known === 'Someone' ? 'this person' : known
     showSheet({
       kind: 'actions',
       hue: 'violet',
       title: `Unblock ${name}?`,
-      message: 'They can see your profile and message you again. They are not told.',
+      message: 'They can see your profile again. A conversation you ended stays closed. They are not told.',
       actions: [
         {
           label: 'Unblock',
-          variant: 'destructive',
+          // Neutral, as the board's button language has it: unblocking gives access back; red is for Delete only.
+          variant: 'secondary',
           run: async () => {
             const result = await unblockUser(user.blocked_id)
             if (!result.success) return { ok: false, error: "Couldn’t unblock them. Try again." }
             setBlockedUsers((prev) => prev.filter((u) => u.blocked_id !== user.blocked_id))
-            return { ok: true, toast: user.blocked_user_name ? `${user.blocked_user_name} is unblocked` : 'Unblocked' }
+            setTotal((n) => Math.max(0, n - 1))
+            return { ok: true, toast: known === 'Someone' ? 'Unblocked' : `${known} is unblocked` }
           },
         },
         { label: 'Cancel', cancel: true },
@@ -147,18 +181,23 @@ function BlockedUsersContent() {
   }
 
   const renderBlockedUser = ({ item }: { item: BlockedUser }) => {
-    const name = item.blocked_user_name || 'Someone'
+    const name = blockedName(item)
     const line = blockedLine(item)
     return (
-      <PersonRow
-        person={{ userId: item.blocked_id, name, photo: item.blocked_user_photo }}
-        detail={line.detail}
-        detailMono={line.mono}
-        detailTail={line.tail}
-        trailing={
-          <Button kind="secondary" size="sm" label="Unblock" accessibilityLabel={`Unblock ${name}`} onPress={() => handleUnblock(item)} style={styles.centred} />
-        }
-      />
+      // Unblocked, the row fades and the rest close the gap (DS #16, audit M13).
+      <Animated.View exiting={reduceMotion ? undefined : rowOut}>
+        <PersonRow
+          // A blocked person is a creature mark, never their face (E10, flow-6 blocked): the server sends no photo, and none is drawn if one slips through.
+          person={{ userId: item.blocked_id, name, photo: null }}
+          named={false}
+          detail={line.detail}
+          detailMono={line.mono}
+          detailTail={line.tail}
+          trailing={
+            <Button kind="secondary" size="sm" label="Unblock" accessibilityLabel={`Unblock ${name}`} onPress={() => handleUnblock(item)} style={styles.centred} />
+          }
+        />
+      </Animated.View>
     )
   }
 
@@ -166,22 +205,26 @@ function BlockedUsersContent() {
     failed ? (
       <StateScreen
         icon="cloud-off"
-        title="Blocked users didn’t load"
+        title="Blocked didn’t load"
         body="Check your connection and try again."
         actions={[{ label: 'Try again', onPress: () => void onRefresh(), loading: refreshing }]}
       />
     ) : (
-      <StateScreen
-        testID="blocked-empty"
-        icon="shield-check"
-        title="No blocked users"
-        body="People you block show up here, and you can unblock them any time."
-      />
+      searched ? (
+        <StateScreen testID="blocked-no-match" icon="search" title={`Nobody called “${searched}”`} body="Search by the name you saw them as, or where you blocked them." />
+      ) : (
+        <StateScreen
+          testID="blocked-empty"
+          icon="ban"
+          title="Nobody blocked"
+          body="Block someone from their profile or a chat. They aren’t told, and you can unblock here any time."
+        />
+      )
     )
 
   /** The foot of a long list: the next page on its way, or the one that did not come. */
   const footer = loadingMore ? (
-    <View style={styles.skeletonRow} accessibilityLabel="Loading more">
+    <View accessible style={styles.skeletonRow} accessibilityLabel="Loading more">
       <SkeletonCircle width={SIZE.control} />
       <View style={styles.skeletonText}>
         <SkeletonLine width="45%" />
@@ -197,10 +240,10 @@ function BlockedUsersContent() {
 
   return (
     <View style={styles.container}>
-      <TopBar title="Blocked users" state={bar.state} onBack={() => router.back()} />
+      <TopBar title="Blocked" state={bar.state} onBack={() => router.back()} />
 
       {loading ? (
-        <View style={styles.listContent} accessibilityLabel="Loading">
+        <View accessible style={styles.listContent} accessibilityLabel="Loading">
           {[0, 1, 2].map((i) => (
             <View key={i} style={styles.skeletonRow}>
               <SkeletonCircle width={SIZE.control} />
@@ -212,14 +255,40 @@ function BlockedUsersContent() {
           ))}
         </View>
       ) : (
-        <FlatList
+        <Animated.View entering={arrive} style={styles.fill}>
+        <Animated.FlatList
           testID="blocked-users-list"
+          itemLayoutAnimation={reduceMotion ? undefined : rowReflow}
           data={blockedUsers}
+          ListHeaderComponent={
+            <View style={styles.head}>
+              {/* Each group owns its line (advisor 2026-11-25): over the crews, the people's line said something false of them. */}
+              {total > 0 && crewCount === 0 ? (
+                <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.lede]}>{PEOPLE_LINE}</Text>
+              ) : null}
+              {searched ? null : <BlockedCrews onCount={setCrewCount} />}
+              {crewCount > 0 && total > 0 ? <SectionHeader title="People" count={total} caption={PEOPLE_LINE} /> : null}
+              {total > BLOCKED_SEARCH_FROM ? (
+                <SearchField
+                  value={query}
+                  onChangeText={(text) => setQuery(text.slice(0, BLOCKED_SEARCH_MAX))}
+                  placeholder={`Search ${blockedCountLine(total)}`}
+                  resultsLabel={searched ? `${found.toLocaleString('en-US')} found` : undefined}
+                  testID="blocked-search"
+                />
+              ) : null}
+            </View>
+          }
+          keyboardShouldPersistTaps="handled"
           keyExtractor={(item) => item.blocked_id}
           renderItem={renderBlockedUser}
           // The foot is the list's own padding: a wrapper that insets the screen cuts the scroll on a line above the home indicator.
-          contentContainerStyle={[blockedUsers.length === 0 ? styles.emptyList : styles.listContent, { paddingBottom: insets.bottom + SPACE.xl }]}
-          ListEmptyComponent={renderEmptyState}
+          contentContainerStyle={[blockedUsers.length === 0 && crewCount === 0 ? styles.emptyList : styles.listContent, { paddingBottom: insets.bottom + SPACE.xl }]}
+          // After the last unblock it waits for the row's fade (emptyAfterRowOut).
+          ListEmptyComponent={
+            // With crews blocked and nobody else, the People group is simply not there (B-A: an empty group is hidden).
+            crewCount > 0 && !searched && !failed ? null : <Animated.View entering={reduceMotion ? undefined : emptyAfterRowOut}>{renderEmptyState()}</Animated.View>
+          }
           onEndReached={onEndReached}
           onEndReachedThreshold={0.5}
           ListFooterComponent={footer}
@@ -229,6 +298,7 @@ function BlockedUsersContent() {
           showsVerticalScrollIndicator={false}
           {...bar.scrollProps}
         />
+        </Animated.View>
       )}
     </View>
   )
@@ -237,10 +307,13 @@ function BlockedUsersContent() {
 const styles = StyleSheet.create({
   centred: { alignSelf: 'center' },
   container: { flex: 1, backgroundColor: COLOR.ink },
+  fill: { flex: 1 },
   listContent: { paddingHorizontal: SPACE.gutter, paddingVertical: SPACE.sm },
   // Top-aligned, as Muted rooms' (D-L11): one empty state, one placement.
   emptyList: { flexGrow: 1, paddingHorizontal: SPACE.gutter },
   moreFailed: { alignItems: 'center', paddingVertical: SPACE.lg },
+  head: { gap: SPACE.md, paddingBottom: SPACE.sm },
+  lede: { color: COLOR.textSecondary },
   moreFailedText: { color: COLOR.textTertiary },
   skeletonRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md, paddingVertical: SPACE.md },
   skeletonText: { flex: 1, gap: SPACE.sm },

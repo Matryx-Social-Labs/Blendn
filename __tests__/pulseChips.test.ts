@@ -1,0 +1,110 @@
+import { NO_FILTERS, type EventFilters } from '../lib/eventFilters'
+import { chipCount, extraApplied, NEAR_KM, quickChips, toggleQuick, vibeOf } from '../lib/pulseChips'
+
+/**
+ * The chips that are the Pulse's header (Flow 3 · Pulse, Option C): Tonight and This weekend with the server's counts,
+ * Near me (N1) only where distance means something, one vibe from the week's data, then Filters.
+ */
+
+const CATS = [
+  { slug: 'music', name: 'Live music' },
+  { slug: 'food', name: 'Food & drink' },
+  { slug: 'sport', name: 'Run clubs' },
+]
+const VIBE = { slug: 'music', name: 'Live music' }
+
+describe('chipCount', () => {
+  it('compact past 999 (owner 2026-11-05) and never shows a count under five', () => {
+    expect(chipCount(1038)).toBe('1k')
+    expect(chipCount(12_480)).toBe('12k')
+    expect(chipCount(214)).toBe('214')
+    expect(chipCount(5)).toBe('5')
+    expect(chipCount(4)).toBeUndefined()
+    expect(chipCount(0)).toBeUndefined()
+    expect(chipCount(null)).toBeUndefined()
+  })
+})
+
+describe('quickChips', () => {
+  const base = { filters: NO_FILTERS, counts: { tonight: 214, weekend: 1038 }, nearOn: true, vibe: VIBE }
+
+  it('the N1 board order: Tonight, Near me, This weekend, the vibe; counts on the time chips only', () => {
+    const chips = quickChips(base)
+    expect(chips.map((c) => c.key)).toEqual(['tonight', 'near', 'weekend', 'vibe'])
+    expect(chips.map((c) => c.label)).toEqual(['Tonight', 'Near me', 'This weekend', 'Live music'])
+    // N1 (SCRUM-1022): Near me reaches a short ride, the Nearby list's 8 km.
+    expect(NEAR_KM).toBe(8)
+    expect(chips[0].count).toBe('214')
+    expect(chips[1].count).toBeUndefined()
+    expect(chips[2].count).toBe('1k')
+    expect(chips[3].count).toBeUndefined()
+    expect(chips.every((c) => !c.selected)).toBe(true)
+  })
+
+  it('reads the count in the label, so a screen reader hears it', () => {
+    const [tonight, near, weekend] = quickChips(base)
+    expect(tonight.accessibilityLabel).toBe('Tonight, 214 events')
+    expect(weekend.accessibilityLabel).toBe('This weekend, 1,038 events')
+    expect(near.accessibilityLabel).toBe('Near me')
+  })
+
+  it('a quiet tonight shows the chip with no number', () => {
+    const [tonight] = quickChips({ ...base, counts: { tonight: 3, weekend: null } })
+    expect(tonight.count).toBeUndefined()
+    expect(tonight.accessibilityLabel).toBe('Tonight')
+  })
+
+  it('no distance chip without a fix in the browsed city, and no vibe chip without data', () => {
+    expect(quickChips({ ...base, nearOn: false, vibe: null }).map((c) => c.key)).toEqual(['tonight', 'weekend'])
+  })
+
+  it('each chip is lit by the filter it applies', () => {
+    const on = (f: EventFilters) => quickChips({ ...base, filters: f }).filter((c) => c.selected).map((c) => c.key)
+    expect(on({ when: 'today' })).toEqual(['tonight'])
+    expect(on({ when: 'weekend', radiusKm: NEAR_KM })).toEqual(['near', 'weekend'])
+    expect(on({ when: 'any', categorySlug: 'music' })).toEqual(['vibe'])
+    // Control: a filter the chips do not stand for lights none of them.
+    expect(on({ when: 'week', radiusKm: 5, categorySlug: 'food' })).toEqual([])
+  })
+})
+
+describe('toggleQuick', () => {
+  it('Tonight and This weekend are one choice: picking one replaces the other', () => {
+    const tonight = toggleQuick(NO_FILTERS, 'tonight', VIBE)
+    expect(tonight).toEqual({ when: 'today' })
+    expect(toggleQuick(tonight, 'weekend', VIBE)).toEqual({ when: 'weekend' })
+    expect(toggleQuick(tonight, 'tonight', VIBE)).toEqual({ when: 'any' })
+  })
+
+  it('distance and vibe toggle their own field and keep the rest', () => {
+    const f: EventFilters = { when: 'today' }
+    expect(toggleQuick(f, 'near', VIBE)).toEqual({ when: 'today', radiusKm: NEAR_KM })
+    expect(toggleQuick({ when: 'today', radiusKm: NEAR_KM }, 'near', VIBE)).toEqual({ when: 'today', radiusKm: undefined })
+    expect(toggleQuick(f, 'vibe', VIBE)).toEqual({ when: 'today', categorySlug: 'music' })
+    expect(toggleQuick({ when: 'today', categorySlug: 'music' }, 'vibe', VIBE)).toEqual({ when: 'today', categorySlug: undefined })
+  })
+
+  it('returns a new object, never the one it was given', () => {
+    const f: EventFilters = { when: 'any' }
+    expect(toggleQuick(f, 'tonight', VIBE)).not.toBe(f)
+    expect(f).toEqual({ when: 'any' })
+  })
+})
+
+describe('extraApplied', () => {
+  it('only filters the chips do not already show are drawn as removable chips', () => {
+    expect(extraApplied({ when: 'today', radiusKm: NEAR_KM, categorySlug: 'music' }, CATS, VIBE)).toEqual([])
+    expect(extraApplied({ when: 'week', radiusKm: 5, categorySlug: 'food' }, CATS, VIBE).map((a) => a.label)).toEqual(['Food & drink', 'This week', 'Under 5 km'])
+  })
+})
+
+describe('vibeOf', () => {
+  it('the busiest category in the loaded events, by its server name', () => {
+    const events = [{ category_group: 'food' }, { category_group: 'music' }, { category_group: 'music' }, { category_group: null }]
+    expect(vibeOf(events, CATS)).toEqual(VIBE)
+  })
+  it('none when nothing is categorised, or the list is empty', () => {
+    expect(vibeOf([{ category_group: null }], CATS)).toBeNull()
+    expect(vibeOf([], CATS)).toBeNull()
+  })
+})

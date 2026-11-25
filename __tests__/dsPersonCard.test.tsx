@@ -2,20 +2,29 @@
  * <PersonCard> (guidelines/components/PersonCard.html; ROUND3 D · 4.1–4.3, the
  * R3-D4 delta; Flow 15 #18): the L3 sheet for a person from every entry point.
  * Variants a here · b was · d pre · e matched · f friend · g gone · h thin;
- * states liked · requested · wave sending · waved (still, with the word);
- * waved at you; a refusal line. Like is the gradient primary (H.like); Say hi
- * is H.primary; Wave, Message and ⋯ are silent; View profile on all but gone.
+ * Wave dock A (SCRUM-1042): Wave (lit, H.select) + Message; Wave back (the filled
+ * one) when they waved at you; a still ✓ Waved; mutual is "You both waved" and
+ * Say hi only. No person Like anywhere; a crew's "Like for {crew}" is a row.
+ * Requested; a refusal line. Message and ⋯ are silent; View profile on all but gone.
  */
-import { act, fireEvent, render, screen } from '@testing-library/react-native'
+import { act, fireEvent, render, screen, within } from '@testing-library/react-native'
 import React from 'react'
-import { AccessibilityInfo, Platform, StyleSheet } from 'react-native'
+import { AccessibilityInfo, Dimensions, Platform, StyleSheet } from 'react-native'
 
 import { PersonCard, PersonCardContent, type PersonCardPerson } from '../components/ds/PersonCard'
 import { HueProvider } from '../components/ds/shared'
+
 import * as Reanimated from 'react-native-reanimated'
 
-import { COLOR, FONT_FAMILY, MATERIAL, SIZE, SPRING, TYPE } from '../lib/design/tokens'
+import { COLOR, FONT_FAMILY, GRADIENT, MATERIAL, SIZE, SPRING, TYPE } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
+import { isLitControl } from './helpers/lit'
+
+// The chat glyph as something a query can find (lucide draws bare paths).
+jest.mock('lucide-react-native/icons/message-circle', () => {
+  const { View } = jest.requireActual('react-native')
+  return { __esModule: true, default: () => <View testID="glyph-message-circle" /> }
+})
 
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
 jest.mock('react-native-reanimated', () => {
@@ -38,12 +47,12 @@ const query = (id: string) => screen.queryByTestId(id, { includeHiddenElements: 
 const text = (t: string | RegExp) => screen.queryByText(t, { includeHiddenElements: true })
 
 const PRIYA: PersonCardPerson = {
-  face: { kind: 'photo', uri: 'https://example.com/priya.jpg' },
+  face: { kind: 'photo', uri: 'https://example.com/priya.jpg', name: 'Priya' },
   name: 'Priya',
   age: 27,
-  reason: 'Both open to dating',
-  reasons: ['Both open to dating', 'Both at 3 nights before'],
-  chips: ['Vinyl', 'Techno'],
+  meta: 'Anonymous · 27',
+  lead: [{ icon: 'users', label: 'Here for friends', lit: true }],
+  common: { label: 'In common', items: ['Vinyl', 'Techno'] },
 }
 
 const reduceMotion = Reanimated.useReducedMotion as jest.Mock
@@ -62,7 +71,6 @@ const draw = (props: Partial<React.ComponentProps<typeof PersonCardContent>> = {
     <PersonCardContent
       person={PRIYA}
       variant="here"
-      onLike={jest.fn()}
       onWave={jest.fn()}
       onMessage={jest.fn()}
       onSayHi={jest.fn()}
@@ -74,90 +82,49 @@ const draw = (props: Partial<React.ComponentProps<typeof PersonCardContent>> = {
     />
   )
 
-describe('a · here now', () => {
-  it('the 112 face, the name with the age in Geist Mono, why, and “Here now”, read as one', async () => {
+describe('a · here now (P-A)', () => {
+  it('the 72 face, the name and the meta line, read as one head', async () => {
     await draw()
-    expect(flat('p-face')).toMatchObject({ width: 112, height: 112 })
-    expect(StyleSheet.flatten(text('27')!.props.style)).toMatchObject({ fontFamily: FONT_FAMILY.mono[700], fontSize: TYPE.title.fontSize })
-    expect(screen.getByLabelText('Priya, 27, Both open to dating, here now')).toBeTruthy()
-    expect(flat('p-presence-dot').backgroundColor).toBe(COLOR.live)
+    expect(flat('p-face')).toMatchObject({ width: 72, height: 72 })
+    expect(screen.getByLabelText('Priya, Anonymous, 27')).toBeTruthy()
+    expect(text('Anonymous · 27')).toBeTruthy()
   })
 
-  it('the reasons panel and the chips', async () => {
+  it('the lead pills and In common, the shared ones said as shared', async () => {
     await draw()
-    expect(text('Both at 3 nights before')).toBeTruthy()
-    expect(flat('p-reasons').backgroundColor).toBe(MATERIAL.fillOnGlass)
-    expect(text('Techno')).toBeTruthy()
+    expect(text('Here for friends')).toBeTruthy()
+    expect(screen.getByLabelText('Techno, shared')).toBeTruthy()
   })
 
-  it('the reason under the name is not said again as the panel’s first row (B-R13)', async () => {
-    await draw()
-    expect(screen.getAllByText('Both open to dating', { includeHiddenElements: true })).toHaveLength(1)
-    expect(text('Both at 3 nights before')).toBeTruthy()
-  })
-
-  it('a panel whose only reason is the one under the name is not drawn; a different first reason stays', async () => {
-    await draw({ person: { ...PRIYA, reasons: ['Both open to dating'] } })
-    expect(query('p-reasons')).toBeNull()
-    await draw({ person: { ...PRIYA, reasons: ['Both at 3 nights before', 'Both open to dating'] } })
-    expect(screen.getAllByText('Both open to dating', { includeHiddenElements: true })).toHaveLength(2)
-  })
-
-  it('Like (the gradient primary) · Wave · Message · ⋯, the consequence, View profile', async () => {
-    await draw()
-    const like = screen.getByRole('button', { name: 'Like' })
-    expect(screen.getAllByTestId('gradient', { includeHiddenElements: true }).length).toBeGreaterThan(0)
-    expect(like.props.accessibilityHint).toBe('They’re only told if they like you back.')
+  it('Wave (lit) + Message, two-up; no Like; ⋯ in the head', async () => {
+    await render(<HueProvider value="rose"><PersonCardContent person={PRIYA} variant="here" onWave={jest.fn()} onMessage={jest.fn()} testID="p" /></HueProvider>)
     expect(screen.getByRole('button', { name: 'Wave at Priya' })).toBeTruthy()
+    expect(isLitControl(screen.getByTestId('p-wave', { includeHiddenElements: true }))).toBe(true)
     expect(screen.getByRole('button', { name: 'Message' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /^Like/ })).toBeNull()
+    // No hero on the card: every full gradient on it is a lit button's rim (board C), one per lit tint.
+    const colors = screen.queryAllByTestId('gradient', { includeHiddenElements: true }).map((g) => JSON.stringify(g.props.colors))
+    expect(colors.filter((c) => c === JSON.stringify(GRADIENT.fill.colors))).toHaveLength(colors.filter((c) => c === JSON.stringify(GRADIENT.lit.colors)).length)
     expect(screen.getByRole('button', { name: 'Block or report Priya' })).toBeTruthy()
-    expect(text('Message sends a request and reveals you to Priya.')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'View profile' })).toBeTruthy()
+    expect(text('View profile')).toBeNull()
   })
 
-  it('Like plays H.like and nothing else; Wave, Message, ⋯ and View profile are silent', async () => {
-    const calls = { onLike: jest.fn(), onWave: jest.fn(), onMessage: jest.fn(), onMore: jest.fn(), onViewProfile: jest.fn() }
+  it('Wave plays H.select and nothing else; Message, ⋯ and the head (their profile) are silent', async () => {
+    const calls = { onWave: jest.fn(), onMessage: jest.fn(), onMore: jest.fn(), onViewProfile: jest.fn() }
     await draw(calls)
-    const like = screen.getByRole('button', { name: 'Like' })
-    await fireEvent(like, 'pressIn')
-    await fireEvent.press(like)
-    expect(haptics.like).toHaveBeenCalledTimes(1)
-    for (const name of ['Wave at Priya', 'Message', 'Block or report Priya', 'View profile']) {
+    for (const name of ['Wave at Priya', 'Message', 'Block or report Priya']) {
       const b = screen.getByRole('button', { name })
       await fireEvent(b, 'pressIn')
       await fireEvent.press(b)
     }
-    silent(['like'])
+    await fireEvent.press(screen.getByTestId('p-head'))
+    expect(haptics.select).toHaveBeenCalledTimes(1)
+    silent(['select'])
     for (const fn of Object.values(calls)) expect(fn).toHaveBeenCalledTimes(1)
   })
 })
 
 describe('the states', () => {
-  it('liked: a lit “Liked” (direction C: no white selection), selected, still: no second H.like', async () => {
-    const onLike = jest.fn()
-    await draw({ state: 'liked', onLike })
-    const liked = screen.getByRole('button', { name: 'Liked' })
-    expect(liked.props.accessibilityState).toMatchObject({ selected: true })
-    expect(flat('p-liked')).toMatchObject({ backgroundColor: COLOR.selectionEmberFill, borderWidth: 1, borderColor: COLOR.brandOrange, height: SIZE.control })
-    expect(StyleSheet.flatten(text('Liked')!.props.style).color).toBe(COLOR.textPrimary)
-    await fireEvent.press(liked)
-    expect(onLike).not.toHaveBeenCalled()
-    silent()
-  })
-
-  it('#15: Liked pops in, 0.85 → 1 on M.pop; Reduce Motion places it', async () => {
-    const card = (state: 'none' | 'liked') => <PersonCardContent person={PRIYA} variant="here" state={state} testID="p" />
-    await render(card('none'))
-    jest.mocked(Reanimated.withSpring).mockClear()
-    await screen.rerender(card('liked'))
-    expect(Reanimated.withSpring).toHaveBeenCalledWith(1, expect.objectContaining({ stiffness: SPRING.pop.stiffness }))
-    reduceMotion.mockReturnValue(true)
-    await render(card('none'))
-    jest.mocked(Reanimated.withSpring).mockClear()
-    await screen.rerender(card('liked'))
-    expect(Reanimated.withSpring).not.toHaveBeenCalledWith(1, expect.objectContaining({ stiffness: SPRING.pop.stiffness }))
-  })
-
   it('requested: a check and “Requested” in place of Message, and the line says so', async () => {
     await draw({ state: 'requested' })
     expect(screen.queryByRole('button', { name: 'Message' })).toBeNull()
@@ -165,41 +132,76 @@ describe('the states', () => {
     expect(text('Request sent to Priya. They’ll see your name and photo.')).toBeTruthy()
   })
 
-  it('wave sending: the circle is busy and takes no second tap', async () => {
+  it('wave sending: busy, the hand swings, and no second tap', async () => {
     const onWave = jest.fn()
-    await draw({ state: 'waveBusy', onWave })
-    const wave = screen.getByRole('button', { name: 'Wave at Priya' })
-    expect(wave.props.accessibilityState).toMatchObject({ busy: true, disabled: true })
+    await draw({ wave: 'sending', onWave })
+    const wave = screen.getByRole('button', { name: 'Waving at Priya' })
+    expect(wave.props.accessibilityState).toMatchObject({ disabled: true })
+    expect(query('p-hand-waving')).toBeTruthy()
     await fireEvent.press(wave)
     expect(onWave).not.toHaveBeenCalled()
   })
 
-  it('waved: the label settles to a still lit “Waved” with a check (R3-D4 12, 15), selected, not a dimmed button', async () => {
-    await draw({ state: 'waved' })
+  it('waved: a still lit “✓ Waved”, selected, not a button, and never “Wave again”', async () => {
+    await draw({ wave: 'waved' })
     expect(screen.queryByRole('button', { name: /Wave/ })).toBeNull()
-    expect(StyleSheet.flatten(text('Waved')!.props.style).color).toBe(COLOR.textPrimary)
+    expect(text('Wave again')).toBeNull()
     expect(flat('p-waved')).toMatchObject({ backgroundColor: COLOR.selectionEmberFill, borderWidth: 1, borderColor: COLOR.brandOrange })
-    expect(screen.getByLabelText('Waved').props.accessibilityState).toMatchObject({ selected: true })
-    expect(text('Waved. Message sends a request and reveals you to Priya.')).toBeTruthy()
+    expect(screen.getByLabelText('Waved at Priya').props.accessibilityState).toMatchObject({ selected: true })
+    expect(screen.getByRole('button', { name: 'Message' })).toBeTruthy()
   })
 
-  it('waved at you: the still chip, and the button reads Wave back', async () => {
+  it('waved at you: the chip “Waved at you · 2 min”, and Wave back is the filled one', async () => {
     const onWave = jest.fn()
-    await draw({ wavedAtYou: '2 min', onWave })
+    await draw({ wave: 'wavedAtYou', wavedAtYou: '2 min', onWave })
     expect(text('Waved at you · 2 min')).toBeTruthy()
+    expect(screen.queryAllByTestId('gradient', { includeHiddenElements: true }).length).toBeGreaterThan(0)
     await fireEvent.press(screen.getByRole('button', { name: 'Wave back at Priya' }))
     expect(onWave).toHaveBeenCalledTimes(1)
-    silent()
+  })
+
+  it('waved at you with no time known: the chip says “Waved at you”', async () => {
+    await draw({ wave: 'wavedAtYou' })
+    expect(text('Waved at you')).toBeTruthy()
+  })
+
+  it('you both waved: the chip, and Say hi only (Message goes)', async () => {
+    const onSayHi = jest.fn()
+    await draw({ variant: 'matched', wave: 'mutual', onSayHi })
+    expect(text('You both waved')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Message' })).toBeNull()
+    expect(screen.queryByRole('button', { name: /Wave/ })).toBeNull()
+    await fireEvent.press(screen.getByRole('button', { name: 'Say hi' }))
+    expect(onSayHi).toHaveBeenCalledTimes(1)
+  })
+
+  it('you both waved: Say hi carries the board’s chat glyph, on the DS primary (owner ruling 2026-11-13, Wave item 1)', async () => {
+    await draw({ variant: 'matched', wave: 'mutual', testID: 'c' })
+    expect(within(screen.getByTestId('c-say-hi')).queryByTestId('glyph-message-circle')).toBeTruthy()
+    // Still the DS primary, the gradient every primary uses: not the board kit's cream pill.
+    expect(within(screen.getByTestId('c-say-hi')).queryByTestId('gradient')).toBeTruthy()
   })
 
   it('a refusal is announced as it arrives, so a screen reader hears why nothing happened', async () => {
     const announce = jest.spyOn(AccessibilityInfo, 'announceForAccessibility').mockImplementation(() => {})
     await draw()
     await screen.rerender(
-      <PersonCardContent person={PRIYA} variant="here" refusal={{ text: 'That didn’t go through.' }} onLike={jest.fn()} testID="p" />
+      <PersonCardContent person={PRIYA} variant="here" refusal={{ text: 'That didn’t go through.' }} onWave={jest.fn()} testID="p" />
     )
     expect(announce).toHaveBeenCalledTimes(1)
     expect(announce).toHaveBeenCalledWith('That didn’t go through.')
+  })
+
+  it('Waved is said as it lands, once; a card opened already waved says nothing (drive, TalkBack)', async () => {
+    const announce = jest.spyOn(AccessibilityInfo, 'announceForAccessibility').mockImplementation(() => {})
+    await draw({ wave: 'waved' })
+    expect(announce).not.toHaveBeenCalled()
+    await draw({ wave: 'sending' })
+    await screen.rerender(<PersonCardContent person={PRIYA} variant="here" wave="waved" onWave={jest.fn()} testID="p" />)
+    expect(announce).toHaveBeenCalledTimes(1)
+    expect(announce).toHaveBeenCalledWith('Waved at Priya')
+    expect(screen.getByTestId('p-actions').props.accessibilityLiveRegion).toBe('polite')
+    announce.mockRestore()
   })
 
   it('a refusal is one neutral line under the actions, with its action, and no haptic', async () => {
@@ -213,11 +215,16 @@ describe('the states', () => {
 })
 
 describe('the variants', () => {
-  it('b · was here: no Wave; “Was here”', async () => {
+  it('b · was here: no new Wave (both must be inside), no Like; “Was here”', async () => {
     await draw({ variant: 'was' })
     expect(screen.queryByRole('button', { name: /Wave/ })).toBeNull()
-    expect(screen.getByLabelText('Priya, 27, Both open to dating, was here')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Like' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /^Like/ })).toBeNull()
+    expect(screen.getByLabelText('Priya, Anonymous, 27, was here')).toBeTruthy()
+  })
+
+  it('b · was here and waved at you: Wave back still answers it until the room closes', async () => {
+    await draw({ variant: 'was', wave: 'wavedAtYou' })
+    expect(screen.getByRole('button', { name: 'Wave back at Priya' })).toBeTruthy()
   })
 
   it('d · pre-event: ⋯ only, with the server’s sentence; no reasons, no Like', async () => {
@@ -240,12 +247,11 @@ describe('the variants', () => {
     expect(onSayHi).toHaveBeenCalledTimes(1)
   })
 
-  it('matched and friend say “Here now” only when they are (`here`); never by default', async () => {
+  it('matched and friend: the head says who they are to you, and P-A draws no presence line', async () => {
     await draw({ variant: 'matched' })
-    expect(screen.getByLabelText('Priya, 27, Both open to dating')).toBeTruthy()
-    expect(query('p-presence-dot')).toBeNull()
+    expect(screen.getByLabelText('Priya, Anonymous, 27')).toBeTruthy()
     await draw({ variant: 'friend', here: true })
-    expect(screen.getByLabelText('Priya, 27, Friend, here now')).toBeTruthy()
+    expect(screen.getByLabelText('Priya, Anonymous, 27, friend')).toBeTruthy()
   })
 
   it('f · friend: “Friend”, no Like, Message opens your chat', async () => {
@@ -267,8 +273,9 @@ describe('the variants', () => {
   })
 
   it('h · thin: the pseudonym, age and city; Message and ⋯; never why', async () => {
-    await draw({ variant: 'thin', person: { face: { kind: 'creature', pseudonym: 'Cosmic Panda' }, name: 'Cosmic Panda', age: 27, city: 'Bengaluru', reasons: ['x'], chips: ['y'] } })
-    expect(text('Bengaluru')).toBeTruthy()
+    await draw({ variant: 'thin', person: { face: { kind: 'creature', pseudonym: 'Cosmic Panda' }, name: 'Cosmic Panda', age: 27, city: 'Bengaluru', lead: [{ icon: 'users', label: 'x', lit: true }], common: { label: 'In common', items: ['y'] }, tonight: { question: 'q', answer: 'z' } } })
+    expect(text('z')).toBeNull()
+    expect(text('27 · Bengaluru')).toBeTruthy()
     expect(text('x')).toBeNull()
     expect(text('y')).toBeNull()
     expect(screen.queryByRole('button', { name: 'Like' })).toBeNull()
@@ -279,23 +286,31 @@ describe('the variants', () => {
 
 it('the hand-drawn controls take the focus ring and, on Android, ripple instead of scaling', async () => {
   await draw()
-  const wave = screen.getByRole('button', { name: 'Wave at Priya' })
-  await fireEvent(wave, 'focus')
-  expect(query('p-hand-focus')).toBeTruthy()
-  const more = screen.getByRole('button', { name: 'View profile' })
+  const more = screen.getByRole('button', { name: 'Block or report Priya' })
   await fireEvent(more, 'focus')
-  expect(query('p-view-profile-focus')).toBeTruthy()
+  expect(query('p-ellipsis-focus')).toBeTruthy()
 })
 
-it('the action row wraps rather than truncating a label at large text or on a narrow phone', async () => {
+it('the action row stacks at the largest text rather than truncating a label (P-A ax)', async () => {
+  const window = Dimensions.get('window')
+  await act(async () => Dimensions.set({ window: { ...window, fontScale: 1 }, screen: { ...window, fontScale: 1 } }))
   await draw()
-  expect(flat('p-actions')).toMatchObject({ flexDirection: 'row', flexWrap: 'wrap' })
+  expect(flat('p-actions')).toMatchObject({ flexDirection: 'row' })
+  await act(async () => Dimensions.set({ window: { ...window, fontScale: 3 }, screen: { ...window, fontScale: 3 } }))
+  await draw()
+  expect(flat('p-actions')).toMatchObject({ flexDirection: 'column' })
+  // Drive, Android 2.0: a zero flex-basis in the column collapsed each pill behind its label.
+  // The Button's style sits on the view around its pressable.
+  const outer = (id: string) => StyleSheet.flatten(screen.getByTestId(id, { includeHiddenElements: true }).parent?.props.style)
+  for (const id of ['p-wave', 'p-message']) expect(outer(id)).toMatchObject({ alignSelf: 'stretch' })
+  for (const id of ['p-wave', 'p-message']) expect(outer(id).flexBasis).toBeUndefined()
+  await act(async () => Dimensions.set({ window, screen: window }))
 })
 
 it('Android: the panels are sunken, not 8% white', async () => {
   on('android')
   await draw()
-  expect(flat('p-reasons').backgroundColor).toBe(COLOR.surfaceSunken)
+  expect(flat('p-ellipsis').backgroundColor).toBe(COLOR.surfaceSunken)
 })
 
 it('<PersonCard> presents it in the sheet, with no title of its own', async () => {
@@ -305,7 +320,6 @@ it('<PersonCard> presents it in the sheet, with no title of its own', async () =
       onClose={jest.fn()}
       person={PRIYA}
       variant="here"
-      onLike={jest.fn()}
       onWave={jest.fn()}
       onMessage={jest.fn()}
       onSayHi={jest.fn()}
@@ -316,7 +330,7 @@ it('<PersonCard> presents it in the sheet, with no title of its own', async () =
   )
   await act(async () => {})
   expect(screen.getByTestId('s-modal', { includeHiddenElements: true }).props.visible).toBe(true)
-  expect(screen.getByLabelText('Priya, 27, Both open to dating, here now')).toBeTruthy()
+  expect(screen.getByLabelText('Priya, Anonymous, 27')).toBeTruthy()
 })
 
 it('<PersonCard> sends a screen reader to the person, not the handle, as it opens', async () => {
@@ -336,22 +350,21 @@ it('<PersonCard>: the unavailable card’s Close closes the sheet', async () => 
 })
 
 describe('Flow 4: the room’s card (R2-D1, R3-D4, #51)', () => {
-  it('a wave on its way: the hand waves ±14° (#51), never a spinner, and is busy', async () => {
-    await draw({ waving: true, testID: 'c' })
+  it('a wave on its way: the hand swings ±14° three times (07-motion), never a spinner, and is busy', async () => {
+    await draw({ wave: 'sending', testID: 'c' })
     expect(query('c-hand-waving')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Wave at Priya' }).props.accessibilityState).toMatchObject({ busy: true, disabled: true })
+    expect(screen.getByRole('button', { name: 'Waving at Priya' }).props.accessibilityState).toMatchObject({ disabled: true })
     silent()
   })
 
   it('Reduce Motion: the hand stays still while the wave goes', async () => {
     reduceMotion.mockReturnValue(true)
-    await draw({ waving: true, testID: 'c' })
+    await draw({ wave: 'sending', testID: 'c' })
     expect(Reanimated.getAnimatedStyle(screen.getByTestId('c-hand-waving', { includeHiddenElements: true })).transform).toEqual([{ rotate: '0deg' }])
   })
 
-  it('liked, requested and waved are each their own: one never hides another', async () => {
-    await draw({ liked: true, requested: true, waved: true, testID: 'c' })
-    expect(query('c-liked')).toBeTruthy()
+  it('requested and waved are each their own: one never hides another', async () => {
+    await draw({ requested: true, wave: 'waved', testID: 'c' })
     expect(query('c-waved')).toBeTruthy()
     expect(screen.getByLabelText('Request sent to Priya')).toBeTruthy()
   })
@@ -361,97 +374,52 @@ describe('Flow 4: the room’s card (R2-D1, R3-D4, #51)', () => {
     expect(screen.getByRole('button', { name: 'Message' }).props.accessibilityHint).toBe('Sends a request, which shows them your name and photo.')
   })
 
-  it('a crew here: "Like for Nebula" with its emblem, "Like as yourself" under the row, and who they see', async () => {
+  it('a crew here: a "Wave for Nebula" row under the dock (H.select), the dock only Wave + Message, and who they see', async () => {
     const crewLike = jest.fn()
-    const onLike = jest.fn()
-    await draw({ crewLike: { name: 'Nebula', emblemSeed: 'nebula', onPress: crewLike }, onLike, testID: 'c' })
-    await fireEvent.press(screen.getByRole('button', { name: 'Like for Nebula' }))
+    await draw({ crewLike: { name: 'Nebula', emblemSeed: 'nebula', onPress: crewLike }, testID: 'c' })
+    await fireEvent.press(screen.getByRole('button', { name: 'Wave for Nebula' }))
     expect(crewLike).toHaveBeenCalledTimes(1)
-    expect(onLike).not.toHaveBeenCalled()
-    expect(haptics.like).toHaveBeenCalledTimes(1)
-    expect(text('A crew like is shown to Priya as Nebula, never as you.')).toBeTruthy()
-    await fireEvent.press(screen.getByRole('button', { name: 'Like as yourself' }))
-    expect(onLike).toHaveBeenCalledTimes(1)
-  })
-
-  it('several crews may like: "Like for your crew", a heart rather than an emblem', async () => {
-    await draw({ crewLike: { name: 'your crew', onPress: jest.fn() }, testID: 'c' })
-    expect(screen.getByRole('button', { name: 'Like for your crew' })).toBeTruthy()
-  })
-
-  it('once liked, no crew like is offered again', async () => {
-    await draw({ liked: true, crewLike: { name: 'Nebula', emblemSeed: 'nebula', onPress: jest.fn() }, testID: 'c' })
-    expect(screen.queryByRole('button', { name: 'Like for Nebula' })).toBeNull()
+    expect(haptics.select).toHaveBeenCalledTimes(1)
+    expect(haptics.like).not.toHaveBeenCalled()
+    expect(text('A crew wave is shown to Priya as Nebula, never as you.')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Like as yourself' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Wave at Priya' })).toBeTruthy()
+  })
+
+  it('several crews may wave: "Wave for your crew"', async () => {
+    await draw({ crewLike: { name: 'your crew', onPress: jest.fn() }, testID: 'c' })
+    expect(screen.getByRole('button', { name: 'Wave for your crew' })).toBeTruthy()
+  })
+
+  it('once you both waved, no crew like is offered', async () => {
+    await draw({ variant: 'matched', wave: 'mutual', crewLike: { name: 'Nebula', emblemSeed: 'nebula', onPress: jest.fn() }, testID: 'c' })
+    expect(screen.queryByRole('button', { name: 'Wave for Nebula' })).toBeNull()
   })
 })
 
 describe('the action row is one height (M4)', () => {
-  it('Like, Message, the pills and the circles are all 48', async () => {
-    await draw({ onLike: jest.fn(), onWave: jest.fn(), onMore: jest.fn() })
-    for (const id of ['p-like', 'p-message', 'p-hand', 'p-ellipsis']) expect(flat(id).height).toBe(SIZE.control)
+  it('Message is the board’s quiet .db.q (fill-on-glass), visible on Android’s solid sheet too', async () => {
+    on('android')
+    await draw()
+    // Drive, Android: a plain secondary is COLOR.surface, the solid sheet's own colour, and the pill vanished.
+    for (const id of ['p-message']) expect(JSON.stringify(screen.getByTestId(id, { includeHiddenElements: true }).props.style)).toContain(MATERIAL.fillOnGlass)
   })
 
-  it('under rose, Liked lights in rose', async () => {
+  it('Wave and Message are 52 (the board’s .db), and so is ✓ Waved; ⋯ is a 44 target', async () => {
+    await draw({ onWave: jest.fn(), onMore: jest.fn() })
+    for (const id of ['p-message', 'p-wave']) expect(flat(id).height).toBe(SIZE.tabBarCompact)
+    await draw({ wave: 'waved' })
+    expect(flat('p-waved').height).toBe(SIZE.tabBarCompact)
+    await draw({ onMore: jest.fn() })
+    expect(flat('p-ellipsis').height).toBe(SIZE.targetIos)
+  })
+
+  it('under rose, ✓ Waved lights in rose', async () => {
     await render(
       <HueProvider value="rose">
-        <PersonCardContent person={PRIYA} variant="here" state="liked" testID="p" />
+        <PersonCardContent person={PRIYA} variant="here" wave="waved" testID="p" />
       </HueProvider>
     )
-    expect(flat('p-liked').backgroundColor).toBe(COLOR.selectionRoseFill)
-  })
-})
-
-describe('Matching v2 overlap (Flow 14 · 14.1, R7)', () => {
-  const LABELS = [
-    { text: 'Friendship', shared: true },
-    { text: 'CSK', shared: true },
-    { text: 'Filter coffee', shared: true },
-    { text: 'Leo', shared: false },
-  ]
-  const overlap = { line: 'Both CSK, in RCB country', labels: LABELS }
-
-  it('draws the server’s line and two labels before a reveal; the plain chips give way', async () => {
-    await draw({ person: { ...PRIYA, overlap } })
-    expect(text('Both CSK, in RCB country')).toBeTruthy()
-    expect(text('Friendship')).toBeTruthy()
-    expect(text('CSK')).toBeTruthy()
-    expect(text('Filter coffee')).toBeNull()
-    expect(text('Vinyl')).toBeNull()
-  })
-
-  it('four labels after a reveal (matched)', async () => {
-    await draw({ person: { ...PRIYA, overlap }, variant: 'matched' })
-    expect(text('Leo')).toBeTruthy()
-  })
-
-  it('no line: nothing new, and the plain chips stay', async () => {
-    await draw({ person: { ...PRIYA, overlap: { line: null, labels: [] } } })
-    expect(query('p-overlap')).toBeNull()
-    expect(text('Vinyl')).toBeTruthy()
-  })
-
-  it('the thin card never says what you share', async () => {
-    await draw({ person: { ...PRIYA, overlap }, variant: 'thin' })
-    expect(query('p-overlap')).toBeNull()
-  })
-})
-
-describe('badges on the card (Flow 14 · 14.5, the server’s own budget)', () => {
-  // `badges` as a room card's person carries them: `{ kind, label }[]`, none in a small room.
-  it('draws what they earned as read-only DS pills after the chips', async () => {
-    await draw({ person: { ...PRIYA, badges: ['shows_up', 'nights_out'] } })
-    expect(query('p-badges')).toBeTruthy()
-    expect(screen.getByLabelText('Badge: Shows up')).toBeTruthy()
-    expect(screen.getByLabelText('Badge: 5+ nights this month')).toBeTruthy()
-    // Read, not pressed: a pill with no handler is not a button.
-    expect(screen.getByLabelText('Badge: Shows up').props.accessibilityRole).toBeUndefined()
-  })
-
-  it('draws no row for none, and none on the thin card', async () => {
-    await draw({ person: { ...PRIYA, badges: [] } })
-    expect(query('p-badges')).toBeNull()
-    await draw({ person: { ...PRIYA, badges: ['shows_up'] }, variant: 'thin' })
-    expect(query('p-badges')).toBeNull()
+    expect(flat('p-waved').backgroundColor).toBe(COLOR.selectionRoseFill)
   })
 })

@@ -75,7 +75,7 @@ export interface SavedEventsPayload {
     changedFields?: ChangedField[] | null
     /** Both list routes send it (`/me/rsvps`, `/users/:id/favorites`). */
     timezone?: string | null
-    /** The favourites route sends it; `/me/rsvps` not yet (server need). */
+    /** Both list routes send it. */
     categories?: ListCategories
   }[]
   pagination?: { page: number; totalCount: number; hasMore: boolean; nextCursor?: string | null }
@@ -121,16 +121,20 @@ export function changedTag(row: Pick<SavedEventRow, 'changed' | 'status'>): 'New
  * Only `going` and `waitlisted` come back.
  */
 export interface RsvpEventsPayload {
-  events: (SavedEventsPayload['events'][number] & { rsvpStatus: 'going' | 'waitlisted' })[]
+  /** `lobby.newCount`: posts since the caller last opened that Lobby, once the server sends it (ROADMAP § Backend later, Going 6). */
+  events: (SavedEventsPayload['events'][number] & { rsvpStatus: 'going' | 'waitlisted'; lobby?: { newCount?: unknown } | null })[]
   pagination?: { page: number; totalCount: number; hasMore: boolean; nextCursor?: string | null }
 }
 
-export type RsvpEventRow = SavedEventRow & { rsvpStatus: 'going' | 'waitlisted' }
+export type RsvpEventRow = SavedEventRow & { rsvpStatus: 'going' | 'waitlisted'; lobbyNew?: number }
 
 export function rsvpEventRows(data: RsvpEventsPayload | undefined | null): RsvpEventRow[] {
   if (!data || !Array.isArray(data.events)) return []
   const rows = savedEventRows({ events: data.events })
-  return rows.map((row, i) => ({ ...row, rsvpStatus: data.events[i].rsvpStatus }))
+  return rows.map((row, i) => {
+    const n = data.events[i].lobby?.newCount
+    return { ...row, rsvpStatus: data.events[i].rsvpStatus, ...(typeof n === 'number' && Number.isFinite(n) && n > 0 ? { lobbyNew: n } : {}) }
+  })
 }
 
 /** `GET /me/attendance` — snake_case, unlike the two above; it is its own route. */
@@ -146,19 +150,19 @@ export interface AttendancePayload {
     attendedAt: string
     /** The event's IANA zone (admin #749): its day is said in it. Absent from an older server: the phone's. */
     timezone?: string | null
-    /** Read under the list routes' name when the attendance route sends it (not yet: server need). */
+    /** The attendance route sends it under the list routes' name. */
     categories?: ListCategories
     /** `venue_day` is a visit to a place you went live at; its `title` is bookkeeping, its `venue_name` the place (blendn-admin D-6). */
     kind?: 'event' | 'venue_day'
     /**
-     * How long you were there, in minutes, and the place's own id (for its page): neither is on the route yet, so a visit says
-     * its date alone and opens nothing until they are. Read from these names when the server sends them.
+     * How long you were there, in minutes, and the place's own id (for its page): the route sends both for a visit (a venue
+     * day) and null for an event. An older server omits them, and a visit then says its date alone and opens nothing.
      */
     stay_minutes?: number | null
     venue_id?: string | null
     /** `venue_type` (a plate's type, when the server says what kind of place it was). */
     venue_type?: string | null
-    /** When you rated the night, or null: sent by the list once the server has it (absent today, and then each row is asked). */
+    /** When you rated the night, or null: the route sends it. An older server omits it, and then each row is asked. */
     ratedAt?: string | null
   }[]
   pagination?: { page: number; totalCount: number; hasMore: boolean; nextCursor?: string | null }
@@ -242,10 +246,10 @@ export type GoingItem =
  * **Next up** — the soonest RSVP, as the one large card: the event you are
  * about to leave the house for, with its directions, calendar and share. **The
  * rest of your RSVPs** — under day headings, one row each, the way the Pulse's
- * Upcoming reads. The tab was named for these and once listed only hearts, so
+ * Upcoming reads. The tab was named for these and once listed only saves, so
  * somebody who tapped "I'm going" did not find the event under Going. There is
  * no "Going" heading over them: the screen's title already says it.
- * **Saved** — the hearts, minus anything already under Going: one event, one
+ * **Saved** — the saves, minus anything already under Going: one event, one
  * row. **Past** — events you attended that have ended, which is where "rate
  * the people you met" lives; `rate/[eventId]` was reachable only by reopening
  * an old event.

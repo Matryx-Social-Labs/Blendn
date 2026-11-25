@@ -38,6 +38,13 @@ export interface ProfileOptions {
   homeStates: Option[]
   signs: SignOption[]
   thisOrThat: ThisOrThatQuestion[]
+  /**
+   * Whose lists these are (`GET /profile-options?country=`, SCRUM-711): the account's home-city country, or null for the
+   * neutral lists (no regions) the server sends a country without its own. The server picks every list; the app copies none.
+   */
+  country?: string | null
+  /** What that country calls a `homeStates` entry ("state", "province"); null where it has none. */
+  regionWord?: 'state' | 'province' | null
 }
 
 export type SignSystem = 'western' | 'rashi'
@@ -196,7 +203,7 @@ export function tierBRefusals(body: Record<string, unknown>, errorCode?: string)
 export function tierBNames(body: Record<string, unknown>): string {
   const names = [
     'languages' in body ? 'languages' : null,
-    'home_state' in body ? 'home state' : null,
+    'home_state' in body ? 'home region' : null,
     'sun_sign' in body || 'sign_system' in body ? 'sign' : null,
   ].filter((n): n is string => n !== null)
   return names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : (names[0] ?? '')

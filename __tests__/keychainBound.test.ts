@@ -11,18 +11,42 @@ const mockSecure = new Map<string, string>()
 /** Keys whose read (or write) never answers: a SecureStore queue blocked by another module's call. */
 const mockStalledReads = new Set<string>()
 const mockStalledWrites = new Set<string>()
+/** Writes held in the blocked queue: each lands (in order) when the test unblocks it. */
+const mockHeldWrites: (() => void)[] = []
 /** A read held until the test answers it. */
 let mockHeld: ((value: string) => void) | null = null
 let mockHold = false
+/** Keys whose read throws, as iOS's keychain does for a locked phone (errSecInteractionNotAllowed). */
+const mockLockedReads = new Set<string>()
+/** Slots (`key` or `legacy:key`) whose delete throws, as a keychain call that fails mid sign-out. */
+const mockFailingDeletes = new Set<string>()
+/** Every keychain write and delete, in order, with the accessibility a write asked for. */
+const mockOps: string[] = []
+/** The keychain service an option names: the old one's items are kept apart, as `legacy:<key>`. */
+type MockOptions = { keychainService?: string; keychainAccessible?: string }
+const mockSlot = (k: string, o?: MockOptions) => (o?.keychainService === 'blendn.api.auth' ? `legacy:${k}` : k)
 jest.mock('expo-secure-store', () => ({
-  getItemAsync: (k: string) =>
-    mockHold
+  AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY: 'afterFirstUnlockThisDeviceOnly',
+  WHEN_UNLOCKED_THIS_DEVICE_ONLY: 'whenUnlockedThisDeviceOnly',
+  getItemAsync: (k: string, o?: MockOptions) =>
+    mockLockedReads.has(k)
+      ? Promise.reject(new Error('Keychain: errSecInteractionNotAllowed (-25308)'))
+      : mockHold
       ? new Promise((resolve) => (mockHeld = resolve))
       : mockStalledReads.has(k)
         ? new Promise(() => {})
-        : Promise.resolve(mockSecure.get(k) ?? null),
-  setItemAsync: (k: string, v: string) => (mockStalledWrites.has(k) ? new Promise(() => {}) : Promise.resolve(void mockSecure.set(k, v))),
-  deleteItemAsync: async (k: string) => void mockSecure.delete(k),
+        : Promise.resolve(mockSecure.get(mockSlot(k, o)) ?? null),
+  setItemAsync: (k: string, v: string, o?: MockOptions) => {
+    mockOps.push(`set ${mockSlot(k, o)} ${o?.keychainAccessible}`)
+    return mockStalledWrites.has(k)
+      ? new Promise<void>((resolve) => mockHeldWrites.push(() => resolve(void mockSecure.set(k, v))))
+      : Promise.resolve(void mockSecure.set(k, v))
+  },
+  deleteItemAsync: async (k: string, o?: MockOptions) => {
+    mockOps.push(`delete ${mockSlot(k, o)}`)
+    if (mockFailingDeletes.has(mockSlot(k, o))) throw new Error('Keychain: delete failed')
+    mockSecure.delete(mockSlot(k, o))
+  },
 }))
 jest.mock('react-native', () => ({ Platform: { OS: 'ios' }, AppState: { addEventListener: () => ({ remove: () => {} }), currentState: 'active' } }))
 jest.mock('../lib/logger', () => ({ Logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() } }))
@@ -33,7 +57,7 @@ jest.mock('../lib/fetchTimeout', () => ({ ...jest.requireActual('../lib/fetchTim
 
 process.env.EXPO_PUBLIC_API_BASE_URL = 'https://api.test'
 /* eslint-disable @typescript-eslint/no-require-imports */
-const { apiClient, TokenStorage, REFRESH_DEADLINE_MS } = require('../lib/apiClient') as typeof import('../lib/apiClient')
+const { apiClient, TokenStorage, REFRESH_DEADLINE_MS, SIGN_OUT_READ_MS, SIGN_IN_PERSIST_MS } = require('../lib/apiClient') as typeof import('../lib/apiClient')
 const { TIMEOUT_MESSAGE } = require('../lib/fetchTimeout') as typeof import('../lib/fetchTimeout')
 const { Logger } = require('../lib/logger') as typeof import('../lib/logger')
 /* eslint-enable @typescript-eslint/no-require-imports */
@@ -47,14 +71,19 @@ beforeEach(async () => {
   mockSecure.clear()
   mockStalledReads.clear()
   mockStalledWrites.clear()
+  mockHeldWrites.length = 0
+  mockLockedReads.clear()
+  mockFailingDeletes.clear()
   mockExpired.mockClear()
   await TokenStorage.setTokens('access-1', 'refresh-1')
   // The keychain as a launch finds it: nothing read into memory yet (RC drive 2 D-A), so every read here asks the keychain.
   TokenStorage.forgetMemory()
+  mockOps.length = 0
 })
 afterEach(async () => {
   // Let the background refresh retries (2 s, 5 s, 10 s) run out inside the test, not after it.
   mockStalledReads.clear()
+  mockLockedReads.clear()
   mockStalledWrites.clear()
   global.fetch = jest.fn(async () => json(401, { success: false })) as typeof fetch
   await jest.advanceTimersByTimeAsync(20_000)
@@ -161,7 +190,8 @@ describe('sign-out always finishes (SCRUM-733)', () => {
     global.fetch = jest.fn() as typeof fetch
     mockStalledReads.add(REFRESH)
     const pending = apiClient.signOut()
-    await jest.advanceTimersByTimeAsync(100)
+    // Sign-out waits SIGN_OUT_READ_MS for the keychain, not the (here shortened) request deadline.
+    await jest.advanceTimersByTimeAsync(SIGN_OUT_READ_MS + 100)
     await expect(pending).resolves.toEqual({ success: false, error: TIMEOUT_MESSAGE })
     expect(global.fetch).not.toHaveBeenCalled()
     expect(mockSecure.has(ACCESS)).toBe(false)
@@ -175,6 +205,146 @@ describe('sign-out always finishes (SCRUM-733)', () => {
     }) as typeof fetch
     await expect(apiClient.signOut()).resolves.toMatchObject({ success: true })
     expect(body.refreshToken).toBe('refresh-1')
+    expect(mockSecure.has(REFRESH)).toBe(false)
+  })
+})
+
+describe('sign-in lands on the Pulse even when the keychain is blocked (SCRUM-903)', () => {
+  const USER = 'blendn_user'
+  const signedIn = { success: true, data: { accessToken: 'access-2', refreshToken: 'refresh-2', user: { id: 'u2', email: 'b@test' } } }
+  /** The keychain's queue is blocked: every write waits, as behind a wedged permission read. */
+  const blockWrites = () => [ACCESS, REFRESH, USER].forEach((k) => mockStalledWrites.add(k))
+  const unblockWrites = async () => {
+    mockStalledWrites.clear()
+    mockHeldWrites.splice(0).forEach((land) => land())
+    await jest.advanceTimersByTimeAsync(0)
+  }
+
+  it('answers the sign-in at SIGN_IN_PERSIST_MS, with the session in memory and a warning', async () => {
+    global.fetch = jest.fn(async () => json(200, signedIn)) as typeof fetch
+    blockWrites()
+    const warn = Logger.warn as jest.Mock
+    warn.mockClear()
+    const pending = apiClient.signInWithEmail('b@test', 'pw')
+    let settled = false
+    void pending.then(() => (settled = true))
+    await jest.advanceTimersByTimeAsync(SIGN_IN_PERSIST_MS - 1)
+    expect(settled).toBe(false)
+    await jest.advanceTimersByTimeAsync(1)
+    await expect(pending).resolves.toMatchObject({ success: true })
+    // The new session answers from memory, so the Pulse's first request carries it.
+    await expect(TokenStorage.getAccessToken()).resolves.toBe('access-2')
+    expect(warn).toHaveBeenCalledWith('auth', 'signIn:persistSlow', expect.objectContaining({ ms: SIGN_IN_PERSIST_MS }))
+  })
+
+  it('keeps persisting in the background: when the queue frees, the keychain holds the session', async () => {
+    global.fetch = jest.fn(async () => json(200, signedIn)) as typeof fetch
+    blockWrites()
+    const pending = apiClient.signInWithEmail('b@test', 'pw')
+    await jest.advanceTimersByTimeAsync(SIGN_IN_PERSIST_MS)
+    await pending
+    expect(mockSecure.get(ACCESS)).toBe('access-1')
+    // Tokens land, then the user is written (it is issued after them), then the signed-out marker is forgotten.
+    await unblockWrites()
+    await unblockWrites()
+    expect(mockSecure.get(ACCESS)).toBe('access-2')
+    expect(mockSecure.get(REFRESH)).toBe('refresh-2')
+    expect(JSON.parse(mockSecure.get(USER) ?? '{}')).toMatchObject({ id: 'u2' })
+  })
+
+  it('a sign-out while the persist is pending: the old sign-in does not write its user back', async () => {
+    global.fetch = jest.fn(async () => json(200, signedIn)) as typeof fetch
+    blockWrites()
+    const pending = apiClient.signInWithEmail('b@test', 'pw')
+    await jest.advanceTimersByTimeAsync(SIGN_IN_PERSIST_MS)
+    await pending
+    global.fetch = jest.fn(async () => json(200, { success: true })) as typeof fetch
+    await apiClient.signOut()
+    await unblockWrites()
+    await unblockWrites()
+    expect(mockSecure.has(USER)).toBe(false)
+  })
+
+  it('a keychain that answers costs no wait and no warning', async () => {
+    global.fetch = jest.fn(async () => json(200, signedIn)) as typeof fetch
+    const warn = Logger.warn as jest.Mock
+    warn.mockClear()
+    await expect(apiClient.signInWithEmail('b@test', 'pw')).resolves.toMatchObject({ success: true })
+    expect(mockSecure.get(ACCESS)).toBe('access-2')
+    expect(warn).not.toHaveBeenCalledWith('auth', 'signIn:persistSlow', expect.anything())
+  })
+})
+
+/*
+ * SCRUM-878: iOS launches the app in the background while the phone is locked (prewarming, a push). The tokens were
+ * stored WHEN_UNLOCKED_THIS_DEVICE_ONLY, so the keychain refused the read; it was taken for "no token", and the 401 path
+ * cleared the session and said "You were signed out" over a live refresh token.
+ */
+describe('a locked keychain is not a missing token (SCRUM-878)', () => {
+  it('a refresh-token read the keychain refuses is a failed refresh: nothing cleared, nobody told they were signed out', async () => {
+    global.fetch = jest.fn(async () => json(401, { success: false, error: 'expired' })) as typeof fetch
+    mockLockedReads.add(REFRESH)
+    await expect(apiClient.refreshSessionOutcome()).resolves.toBe('failed')
+    expect(global.fetch).not.toHaveBeenCalled()
+    expect(mockSecure.get(REFRESH)).toBe('refresh-1')
+    expect(mockSecure.get(ACCESS)).toBe('access-1')
+    expect(mockExpired).not.toHaveBeenCalled()
+  })
+
+  it('says which reads it could not make: unknown, never null', async () => {
+    mockLockedReads.add(ACCESS)
+    await expect(TokenStorage.accessTokenOrUnknown()).resolves.toBeUndefined()
+    await expect(TokenStorage.refreshTokenOrUnknown()).resolves.toBe('refresh-1')
+    mockLockedReads.clear()
+    await expect(TokenStorage.accessTokenOrUnknown()).resolves.toBe('access-1')
+  })
+
+  it('stores them readable after the first unlock, in their own service; the older copy goes only once that is written', async () => {
+    await TokenStorage.setTokens('access-2', 'refresh-2')
+    const AFU = 'afterFirstUnlockThisDeviceOnly'
+    expect(mockOps.filter((op) => op.includes(REFRESH))).toEqual([`set ${REFRESH} ${AFU}`, `delete legacy:${REFRESH}`])
+    expect(mockSecure.get(REFRESH)).toBe('refresh-2')
+  })
+
+  it('an install from an older build: its session is read from the old service, and moved by the next write', async () => {
+    mockSecure.clear()
+    mockSecure.set(`legacy:${ACCESS}`, 'access-old')
+    mockSecure.set(`legacy:${REFRESH}`, 'refresh-old')
+    await expect(TokenStorage.refreshTokenOrUnknown()).resolves.toBe('refresh-old')
+    await TokenStorage.setTokens('access-new', 'refresh-new')
+    expect([...mockSecure.keys()].sort()).toEqual([ACCESS, REFRESH])
+    expect(mockSecure.get(REFRESH)).toBe('refresh-new')
+  })
+
+  it('a write that never finishes leaves the older copy in place: never a moment with no session stored', async () => {
+    mockSecure.clear()
+    mockSecure.set(`legacy:${REFRESH}`, 'refresh-old')
+    mockStalledWrites.add(REFRESH)
+    void TokenStorage.setRefreshToken('refresh-new')
+    await jest.advanceTimersByTimeAsync(1000)
+    expect(mockSecure.get(`legacy:${REFRESH}`)).toBe('refresh-old')
+  })
+})
+
+describe('sign-out clears both keychain services (SCRUM-878 review)', () => {
+  it('deletes the old copy even when the new delete fails, and reports the clear as incomplete', async () => {
+    // An install whose old copy outlived a migration: both services hold the refresh token.
+    mockSecure.set(`legacy:${REFRESH}`, 'refresh-old')
+    mockFailingDeletes.add(REFRESH)
+
+    const cleared = await TokenStorage.clearAll()
+
+    expect(mockOps).toContain(`delete legacy:${REFRESH}`)
+    expect(mockSecure.has(`legacy:${REFRESH}`)).toBe(false)
+    // Not fully clear: the "signed out here" marker must stay, so the next launch clears again.
+    expect(cleared).toBe(false)
+  })
+
+  it('reports a full clear when every delete succeeds', async () => {
+    mockSecure.set(`legacy:${REFRESH}`, 'refresh-old')
+
+    expect(await TokenStorage.clearAll()).toBe(true)
+    expect(mockSecure.has(`legacy:${REFRESH}`)).toBe(false)
     expect(mockSecure.has(REFRESH)).toBe(false)
   })
 })

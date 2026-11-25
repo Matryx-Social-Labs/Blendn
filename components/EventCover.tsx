@@ -1,11 +1,11 @@
 import { useState } from 'react'
-import { Image as ExpoImage } from 'expo-image'
 import { StyleSheet, View } from 'react-native'
 
 import { Logger } from '../lib/logger'
 import { hostOf } from '../lib/urlHost'
 import { COLOR, RADIUS } from '../lib/design/tokens'
 import { CategoryPlate } from './ds/EventCard'
+import { ContainedCover } from './ds/LinkPreviewCard'
 
 
 interface EventCoverProps {
@@ -50,24 +50,19 @@ export function EventCover({ uri, height, radius = RADIUS.rowInCard, retry = 0, 
        * memory/disk cache the rest of the app's images already share.
        */
       <View style={[styles.frame, corners, { height }]}>
-        <ExpoImage
-          testID="event-cover-image"
+        <ContainedCover
           // Remounted per attempt: the native view does not reload a source it
           // already failed on just because it rendered again.
           key={attempt}
-          source={{ uri }}
-          // Lists reuse native views; without this a row can flash the last one's picture.
-          recyclingKey={uri}
+          uri={uri}
+          auto
           onError={() => {
             // Said out loud: a host that starts refusing the app (SCRUM-285) is
             // otherwise a screen of quiet placeholders.
             Logger.warn('general', 'Event cover failed to load', { host: hostOf(uri) })
             setFailedAttempt(attempt)
           }}
-          style={StyleSheet.absoluteFill}
-          contentFit="cover"
-          transition={150}
-          cachePolicy="memory-disk"
+          testID="event-cover-image"
         />
       </View>
     )

@@ -3,6 +3,7 @@
  * marks; this fails when one drifts from the list.
  */
 import { fireEvent, render, screen } from '@testing-library/react-native'
+import { StyleSheet } from 'react-native'
 import { readFileSync } from 'fs'
 import { join } from 'path'
 
@@ -18,14 +19,35 @@ import { COACH_TIPS } from '../lib/coachMarks'
 const source = (path: string) => readFileSync(join(__dirname, '..', path), 'utf8')
 
 describe('the Tips screen', () => {
-  it('says what it is, and lists every tip under the screen it shows on, with when', async () => {
+  it('says what it is, and lists every tip with where and when as one quiet line', async () => {
     await render(<TipsScreen />)
     expect(screen.getByText(/Each tip shows once/)).toBeTruthy()
     for (const tip of COACH_TIPS) {
-      expect(screen.getByText(tip.screen)).toBeTruthy()
       expect(screen.getByText(tip.text)).toBeTruthy()
-      expect(screen.getByText(tip.when)).toBeTruthy()
+      expect(screen.getByText(`${tip.screen} · ${tip.when}`)).toBeTruthy()
     }
+  })
+
+  // Board remaining-screens 04 A: grouped by the night, in its order, one card per group, the labels in sentence case.
+  it('groups the tips by the night, in the night’s order, with sentence-case labels', async () => {
+    await render(<TipsScreen />)
+    const groups = screen.getAllByRole('header').filter((h) => h.props.children !== 'Tips')
+    expect(groups.map((h) => h.props.children)).toEqual(['Before you go', 'At the door', 'Inside', 'After'])
+    for (const h of groups) expect(StyleSheet.flatten(h.props.style).textTransform).not.toBe('uppercase')
+    expect(screen.getByTestId('tips-at-the-door-card')).toBeTruthy()
+    expect(screen.queryByTestId('tip-door_pass')).toBeNull()
+  })
+
+  it('puts each tip under its moment: saving before, the button and the code at the door, the Room and the Mix inside, muting after', () => {
+    const night = Object.fromEntries(COACH_TIPS.map((t) => [t.id, t.night]))
+    expect(night).toEqual({
+      events_preview_hint: 'Before you go',
+      centre_button_checkin: 'At the door',
+      door_pass: 'At the door',
+      room_reveal: 'Inside',
+      blend_first_open: 'Inside',
+      banter_swipe_mute: 'After',
+    })
   })
 
   it('replays nothing: a tip is not a button', async () => {
@@ -47,6 +69,7 @@ describe('the list and the marks say the same words', () => {
     events_preview_hint: 'app/(tabs)/events.tsx',
     room_reveal: 'components/blendn/BlendnScreen.tsx',
     door_pass: 'app/offer/[id].tsx',
+    banter_swipe_mute: 'app/(tabs)/chat.tsx',
   }
   for (const [id, file] of Object.entries(where)) {
     it(`${id}: the sentence is the one in ${file}`, () => {

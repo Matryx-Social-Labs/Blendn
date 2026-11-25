@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode, type Ref } from 'react'
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode, type Ref } from 'react'
 import { AccessibilityInfo, Platform, Pressable, StyleSheet, Text, TextInput, View, type TextInputProps } from 'react-native'
 
 import { Icon } from '../ui/Icon'
@@ -29,11 +29,22 @@ function joinRefs(own: { current: TextInput | null }, theirs?: Ref<TextInput>) {
   }
 }
 
+/**
+ * How a form draws its labels. `mono` is the DS default (Geist Mono, uppercase). `sentence` is the profile editors' (Me +
+ * settings A 03/04, owner approved 2026-11-18): the label as written, Satoshi 500 at the `note` size (13/18), so a form
+ * about a person does not SHOUT ("WHAT ARE YOU OPEN TO?").
+ */
+export const FieldLabelCase = createContext<'mono' | 'sentence'>('mono')
+
 /** The label above a field: Geist Mono, uppercase, textSecondary (white under Increase Contrast), 4 pt in like the field's text (`inputs.js textField`). Every label has this one inset. */
 export function FieldLabel({ text, bold, contrast }: { text: string; bold: boolean; contrast: boolean }) {
+  const sentence = useContext(FieldLabelCase) === 'sentence'
   // A field's name grows to its role's cap (MAX_FONT_SCALE.label): uncapped, EMAIL drew at 3.1x over a 1.3x input (RC drive 2 D-8).
   return (
-    <Text maxFontSizeMultiplier={MAX_FONT_SCALE.label} style={[font('label', bold), styles.label, { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>
+    <Text
+      maxFontSizeMultiplier={MAX_FONT_SCALE.label}
+      style={[sentence ? font('note', bold, FONT_FAMILY.brand[500]) : font('label', bold), styles.label, { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}
+    >
       {text}
     </Text>
   )
@@ -165,6 +176,7 @@ export function TextField({
   measure = count,
   secure = false,
   defaultRevealed = false,
+  labelAside,
   previewState,
   inputRef,
   testID,
@@ -178,6 +190,8 @@ export function TextField({
   secure?: boolean
   /** Start with the password shown (the eye "on"). */
   defaultRevealed?: boolean
+  /** An action at the end of the label row, the field's own (Flow 1c: "Forgot password?" on Password). */
+  labelAside?: ReactNode
 }) {
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
@@ -192,15 +206,24 @@ export function TextField({
    */
   const masked = secure && !revealed
   const ownPlaceholder = secure && !value && rest.placeholder ? rest.placeholder : null
+  const atRest = !secure && !!value && !focus.focused && previewState !== 'focused'
+  const [counterWidth, setCounterWidth] = useState(0)
+  // The overlay stops where the input does: before the counter and its gap.
+  const restRight = SPACE.xl + (limit !== undefined ? counterWidth + SPACE.md : 0)
   const eye = minTarget()
 
   return (
     <View testID={testID} style={[styles.field, disabled && { opacity: OPACITY.disabled }]}>
-      {label ? <View style={styles.labelRow}><FieldLabel text={label} bold={bold} contrast={contrast} /></View> : null}
+      {label && labelAside ? (
+        // An action at the row's end (Flow 1c: "Forgot password?"): FieldHeader's spread, stacked at the accessibility sizes.
+        <FieldHeader label={label} counter={labelAside} testID={testID && `${testID}-label-row`} />
+      ) : label ? (
+        <View testID={testID && `${testID}-label-row`} style={styles.labelRow}><FieldLabel text={label} bold={bold} contrast={contrast} /></View>
+      ) : null}
       {/* The whole capsule is the target: a tap on its padding focuses the text. */}
       <Pressable
         testID={testID && `${testID}-box`}
-        accessible={false}
+        accessible={false} importantForAccessibility="no"
         onPress={() => input.current?.focus()}
         disabled={disabled}
         style={[styles.box, secure && { paddingRight: eye + SPACE.sm }]}
@@ -223,8 +246,24 @@ export function TextField({
           accessibilityLabel={label ?? rest.placeholder}
           accessibilityHint={spokenHint(error, value, limit, hint, measure)}
           accessibilityState={{ disabled }}
-          style={[masked ? font('body', bold, FONT_FAMILY.mono[500]) : font('body', bold), styles.input, styles.line, masked && styles.dots]}
+          style={[masked ? font('body', bold, FONT_FAMILY.mono[500]) : font('body', bold), styles.input, styles.line, masked && styles.dots, atRest && styles.under]}
         />
+        {atRest ? (
+          // At rest a long value ends in an ellipsis (Me + settings A 03: the job title was cut at a word); focused, the input draws it.
+          <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.placeholder, { right: restRight }]}>
+            <Text
+              testID={testID && `${testID}-rest`}
+              accessibilityElementsHidden
+              importantForAccessibility="no"
+              numberOfLines={1}
+              ellipsizeMode="tail"
+              maxFontSizeMultiplier={CONTROL_FONT_CAP}
+              style={[font('body', bold), { color: COLOR.textPrimary }]}
+            >
+              {value}
+            </Text>
+          </View>
+        ) : null}
         {ownPlaceholder ? (
           <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.placeholder, { paddingRight: eye + SPACE.sm }]}>
             <Text
@@ -242,6 +281,7 @@ export function TextField({
           <Text
             accessibilityElementsHidden
             importantForAccessibility="no"
+            onLayout={(e) => setCounterWidth(e.nativeEvent.layout.width)}
             style={[monoCaption(bold), { color: error ? COLOR.destructive : COLOR.textTertiary }]}
             maxFontSizeMultiplier={CONTROL_FONT_CAP}
           >
@@ -319,7 +359,7 @@ export function TextArea({
   return (
     <View testID={testID} style={[styles.field, disabled && { opacity: OPACITY.disabled }]}>
       {label || counter ? <FieldHeader label={label} counter={counter} testID={testID && `${testID}-label-row`} /> : null}
-      <Pressable testID={testID && `${testID}-box`} accessible={false} onPress={() => input.current?.focus()} disabled={disabled} style={[styles.area, { minHeight }]}>
+      <Pressable testID={testID && `${testID}-box`} accessible={false} importantForAccessibility="no" onPress={() => input.current?.focus()} disabled={disabled} style={[styles.area, { minHeight }]}>
         <TextInput
           {...rest}
           ref={joinRefs(input, inputRef)}
@@ -376,6 +416,8 @@ const styles = StyleSheet.create({
   /** Grows from its content (basis auto) past the minimum; `flex: 1` would pin it at the minimum. */
   grow: { flexGrow: 1 },
   dots: { letterSpacing: SPACE.xxs },
+  /** The input's own text under the at-rest overlay: still there to select and to read, never drawn twice. */
+  under: { color: 'transparent' },
   /** A masked field's own placeholder, where the native one would sit: the box's left padding, centred in its height. */
   placeholder: { justifyContent: 'center', paddingLeft: SPACE.xl },
   eye: { position: 'absolute', alignItems: 'center', justifyContent: 'center' },

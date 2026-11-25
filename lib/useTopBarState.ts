@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react'
-import { Platform, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native'
+import { Platform, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import type { TopBarState } from '../components/ds/TopBar'
@@ -42,21 +42,28 @@ export function topBarHeight(insetTop: number, android: boolean): number {
  * first row starts below it (`contentTop`: the bar and 8 more, the frame's 124 pt under a 59 pt status bar) with its
  * indicator clear of it (`indicatorTop`).
  *
+ * The bar is measured (`onBarLayout`, SCRUM-1059 A): at the largest text the title and its sub grow the bar past its
+ * fixed height, and the content then starts 8 under the bar as it is drawn. The first frame, before the layout lands,
+ * uses the fixed height.
+ *
  * ```tsx
  * <View style={styles.fill}>
  *   <ScrollView {...bar.scrollProps} contentContainerStyle={{ paddingTop: bar.contentTop }} scrollIndicatorInsets={{ top: bar.indicatorTop }}>…</ScrollView>
- *   <View style={bar.barPin}><TopBar state={bar.state} … /></View>
+ *   <View style={bar.barPin} onLayout={bar.onBarLayout}><TopBar state={bar.state} … /></View>
  * </View>
  * ```
  */
 export function useTopBarOverlay() {
   const insets = useSafeAreaInsets()
   const bar = useTopBarState()
-  const height = topBarHeight(insets.top, Platform.OS === 'android')
+  const [drawn, setDrawn] = useState(0)
+  const onBarLayout = useCallback((e: LayoutChangeEvent) => setDrawn(e.nativeEvent.layout.height), [])
+  const height = Math.max(topBarHeight(insets.top, Platform.OS === 'android'), drawn)
   return {
     ...bar,
     contentTop: height + SPACE.sm,
     indicatorTop: height,
     barPin: { position: 'absolute', top: 0, left: 0, right: 0 } as const,
+    onBarLayout,
   }
 }

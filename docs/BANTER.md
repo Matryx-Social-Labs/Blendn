@@ -2,13 +2,13 @@
 
 **Design:** Claude Design, `guidelines/flow-5/` — the Banter frames
 (`flow5.js` `banter`), #27 in `flow5-proto.js`, and the deltas R3-D5 (5.6,
-5.7, 5.8, 5.11), R3-0 (C5, C11) and R2-D2 (crews, invites, Blends, the bell).
+5.7, 5.8, 5.11), R3-0 (C5, C11) and R2-D2 (crews, invites, Mixes, the bell).
 See `docs/CHAT.md` for the precedence.
 
 The screen is `app/(tabs)/chat.tsx`; its pieces `components/banter/BanterParts.tsx`;
-its data `lib/useBanterInbox.ts` (rooms, crew chats and Blends, DMs, requests —
-loaded together, cached, kept live) and `lib/useCrewInbox.ts` (crew invites,
-emblems, Blend sides); its pure helpers `components/banter/inbox.ts`.
+its data `lib/useBanterInbox.ts` (rooms, crew chats and Mixes, DMs, requests —
+loaded together, cached, kept live) and `lib/useCrewInbox.ts` (crew emblems,
+Mix sides); its pure helpers `components/banter/inbox.ts`.
 
 ---
 
@@ -17,10 +17,10 @@ emblems, Blend sides); its pure helpers `components/banter/inbox.ts`.
 | | |
 |---|---|
 | **Header** | Bar glass: "Banter", then the bell (Notifications), search, Mark all read (dimmed when no DM is unread). Search opens a field under it that filters in place. |
-| **Live now** | The room you're standing in as the hero: its cover under a scrim, a still Live badge, a rolling "N in the room", the last line — or "Locked by the organizer · read only". An open Blend under it: the two sides' emblems, "Open now · closes 4 AM". |
-| **Requests** | Solid cards that need an answer: the asker, their note verbatim (two lines), the time, ⋯ (Block · Report · Cancel), then Decline and Accept at 48 — Decline first. Accept's `H.success` comes with the server's answer and opens the DM. A crew invite is the same card with Join (the consent screen) and Decline. The Board's asks sit beside them. |
+| **Live now** | The room you're standing in as the hero: its cover under a scrim, a still Live badge, a rolling "N in the room", the last line — or "Locked by the organizer · read only". An open Mix under it: the two sides' emblems, "Open now · closes 4 AM". |
+| **Message requests** | One row (faces, the server's count) to the Message requests page: solid cards that need an answer: the asker, their note verbatim (two lines), the time, ⋯ (Block · Report · Cancel), then Decline and Accept at 48 — Decline first. Accept's `H.success` comes with the server's answer and opens the DM. Message requests only: crew invites and friend requests are answered in Notifications · Waiting on you and in their homes (Crews, Friends/Me), each one shared list (`lib/crewInvites.ts`, `lib/friendRequests.ts`). The Lobby's asks sit beside them. |
 | **Crews** | Crew chats, each its emblem in a rounded square. |
-| **People** | DMs, round: a photo once they're a name to you, else their creature. "Mark all read" on the heading. "Asked to reveal names" is a chip until you open the thread. |
+| **People** | DMs, round: a photo once they're a name to you, else their creature. "Mark all read" on the heading. "Wants to swap names" (they tapped Swap names) is a chip until you open the thread. |
 | **Past rooms** | Rooms you're not standing in, as their covers. A locked or muted room says so as a status chip, never as speech. |
 
 Rows are 64 tall with no hairlines. **Unread is three changes and a dot,
@@ -49,7 +49,23 @@ sends no name and no photo until that person reveals (`lib/conversation-identity
 in blendn-admin), so the inbox can't leak one. An unrevealed match is drawn as
 their creature, seeded on the pseudonym — never on an id.
 
+## Where asks live (requests placement A, owner 2026-11-15)
+
+Asks that open a chat live here: message requests, Lobby asks, waves, reveal
+asks. In Notifications they are a plain history line with a chevron back to
+Banter, never in Waiting on you, and never on the bell. The Banter tab's dot
+counts unread conversations plus message requests and Lobby asks waiting
+(`lib/inboxBadge.ts`); the bell counts Notifications rows that are not
+talk-asks. Board: `~/blendn-design-export/mockups/redesign-2026-11/requests-placement/`.
+
 ## Still open (server)
+
+- **Badge split:** `unreadCount` still counts talk-ask rows and `badgeCount`
+  leaves out message requests and Lobby asks (ROADMAP § Backend later). Until
+  the server splits them, the bell is derived from the newest 30 unseen rows
+  (exact up to 30, a floor past that, never a double count) and the dot reads
+  `GET /message-requests` and `GET /board/requests` itself. The app icon still
+  shows the server's `badgeCount`.
 
 - **Room read state:** no endpoint marks a room read, so Mark all read covers
   DMs only, and a DM's "Mark read" swipe reads the thread's first page (which is

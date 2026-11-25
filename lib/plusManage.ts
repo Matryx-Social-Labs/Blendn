@@ -20,6 +20,11 @@ import { calendarDate, calendarDaysBetween, clockTime } from './time'
 export type PlusState = 'active' | 'cancelled' | 'grace' | 'hold' | 'paused' | 'expired' | 'refunded'
 /** Which of our own gifts a `grant` is. */
 export type PlusGrant = 'trial' | 'referral'
+/** The store plan a subscription is (`GET /me/plus` `plan`). */
+export type PlusPlan = 'monthly' | 'quarterly' | 'yearly'
+
+/** What a Razorpay-sourced Blend'n+ says in place of a store row (OD-5): no link, no button. */
+export const MANAGED_OUTSIDE = 'Managed outside the app'
 
 export type PlusStore = 'ios' | 'android'
 const STORE_NAME: Record<PlusStore, string> = { ios: 'the App Store', android: 'Google Play' }
@@ -45,7 +50,7 @@ function passEnd(iso: string, now: number): string | null {
 /** The store a status is about: where it was bought, else the one this phone has. */
 const storeOf = (status: PlusStatus, device: PlusStore): PlusStore => (status.source === 'apple' ? 'ios' : status.source === 'google' ? 'android' : device)
 
-export type ManageCard = { status: ManageStatus; sentence: string; store: PlusStore }
+export type ManageCard = { status: ManageStatus; sentence: string; store: PlusStore; plan?: PlusPlan }
 
 /**
  * The card, or null when there is nothing to manage: not loaded, or somebody who
@@ -78,9 +83,13 @@ export function manageCard(status: PlusStatus | null | undefined, device: PlusSt
 
   if (status.source === 'grant') {
     if (status.grant === 'referral') return card('referral', `Your referral month runs ${date ? `to ${date}` : 'for now'}. Nothing renews unless you choose a plan.`)
-    // A trial or a gift we cannot tell apart: both end on their date and renew nothing.
-    return card(status.grant === 'trial' ? 'trial' : 'active', `Blend’n+ ${through(date, 'for now')} · nothing renews`)
+    if (status.grant === 'trial') return card('trial', `Blend’n+ ${through(date, 'for now')} · nothing renews`)
+    // A gift we cannot tell apart from any other: it ends on its date and costs nothing (remaining-screens 03 A).
+    return card('gift', `${date ? `Until ${date}` : 'For now'} · nothing renews, nothing to pay`)
   }
+
+  // Bought outside the app (Razorpay): no store holds it, so no store is named and nothing points anywhere (OD-5, App Store 3.1.1).
+  if (status.source === 'razorpay') return card('active', `Blend’n+ ${through(date, 'is on')} · ${MANAGED_OUTSIDE}`)
 
   switch (status.state) {
     case 'cancelled':
@@ -92,12 +101,15 @@ export function manageCard(status: PlusStatus | null | undefined, device: PlusSt
     case 'paused':
       return card('paused', `You paused Blend’n+ in ${name}.`)
     case 'active':
-      return card('active', `${date ? `Renews ${date}` : 'Blend’n+ is on'}${bought ? ` · ${bought}` : ''}`)
+      return planned(card('active', `${date ? `Renews ${date}` : 'Blend’n+ is on'}${bought ? ` · ${bought}` : ''}`), status)
     default:
       // The server has not said how it stands: it is on until its date, and that is all we know.
-      return card('active', `Blend’n+ ${through(date, 'is on')}${bought ? ` · ${bought}` : ''}`)
+      return planned(card('active', `Blend’n+ ${through(date, 'is on')}${bought ? ` · ${bought}` : ''}`), status)
   }
 }
+
+/** An active store subscription's card names its plan when the server does ("Blend’n+ Yearly", remaining-screens 03 A). */
+const planned = (c: ManageCard, status: PlusStatus): ManageCard => (status.plan ? { ...c, plan: status.plan } : c)
 
 /** Whether Settings › Blend'n+ is this screen: there is something to manage, rather than something to buy. */
 export function hasSomethingToManage(status: PlusStatus | null | undefined): boolean {

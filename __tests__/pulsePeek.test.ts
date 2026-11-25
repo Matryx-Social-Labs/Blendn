@@ -22,7 +22,7 @@ describe('the applied filters, as removable chips', () => {
     expect(appliedFilters({ categorySlug: 'music', when: 'weekend', radiusKm: 5 }, categories)).toEqual([
       { field: 'categorySlug', label: 'Live music' },
       { field: 'when', label: 'This weekend' },
-      { field: 'radiusKm', label: 'Within 5 km' },
+      { field: 'radiusKm', label: 'Under 5 km' },
     ])
   })
   it('a category the list no longer knows is named by its slug, not hidden', () => {

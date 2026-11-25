@@ -29,7 +29,6 @@ export type ComposerState =
   | 'failed'
   | 'muted'
   | 'automuted'
-  | 'locked'
   | 'closed'
   | 'ratelimited'
   | 'notcheckedin'
@@ -43,18 +42,17 @@ type Locked = Exclude<ComposerState, 'normal' | 'failed' | 'banned' | 'left' | '
 
 /** Why it can't post, in the server's words where it has them (ROUND3 C2–C4). No mute says when it lifts (R11). */
 const LOCKED: Record<Locked, { icon: IconName; title: string; body?: string }> = {
-  muted: { icon: 'mic-off', title: 'Muted', body: 'The organizer has muted you in this room.' },
+  muted: { icon: 'mic-off', title: 'Muted', body: 'The host has muted you in this room.' },
   automuted: {
     icon: 'mic-off',
     title: 'Muted',
     body: 'You are muted in this room. Your messages have been flagged for policy violations.',
   },
-  locked: { icon: 'lock', title: 'Read only', body: 'The organizer locked posting in this room.' },
   closed: { icon: 'door-closed', title: 'This chat has closed', body: 'Event chats stay open for 24 hours after the event ends.' },
   ratelimited: { icon: 'timer', title: 'Slow down a moment', body: 'Too many messages.' },
   notcheckedin: { icon: 'map-pin', title: 'RSVP to this event to join the chat' },
   /* R2-D2: the server's CHAT_CLOSED reasons it words apart; the sentence is always the server's. */
-  notopen: { icon: 'clock', title: 'Not open yet', body: 'This chat opens 24 hours before the event starts.' },
+  notopen: { icon: 'clock', title: 'Not open yet', body: 'The room opens when the doors open.' },
   hidden: { icon: 'eye-off', title: 'This room is hidden', body: 'This event is no longer available.' },
 }
 
@@ -135,7 +133,9 @@ export function Composer({
   useToastDock(gone ? 0 : height)
 
   if (gone) return null
-  const locked = state !== 'normal' && state !== 'failed'
+  // A rate limit keeps the field: its line, the server's words and the countdown, stands where you type (Flow 5 F-A).
+  const slow = state === 'ratelimited'
+  const locked = state !== 'normal' && state !== 'failed' && !slow
   const shape: StyleProp<ViewStyle> = [
     styles.bar,
     { borderRadius: reply || locked ? RADIUS.sheet : RADIUS.button },
@@ -163,6 +163,8 @@ export function Composer({
               onFocus={onFocus}
               onAttach={onAttach}
               pressed={previewState === 'pressed'}
+              slow={slow ? { line: reason ?? `${LOCKED.ratelimited.title}. ${LOCKED.ratelimited.body}`, countdown } : undefined}
+              testID={testID && `${testID}-field`}
             />
             {state === 'failed' ? <Failed onRetry={onRetry} /> : null}
           </>
@@ -180,6 +182,8 @@ function spokenState(state: ComposerState, reason?: string) {
   if (state === 'failed') return 'Not sent. Tap to retry'
   if (state === 'normal' || state === 'banned' || state === 'left' || state === 'ended') return null
   const { title, body } = LOCKED[state]
+  // A rate limit's own sentence already says it ("Slow down a moment, then try again.").
+  if (state === 'ratelimited' && reason) return reason
   const said = reason ?? body
   return said ? `${title}. ${said}` : title
 }
@@ -223,16 +227,23 @@ function Field({
   onFocus,
   onAttach,
   pressed,
-}: Pick<ComposerProps, 'value' | 'onChangeText' | 'onSend' | 'onFocus' | 'onAttach'> & { placeholder: string; pressed: boolean }) {
+  slow,
+  testID,
+}: Pick<ComposerProps, 'value' | 'onChangeText' | 'onSend' | 'onFocus' | 'onAttach' | 'testID'> & {
+  placeholder: string
+  pressed: boolean
+  /** Rate-limited: this line in place of the field until it lifts, and nothing to send. */
+  slow?: { line: string; countdown?: string }
+}) {
   const android = Platform.OS === 'android'
   const bold = useBoldText()
   const [down, setDown] = useState(false)
-  const lit = value.trim().length > 0
+  const lit = !slow && value.trim().length > 0
   const square = android && (down || pressed)
 
   return (
     <>
-      <View style={[styles.row, onAttach && styles.rowAttach]}>
+      <View testID={testID} style={[styles.row, onAttach && styles.rowAttach]}>
         {onAttach ? (
           <Pressable
             onPress={onAttach}
@@ -244,13 +255,28 @@ function Field({
             <Icon name="image" size={ICON.control} color={COLOR.textSecondary} />
           </Pressable>
         ) : null}
+        {/* Over the empty field, where the placeholder was: the keyboard stays up and the next message can be typed. */}
+        {slow && !value ? (
+          <View pointerEvents="none" style={[styles.slow, onAttach && styles.slowAttach]}>
+            <Text
+              accessibilityHint={slow.countdown ? `You can post again in ${slow.countdown}` : undefined}
+              maxFontSizeMultiplier={MAX_FONT_SCALE.note}
+              numberOfLines={2}
+              style={[font('note', bold), styles.secondary]}
+            >
+              {slow.line}
+              {slow.countdown ? ' ' : null}
+              {slow.countdown ? <Text style={[font('note', bold, FONT_FAMILY.mono[500]), styles.primary]}>{slow.countdown}</Text> : null}
+            </Text>
+          </View>
+        ) : null}
         <TextInput
           value={value}
           onChangeText={onChangeText}
           onFocus={onFocus}
           multiline
           maxLength={MAX_LENGTH}
-          placeholder={placeholder}
+          placeholder={slow ? undefined : placeholder}
           placeholderTextColor={COLOR.textSecondary}
           accessibilityLabel="Message"
           // The field is a control, as a TextField's input is: one line centred on the Send disc, five lines then it scrolls.
@@ -371,6 +397,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   idle: { backgroundColor: MATERIAL.fillOnGlass },
+  // Centred on the Send disc, as the field's one line is.
+  slow: { position: 'absolute', left: SPACE.lg, right: SIZE.circleButton + SPACE.sm + (SIZE.input - SIZE.circleButton) / 2, top: 0, bottom: 0, justifyContent: 'center' },
+  slowAttach: { left: SPACE.xs + ATTACH + SPACE.sm },
   pressedIos: { transform: [{ scale: PRESS.scaleDisc }] },
   wash: { backgroundColor: PRESSED_WASH.android },
   counter: { alignSelf: 'flex-end', color: COLOR.textSecondary, paddingHorizontal: SPACE.lg, paddingBottom: SPACE.sm },

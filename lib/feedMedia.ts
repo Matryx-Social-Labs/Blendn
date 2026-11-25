@@ -13,32 +13,63 @@
  * So a clip is simply the first `video` row, and this file is the one place
  * that decides what "first" means.
  *
- * ## The poster is never allowed to be missing
+ * ## A still is never missing; a clip's poster may be
  *
- * A card whose video is still buffering shows its poster, so a poster that is
- * `null` is a black rectangle for the length of a network round trip. The
- * fallback chain is the clip's own `thumbnail_url`, then the event's
- * `cover_image_url`, then nothing — and "nothing" means this returns no clip at
- * all rather than a clip that will flash black.
- *
- * That last rule is the one worth stating out loud: **we would rather show a
- * still event than a broken-looking one.** An organiser who uploads a video and
- * no poster gets their photograph, not a black card, and the upload path is
- * where that should be fixed rather than here.
+ * `feedPoster` (a card's still) falls back from the cover to any image to a
+ * clip's thumbnail, so a card is never blank. `feedPlaylist` gives a clip only
+ * its own `thumbnail_url` as a poster, never the cover: a poster at another
+ * ratio shows around a letterboxed clip (SCRUM-1066). The upload path is where
+ * a missing first-frame poster should be fixed, not here.
  */
+
+import { mediaFocus, mediaSize, type Focus, type Rendition, type Size } from './mediaFit'
 
 export interface EventMediaItem {
   id?: string
   url?: string | null
   thumbnail_url?: string | null
+  /** The detail route's spelling (`events/[eventId]/route.ts`); the list sends `thumbnail_url` (ROOM-12). */
+  thumbnailUrl?: string | null
   type?: string | null
   order?: number | null
+  /** Pixels as displayed, both or neither; null on pasted URLs and rows from before 2026-11-24 (task 20). */
+  width?: number | null
+  height?: number | null
+  /** A clip's length: the list spells it `duration_ms`, the detail `durationMs`. */
+  duration_ms?: number | null
+  durationMs?: number | null
+  /** The organizer's focal point, 0–1, both or neither (task 30): list snake, detail camel. */
+  focal_x?: number | null
+  focal_y?: number | null
+  focalX?: number | null
+  focalY?: number | null
+  /** A checked clip's copies, smallest first (task 30); the same name on both routes. */
+  renditions?: Rendition[] | null
 }
+
+/** What the server knows about one item: only what it sent, so an old row reads exactly as before (`lib/mediaFit`). */
+type MediaFacts = { size?: Size; focus?: Focus }
 
 /** One thing a card can show. */
 export type FeedMediaItem =
-  | { kind: 'image'; url: string }
-  | { kind: 'video'; url: string; posterUrl: string }
+  | ({ kind: 'image'; url: string } & MediaFacts)
+  /** `posterUrl`: the clip's own still (`thumbnail_url`), or null: never the event's cover (SCRUM-1066). */
+  | ({ kind: 'video'; url: string; posterUrl: string | null; durationMs?: number; renditions?: Rendition[] } & MediaFacts)
+
+function factsOf(m: EventMediaItem | undefined): MediaFacts {
+  if (!m) return {}
+  const size = mediaSize(m)
+  const focus = mediaFocus(m)
+  return { ...(size ? { size } : {}), ...(focus ? { focus } : {}) }
+}
+
+function clipFactsOf(m: EventMediaItem): { durationMs?: number; renditions?: Rendition[] } {
+  const durationMs = m.duration_ms ?? m.durationMs
+  return {
+    ...(typeof durationMs === 'number' && durationMs > 0 ? { durationMs } : {}),
+    ...(Array.isArray(m.renditions) && m.renditions.length ? { renditions: m.renditions } : {}),
+  }
+}
 
 /**
  * Media with a URL, by `order` rather than array position.
@@ -73,8 +104,8 @@ export function feedPoster(
   const image = sorted.find((m) => m.type === 'image')
   if (image?.url) return image.url
 
-  const withThumb = sorted.find((m) => m.thumbnail_url)
-  return withThumb?.thumbnail_url ?? null
+  const withThumb = sorted.find((m) => m.thumbnail_url || m.thumbnailUrl)
+  return withThumb?.thumbnail_url || withThumb?.thumbnailUrl || null
 }
 
 
@@ -90,12 +121,13 @@ export function feedPoster(
  * playlist that shows the same photograph twice in a row and reads as a stuck
  * carousel rather than a loop.
  *
- * ## A video with no poster is dropped, not skipped-with-a-gap
+ * ## A clip's poster is its own, or none
  *
- * The still under a player is what shows while the
- * first frame decodes, so a video we cannot poster is a black rectangle mid-loop
- * — worse in a carousel than as a static card, because it arrives while
- * somebody is already watching.
+ * The still under a player is what shows until its first frame. It is the
+ * clip's `thumbnail_url` and nothing else: the event's cover is another picture
+ * at another ratio, and in the hero's `contain` frame it showed around a
+ * letterboxed clip (SCRUM-1066). A clip added by URL has no thumbnail, so it
+ * has no poster, and the frame's own dark surface shows until it plays.
  *
  * ## Documents never appear
  *
@@ -106,25 +138,21 @@ export function feedPlaylist(
   media: readonly EventMediaItem[] | null | undefined,
   coverImageUrl?: string | null
 ): FeedMediaItem[] {
+  const sorted = Array.isArray(media) ? byOrder(media) : []
   const out: FeedMediaItem[] = []
-  if (coverImageUrl) out.push({ kind: 'image', url: coverImageUrl })
-
-  if (!Array.isArray(media)) return out
-
-  const sorted = byOrder(media)
+  // The cover is its own field with no facts of its own; when the organizer also uploaded it into media, that row's apply.
+  if (coverImageUrl) out.push({ kind: 'image', url: coverImageUrl, ...factsOf(sorted.find((m) => m.url === coverImageUrl)) })
 
   for (const m of sorted) {
     if (m.url === coverImageUrl) continue
 
     if (m.type === 'image') {
-      out.push({ kind: 'image', url: m.url as string })
+      out.push({ kind: 'image', url: m.url as string, ...factsOf(m) })
       continue
     }
 
     if (m.type === 'video') {
-      const posterUrl = m.thumbnail_url || coverImageUrl
-      if (!posterUrl) continue
-      out.push({ kind: 'video', url: m.url as string, posterUrl })
+      out.push({ kind: 'video', url: m.url as string, posterUrl: m.thumbnail_url || m.thumbnailUrl || null, ...factsOf(m), ...clipFactsOf(m) })
     }
   }
 
@@ -144,8 +172,7 @@ export function feedPlaylist(
  * Opening the event is a different act. The person has committed a tap, the
  * hero is two thirds of the screen, and the clip is the best thing the
  * organiser uploaded — so it plays first and the stills follow one by one. The
- * cover is not lost; it is the next item, and it is also the poster painted
- * under the clip while it buffers.
+ * cover is not lost; it is the next item.
  *
  * Stable otherwise: relative order is preserved for everything else, so an
  * organiser's arrangement survives apart from the one promotion.

@@ -147,7 +147,7 @@ describe('<ImageViewer>', () => {
   it('#33: travels from the bubble on M.travel; under Reduce Motion it fades', async () => {
     withSpring.mockClear()
     await render(viewer())
-    expect(withSpring).toHaveBeenCalledWith(1, expect.objectContaining({ stiffness: SPRING.travel.stiffness }))
+    expect(withSpring).toHaveBeenCalledWith(1, expect.objectContaining({ stiffness: SPRING.travel.stiffness }), undefined)
     withSpring.mockClear()
     reduceMotion.mockReturnValue(true)
     await render(viewer())

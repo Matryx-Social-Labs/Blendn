@@ -1,15 +1,12 @@
 import { router, useFocusEffect } from 'expo-router'
-import { useCallback, useEffect, useState } from 'react'
-import { AppState, Platform, StyleSheet, View } from 'react-native'
+import { useCallback } from 'react'
+import { Platform, StyleSheet, View } from 'react-native'
 
-import { apiClient } from '../../lib/apiClient'
-import { iconBadgeFor, setAppIconBadge } from '../../lib/appBadge'
-import { Logger } from '../../lib/logger'
+import { markBellRead, useInboxBadge, useRefreshInboxBadge } from '../../lib/inboxBadge'
 import { badgeLabel } from '../../lib/notificationFormat'
-import { subscribeToBell } from '../../lib/socketClient'
 import { Badge } from '../ds/MonoFamily'
 import { Icon } from '../ui/Icon'
-import { Material } from '../ui/Material'
+import { Material, useMapInk } from '../ui/Material'
 import { COLOR, SIZE, SPACE } from '../../lib/design/tokens'
 import ScalePress from '../motion/ScalePress'
 
@@ -31,25 +28,12 @@ import ScalePress from '../motion/ScalePress'
 /** The most the server counts (`unreadCount` stops at 1000). */
 const UNREAD_CAP = 1000
 
-export function NotificationBell() {
-  const [unread, setUnread] = useState(0)
-
-  /**
-   * One row is enough: the feed carries the counts beside it, and the bell asks for nothing else. The bell says
-   * `unreadCount` (its own rows, which opening it clears); the app icon says `badgeCount`, which holds the unread
-   * conversations too (`lib/appBadge`).
-   */
-  const load = useCallback(async () => {
-    try {
-      const result = await apiClient.getNotifications({ limit: 1 })
-      if (result.success && result.data) {
-        setUnread(result.data.unreadCount)
-        void setAppIconBadge(iconBadgeFor(result.data))
-      }
-    } catch (error) {
-      Logger.warn('notifications', 'count:failed', { error: error as never })
-    }
-  }, [])
+/** `onMap`: the bell floats on the home map, where the solid tier draws it ink like the drawer (`useMapInk`). */
+export function NotificationBell({ onMap = false }: { onMap?: boolean } = {}) {
+  const mapInk = useMapInk()
+  // Unseen rows that are not talk-asks: a message request, a Lobby ask or a reveal ask lights the Banter dot instead (requests placement A).
+  const { unreadCount: unread } = useInboxBadge()
+  const load = useRefreshInboxBadge()
 
   /*
    * The count whenever the tab comes into view, so the badge is right before anybody taps.
@@ -59,31 +43,16 @@ export function NotificationBell() {
    * and a rating opened, three new rows landed, and the badge kept saying 5 for the whole session. A bell
    * that polls is still the wrong answer; a bell that looks when you look at it is the cheapest right one.
    */
-  useFocusEffect(
-    useCallback(() => {
-      void load()
-    }, [load])
-  )
+  useFocusEffect(load)
 
   /*
-   * And the moment a row lands while the app is open. The server says so on your own socket room, and the
-   * bell asks the server for the count rather than adding one: it read 3 for one row on the owner's iPhone
-   * when the app held three sockets, and a re-read cannot drift that way.
+   * A row landing, a DM, and the app coming back to the front re-read the count too: one set of triggers for every reader,
+   * mounted once in the tab layout (`useInboxBadgeSync`), because this bell is mounted on three screens.
    */
-  useEffect(() => subscribeToBell(() => void load()), [load])
 
-  // And when the app comes back to the front: rows and messages landed while it was away, and the icon's number is the one thing
-  // that shows from outside, so it is re-read the moment the app is looked at.
-  useEffect(() => {
-    const sub = AppState.addEventListener('change', (next) => {
-      if (next === 'active') void load()
-    })
-    return () => sub.remove()
-  }, [load])
-
+  // Optimistic: the badge clears on tap rather than after a round trip, because opening it is what "seen" means.
   const open = useCallback(() => {
-    // Optimistic: the badge clears on tap rather than after a round trip, because opening it is what "seen" means.
-    setUnread(0)
+    markBellRead()
     router.push('/notifications')
   }, [])
 
@@ -106,7 +75,7 @@ export function NotificationBell() {
       style={[circle, styles.centre]}
       testID="notification-bell"
     >
-      <Material role="control" style={[StyleSheet.absoluteFill, { borderRadius: circle.borderRadius }]} />
+      <Material role="control" testID="notification-bell-fill" style={[StyleSheet.absoluteFill, { borderRadius: circle.borderRadius }, onMap && mapInk]} />
       <Icon name="bell" />
       {/*
         The badge fades and scales in when something is new (0 → any) and fades out when it clears (DS #28); the

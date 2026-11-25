@@ -34,11 +34,12 @@ const read = (...p: string[]) => readFileSync(join(__dirname, '..', ...p), 'utf8
 const SCREEN = () => read('app', '(tabs)', 'events.tsx')
 const SECTIONS = () => read('components', 'pulse', 'PulseSections.tsx')
 
-describe('the screen wires the Featured row in', () => {
-  it('lets a lone card fill the width', () => {
-    // The stack asks for the layout with `solo`, and a solo card is the page's width, margin to margin.
-    expect(SECTIONS()).toContain('featuredLayout(section.events.length === 1)')
-    expect(SECTIONS()).toContain('soloBleed')
+describe('the screen wires the lead card in (Option C)', () => {
+  it('is margin to margin, and as tall as the rest point leaves room for (`pulseRest`)', () => {
+    expect(SCREEN()).toContain('const leadWidth = screenWidth - 2 * SPACE.gutter')
+    expect(SCREEN()).toContain('const leadHeight = shell?.lead ?? LEAD_CARD_HEIGHT')
+    expect(SCREEN()).toContain('height={leadHeight}')
+    expect(read('components', 'home', 'HomeShell.tsx')).toContain('lead: rest.lead')
   })
 
   it('puts no margin on the list, so the row runs edge to edge without cancelling one', () => {
@@ -46,18 +47,10 @@ describe('the screen wires the Featured row in', () => {
     expect(SCREEN()).toContain('listContainer: {}')
   })
 
-  it('counts the banners above the header, which the chrome constant cannot know', () => {
-    // "You're in San Francisco — nothing here yet" pushed the card's date and
-    // venue under the bar: the fit assumed nothing sat above the header.
-    expect(SCREEN()).toContain('onLayout={setBannersHeight}')
-    expect(SCREEN().match(/bannersHeight\s*\)/g)?.length).toBeGreaterThanOrEqual(1)
-  })
-
-  it('snaps by the width it actually drew, not the unclamped one', () => {
-    // The Featured rail snaps by the drawn width plus its gap (`Rail`: interval = itemWidth + gap).
-    expect(SECTIONS()).toContain('itemWidth={layout.width}')
-    expect(SECTIONS()).toContain('gap={FEATURED_CARD_GAP}')
-    expect(read('components', 'pulse', 'Rail.tsx')).toContain('snapToInterval={interval}')
+  it('the where-you-are banners ride on the map, so a banner never pushes the card under the bar', () => {
+    // "You're in San Francisco — nothing here yet" once pushed the card's words under the bar from the list's header.
+    expect(SCREEN()).toContain('setMapBanners(placeBanners)')
+    expect(read('components', 'home', 'HomeShell.tsx')).toContain('<MapBanners')
   })
 
   it('the page still scrolls under the bar rather than stopping at it', () => {

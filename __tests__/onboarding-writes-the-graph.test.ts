@@ -22,6 +22,7 @@ jest.mock('../lib/onboardingStorage', () => ({}))
 // The photos step's blur (SCRUM-478) is photoUtils' concern; it pulls native modules this suite has none of.
 jest.mock('../lib/photoUtils', () => ({ withBlurForPrimary: jest.fn(async (body: unknown) => body) }))
 
+import { stepPayload } from '../lib/onboarding'
 import { syncInterests } from '../lib/useOnboarding'
 
 const mockApi = jest.requireMock('../lib/apiClient').apiClient as Record<
@@ -201,22 +202,17 @@ describe('syncInterests makes the server match the picker', () => {
 
 describe('"Maybe later" is an answer, and gets recorded', () => {
   it.each([
-    ['app/onboarding/notifications.tsx', 'push_enabled'],
     ['app/onboarding/location.tsx', 'share_location'],
   ])('%s records false rather than skipping', (file, field) => {
     /*
-     * Both columns are `@default(true)`, and both screens called `skip()` on
-     * the decline path — which writes progress and draft and nothing else. So
-     * the profile said this person wants push notifications and wants to share
-     * their location, when they had said neither.
-     *
-     * `notifications.tsx`'s own docstring has always claimed the opposite:
-     * "push_enabled records the answer either way." One more comment describing
-     * behaviour the code did not have.
+     * The column is `@default(true)`, and the screen called `skip()` on the
+     * decline path — which writes progress and draft and nothing else. So the
+     * profile said this person wants to share their location, when they had
+     * said no. (The notifications step had the same fault; it left the flow in
+     * Flow 2's five steps.)
      */
     const src = read(file)
-    // Directly, or through the notifications step's `answer`, which also
-    // remembers the decline so push start-up does not ask the OS.
+    // Directly, or through a step's `answer` helper.
     const direct = new RegExp(`onSecondary=\\{\\(\\) => void commit\\(\\{ ${field}: false \\}\\)\\}`)
     const viaAnswer =
       /onSecondary=\{\(\) => void answer\(false\)\}/.test(src) &&
@@ -240,5 +236,21 @@ describe('the first screen does not ask again for something already given', () =
     expect(read('app/onboarding/basics.tsx')).toMatch(
       /setName\(draft\.name \?\? user\?\.name \?\? ''\)/
     )
+  })
+})
+
+describe('the preferences step writes the intent, not free text (OUT-01)', () => {
+  /*
+   * `lib/board.ts` `profileIsComplete` needs `intent_default.length >= 1` and matching reads it. The step used to send
+   * `looking_for`, so a new account was refused its first Board post and asked "Why do you go out?" again at check-in.
+   */
+  it('sends intent_default: [choice] and no looking_for', () => {
+    const body = stepPayload('preferences', { intent_default: ['friendship'], looking_for: ['Friendship'] })
+    expect(body).toEqual({ intent_default: ['friendship'] })
+    expect('looking_for' in body).toBe(false)
+  })
+
+  it('sends nothing for the intent when none was chosen', () => {
+    expect('intent_default' in stepPayload('preferences', { reveal_by_default: false })).toBe(false)
   })
 })

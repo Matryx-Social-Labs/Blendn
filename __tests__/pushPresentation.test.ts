@@ -148,7 +148,7 @@ describe('a push for what is already on screen', () => {
 
   it('both chat screens say which thread they show', () => {
     expect(read('app', 'private-chat', '[conversationId].tsx')).toMatch(/useActiveThread\(`dm:\$\{/)
-    expect(read('app', 'chat', '[id].tsx')).toMatch(/useActiveThread\(`room:\$\{/)
+    expect(read('components', 'chat', 'RoomChat.tsx')).toMatch(/useActiveThread\(`room:\$\{/)
   })
 })
 
@@ -180,9 +180,11 @@ describe('the bell, while the app is open', () => {
     const socket = read('lib', 'socketClient.ts')
     expect(socket).toMatch(/sock\.on\("notification:new"/)
     expect(socket).toMatch(/export function subscribeToBell\(/)
-    const bell = read('components', 'pulse', 'NotificationBell.tsx')
-    expect(bell).toMatch(/subscribeToBell\(/)
+    // The bell and the tab bar share one read (`lib/inboxBadge`), which listens.
+    expect(read('app', '(tabs)', '_layout.tsx')).toMatch(/useInboxBadgeSync\(/)
+    const shared = read('lib', 'inboxBadge.ts')
+    expect(shared).toMatch(/subscribeToBell\(/)
     // The server's count, not a local +1 that duplicates would inflate.
-    expect(bell).toMatch(/subscribeToBell\(\(\) => void load\(\)\)/)
+    expect(shared).toMatch(/subscribeToBell\(\(row\) =>/)
   })
 })

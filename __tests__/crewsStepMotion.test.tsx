@@ -52,11 +52,13 @@ describe('the screen', () => {
   it('Next brings the step from the right, and going back brings it from the left', async () => {
     await render(<NewCrewScreen />)
     await fireEvent.changeText(screen.getByTestId('make-name-input'), 'Nebula')
+    await waitFor(() => screen.getByRole('checkbox', { name: 'Ask Priya' }))
+    await fireEvent.press(screen.getByRole('checkbox', { name: 'Ask Priya' }))
     await fireEvent.press(screen.getByLabelText('Next'))
-    await waitFor(() => screen.getByLabelText('Step 2 of 3, Invite friends'))
+    await waitFor(() => screen.getByLabelText('Step 2 of 2, Your crew’s vibe'))
     expect(entering()().initialValues.transform[0].translateX).toBe(24)
     await fireEvent(screen.getByTestId('make-modal'), 'requestClose')
-    await waitFor(() => screen.getByLabelText('Step 1 of 3, Name and vibe'))
+    await waitFor(() => screen.getByLabelText('Step 1 of 2, Name and friends'))
     expect(entering()().initialValues.transform[0].translateX).toBe(-24)
   })
 
@@ -64,8 +66,10 @@ describe('the screen', () => {
     mockRM = true
     await render(<NewCrewScreen />)
     await fireEvent.changeText(screen.getByTestId('make-name-input'), 'Nebula')
+    await waitFor(() => screen.getByRole('checkbox', { name: 'Ask Priya' }))
+    await fireEvent.press(screen.getByRole('checkbox', { name: 'Ask Priya' }))
     await fireEvent.press(screen.getByLabelText('Next'))
-    await waitFor(() => screen.getByLabelText('Step 2 of 3, Invite friends'))
+    await waitFor(() => screen.getByLabelText('Step 2 of 2, Your crew’s vibe'))
     expect(entering()().initialValues.transform[0].translateX).toBe(0)
   })
 

@@ -41,6 +41,14 @@ import { roomDisplayTitle } from './placeRoom'
 
 export interface RoomAttendee {
   userId: string
+  /** `displayName` is their name, not the pseudonym (admin SCRUM-1067): a face, never a creature. Absent from an older server. */
+  revealed?: boolean
+  /** Flow 5 P-A: their answer to tonight's question, for this page only (`MatchCard.tonightAnswer`). */
+  tonightAnswer?: string | null
+  /** Flow 5 P-A: why they are here (work lens), for this page only (`MatchCard.workIntent`). */
+  workIntent?: string | null
+  /** When they checked in here (`MatchCard.checkInTime`, SCRUM-1042): the sheet's "Here 40 min". Null to a host. */
+  checkInTime?: string | null
   displayName: string
   photo: string | null
   sharedInterests: string[]
@@ -73,6 +81,11 @@ export interface RoomAttendee {
   age?: number | null
   insideNow?: boolean
   youLiked?: boolean
+  /** SCRUM-1042: you waved at them here; they waved at you here (waves only, never a like). */
+  youWaved?: boolean
+  wavedAtYou?: boolean
+  /** The conversation your mutual here opened (Say hi), or null. */
+  conversationId?: string | null
   /** Matching v2: display-only shared lines, the sign chip and badges (see `MatchCard`). */
   overlaps?: Overlap[]
   sign?: string | null

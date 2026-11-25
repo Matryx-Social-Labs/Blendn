@@ -77,6 +77,11 @@ describe('applyArrival', () => {
     expect(next.hereCount).toBe(4)
   })
 
+  it('carries whether the arrival is named, and a pseudonym otherwise (SCRUM-1067)', () => {
+    expect(applyArrival(room(), arrival('c', { userName: 'Vikram', revealed: true }), ME).attendees[0]).toMatchObject({ name: 'Vikram', revealed: true })
+    expect(applyArrival(room(), arrival('c', { userImage: 'https://x/c.jpg' }), ME).attendees[0]).toMatchObject({ revealed: false })
+  })
+
   it("prefers the server’s count to +1", () => {
     expect(applyArrival(room(), arrival('c', { hereCount: 40 }), ME).hereCount).toBe(40)
   })
@@ -180,14 +185,22 @@ describe('attendeeFromMatch', () => {
         sharedPlans: 1,
         age: null,
         insideNow: true,
-        youLiked: false,
+        youLiked: true,
+        youWaved: true,
+        wavedAtYou: false,
+        conversationId: 'c-mutual',
         overlaps: [{ kind: 'ipl', text: 'Both CSK — in RCB country 💛' }],
         sign: 'Leo ♌',
         badges: [{ kind: 'regular_here', label: 'Regular here' }],
+        tonightAnswer: 'A map of quiet cafés',
+        checkInTime: '2026-11-12T11:08:04.967Z',
+        revealed: true,
       })
     ).toEqual({
       user_id: 'u',
       name: 'Blue Heron',
+      // The server says whether `name` is theirs (SCRUM-1067): the face decides from this, never from the photo.
+      revealed: true,
       profile_photos: undefined,
       interests: ['Jazz'],
       sharedIntents: ['dating'],
@@ -197,15 +210,31 @@ describe('attendeeFromMatch', () => {
       sharedPlans: 1,
       age: undefined,
       insideNow: true,
-      youLiked: false,
+      // Waves only: an installed build's hidden like is never carried (SCRUM-1042).
+      youWaved: true,
+      wavedAtYou: false,
+      // The conversation the mutual opened (SCRUM-1042): Say hi reaches it after a restart.
+      conversationId: 'c-mutual',
       overlaps: [{ kind: 'ipl', text: 'Both CSK — in RCB country 💛' }],
       sign: 'Leo ♌',
       badges: [{ kind: 'regular_here', label: 'Regular here' }],
+      tonightAnswer: 'A map of quiet cafés',
+      workIntent: null,
+      checkInTime: '2026-11-12T11:08:04.967Z',
     })
   })
 
   it('reads an older server with no matching v2 fields as none of them', () => {
     const a = attendeeFromMatch({ userId: 'u', displayName: 'Blue Heron', photo: null, sharedInterests: [] })
-    expect([a.overlaps, a.sign, a.badges]).toEqual([[], null, []])
+    expect([a.overlaps, a.sign, a.badges, a.checkInTime, a.youWaved, a.wavedAtYou, a.conversationId, a.revealed]).toEqual([
+      [],
+      null,
+      [],
+      null,
+      false,
+      false,
+      null,
+      false,
+    ])
   })
 })

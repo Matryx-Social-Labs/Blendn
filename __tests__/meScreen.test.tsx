@@ -2,7 +2,7 @@
  * The Me tab on the design system (Flow 6 `me`): its states render, its circles go where the frame puts them, and the entrance
  * is the DS list-enter (28 ms apart, capped), not the old 70 ms × 9.
  */
-import { SHOWS_UP_TITLE } from '../components/profile/MeBadges'
+import { SHOWN_TO_NOBODY } from '../components/profile/MeBadges'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native'
 import { AccessibilityInfo, Platform, StyleSheet } from 'react-native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
@@ -49,6 +49,8 @@ import { SIZE, SPACE } from '../lib/design/tokens'
 import { queryCache } from '../lib/queryCache'
 import * as FadeInUpModule from '../components/motion/FadeInUp'
 import { noteReturn } from '../lib/backFromBackground'
+import { resetFriendRequests } from '../lib/friendRequests'
+import { resetCrewInvites } from '../lib/crewInvites'
 /* eslint-enable import/first */
 
 const api = apiClient as jest.Mocked<typeof apiClient>
@@ -72,6 +74,9 @@ afterEach(async () => {
 beforeEach(() => {
   jest.clearAllMocks()
   queryCache.invalidate('')
+  // Me reads the one shared list of each ask (requests placement A): each test starts them from nothing.
+  resetFriendRequests()
+  resetCrewInvites()
 })
 
 it('draws the frame: name, circles, requests, crews with its count and dot, stats, nights', async () => {
@@ -81,17 +86,48 @@ it('draws the frame: name, circles, requests, crews with its count and dot, stat
   await screen.findByLabelText('Sam, 28')
   expect(screen.getByLabelText('Settings')).toBeTruthy()
   expect(screen.getByLabelText('Add friends')).toBeTruthy()
-  await waitFor(() => expect(screen.getByLabelText('2 friend requests')).toBeTruthy())
+  // Flow 7 6-A: Friends is a row in the group, the whole count and the requests in its name; no Friends stat.
+  await waitFor(() => expect(screen.getByLabelText('Friends, 9, 2 friend requests')).toBeTruthy())
+  expect(screen.getByText('2 friend requests')).toBeTruthy()
   await waitFor(() => expect(screen.getByLabelText('Crews, 2, 1 invite waiting')).toBeTruthy())
   expect(screen.getByTestId('crews-invite-dot', { includeHiddenElements: true })).toBeTruthy()
-  expect(screen.getByLabelText('14 Nights')).toBeTruthy()
-  expect(screen.getByLabelText('9 Friends')).toBeTruthy()
+  // A 01: no stats card; the count is Nights out's heading.
+  expect(screen.queryByTestId('stats-card')).toBeNull()
+  expect(screen.queryByLabelText('9 Friends')).toBeNull()
   await screen.findByTestId('nights-grid')
-  // What you entered stays visible on your own page: occupation under the name, education under About.
-  expect(screen.getByText('Product designer')).toBeTruthy()
+  // What you entered stays visible on your own page: your job and education under About.
+  expect(screen.getByLabelText('work, Product designer')).toBeTruthy()
   expect(screen.getByLabelText('education, NID Ahmedabad')).toBeTruthy()
   // Hosted is left out at zero.
   expect(screen.queryByLabelText(/Hosted/)).toBeNull()
+})
+
+const ONE_NIGHT = { success: true, data: { events: [{ id: 'e1', title: 'Vinyl Night', start_time: '2020-01-01T20:00:00Z', end_time: '2020-01-01T23:00:00Z', cover_image_url: null }] } }
+
+it('Saved is a line under Nights out: the server savedCount (upcoming, not deleted), not the lifetime favourites', async () => {
+  api.getPublicProfile.mockResolvedValue({ ...PROFILE, data: { ...PROFILE.data, stats: { eventsAttended: 14, eventsFavorited: 6, savedCount: 2, eventsOrganized: 0 } } } as never)
+  api.getMyAttendance.mockResolvedValue(ONE_NIGHT as never)
+  await render(<Profile />)
+  expect(await screen.findByText('2 saved · in Going')).toBeTruthy()
+  expect(screen.queryByText('6 saved · in Going')).toBeNull()
+})
+
+it('Saved falls back to eventsFavorited from a server that sends no savedCount', async () => {
+  api.getPublicProfile.mockResolvedValue(PROFILE as never)
+  api.getMyAttendance.mockResolvedValue(ONE_NIGHT as never)
+  await render(<Profile />)
+  expect(await screen.findByText('6 saved · in Going')).toBeTruthy()
+})
+
+it('no "0 SAVED" (device bug, A 01): nothing saved and nothing hosted say nothing', async () => {
+  api.getPublicProfile.mockResolvedValue({ ...PROFILE, data: { ...PROFILE.data, stats: { eventsAttended: 14, eventsFavorited: 0, savedCount: 0, eventsOrganized: 0 } } } as never)
+  api.getMyAttendance.mockResolvedValue(ONE_NIGHT as never)
+  await render(<Profile />)
+  await screen.findByTestId('nights-grid')
+  // Negative control: the old StatsCard drew "0" over "Saved" here.
+  expect(screen.queryByText(/^0\b/)).toBeNull()
+  expect(screen.queryByText(/saved/i)).toBeNull()
+  expect(screen.queryByText(/hosted/i)).toBeNull()
 })
 
 it('says the first night is not written yet when there is none, never an empty grid', async () => {
@@ -213,7 +249,7 @@ describe('what GET /profiles/:you adds (blendn-admin #716): badges and photos ta
     expect(screen.getByText('When 80%+ of your RSVPs turn into nights, 3 or more')).toBeTruthy()
   })
 
-  describe('Blend’n+ on Me and the "Shows up" switch (Flow 14 R4.1 · Me 01 to 03)', () => {
+  describe('Blend’n+ on Me, sold once and last (Me + settings A 01)', () => {
     it('says Blend’n+ with the store’s price when you have not got it; one tap goes to the paywall as asked for', async () => {
       await mount({ success: true, data: { profile: { badges } } })
       await screen.findByTestId('me-plus-row')
@@ -222,12 +258,36 @@ describe('what GET /profiles/:you adds (blendn-admin #716): badges and photos ta
       expect(mockOpenPaywall).toHaveBeenCalledWith('profile', { userInitiated: true })
     })
 
-    it('sits under the stats and above Nights out, with the badges under Nights out', async () => {
+    it('an ungated city (prod, owner ruling 2026-11-18: the app is free): no Blend’n+ row, no launch line, no way to the paywall', async () => {
+      ;(api.getMyPlus as jest.Mock).mockResolvedValue({ success: true, data: { active: false, gated: false, product: null, source: null, expiresAt: null } })
+      await mount({ success: true, data: { profile: { badges } } })
+      await screen.findByTestId('me-badges')
+      await waitFor(() => expect(api.getMyPlus).toHaveBeenCalled())
+      expect(screen.queryByTestId('me-plus-row')).toBeNull()
+      expect(screen.queryByText(/Blend’n\+|Free during launch/)).toBeNull()
+      expect(mockOpenPaywall).not.toHaveBeenCalled()
+      ;(api.getMyPlus as jest.Mock).mockResolvedValue({ success: true, data: { active: false, gated: true, product: null, source: null, expiresAt: null } })
+    })
+
+    it('is the last thing on Me: Nights out, the badges, About, then Blend’n+', async () => {
       await mount({ success: true, data: { profile: { badges } } })
       await screen.findByTestId('me-badges')
       await screen.findByTestId('nights-first')
-      // In the order they are drawn (R4.1 · Me 01 to 03): the Blend’n+ row, Nights out, then the badges under them.
-      expect(screen.getAllByTestId(/^(me-plus-row|me-badges|nights-first)$/).map((n) => n.props.testID)).toEqual(['me-plus-row', 'nights-first', 'me-badges'])
+      // The row waits for the Plus status (it shows only where Blend’n+ is sold).
+      await screen.findByTestId('me-plus-row')
+      expect(screen.getAllByTestId(/^(me-plus-row|me-badges|nights-first|about)$/).map((n) => n.props.testID)).toEqual(['nights-first', 'me-badges', 'about', 'me-plus-row'])
+    })
+
+    it('a free account with nights held is sold Blend’n+ once: the row, never again inside Nights out (device bug)', async () => {
+      api.getPublicProfile.mockResolvedValue(PROFILE as never)
+      api.getMyAttendance.mockResolvedValue({ success: true, data: { ...ONE_NIGHT.data, lockedCount: 4, total: 5 } } as never)
+      api.getProfile.mockResolvedValue({ success: true, data: { profile: { badges } } } as never)
+      await render(<Profile />)
+      await screen.findByTestId('nights-grid')
+      await screen.findByTestId('me-plus-row')
+      // Negative control: Nights out's old "See Blend’n+" button is a second sell and fails this.
+      expect(screen.queryByText('See Blend’n+')).toBeNull()
+      expect(screen.getAllByTestId('me-plus-row')).toHaveLength(1)
     })
 
     it('with Plus on, the line is the renewal', async () => {
@@ -235,37 +295,28 @@ describe('what GET /profiles/:you adds (blendn-admin #716): badges and photos ta
       await mount({ success: true, data: { profile: { badges } } })
       expect(await screen.findByText(/^Renews 3 Jan 2027 · App Store$/)).toBeTruthy()
     })
-
-    it('draws the switch on the card, on by what the profile says, and a tap writes it at once', async () => {
-      ;(api.updateProfile as jest.Mock).mockResolvedValue({ success: true })
-      await mount({ success: true, data: { profile: { badges, shows_up_badge: true } } })
-      const row = await screen.findByTestId('me-shows-up')
-      expect(screen.getByText('When 80%+ of your RSVPs turn into nights, 3 or more')).toBeTruthy()
-      // D-L31. Negative control: the old "Show “Shows up”" title fails this.
-      expect(screen.getByText(SHOWS_UP_TITLE)).toBeTruthy()
-      await fireEvent.press(row)
-      await waitFor(() => expect(api.updateProfile).toHaveBeenCalledWith('me', { shows_up_badge: false }))
-      expect(await screen.findByText('Off · earned, not shown')).toBeTruthy()
-    })
-
-    it('a refused write puts the switch back and says so under it', async () => {
-      ;(api.updateProfile as jest.Mock).mockResolvedValue({ success: false, error: 'no' })
-      await mount({ success: true, data: { profile: { badges, shows_up_badge: true } } })
-      await fireEvent.press(await screen.findByTestId('me-shows-up'))
-      expect(await screen.findByText('Couldn’t save that. Try again.')).toBeTruthy()
-    })
-
-    it('no switch when the profile did not say (an older server)', async () => {
-      await mount({ success: true, data: { profile: { badges } } })
-      await screen.findByTestId('me-badges')
-      expect(screen.queryByTestId('me-shows-up')).toBeNull()
-    })
   })
 
   it('none earned yet is a sentence and no pills, and nothing to unlock', async () => {
     await mount({ success: true, data: { profile: { badges: [] } } })
     expect(await screen.findByText(/Badges come from your check-ins/)).toBeTruthy()
     expect(screen.queryByLabelText(/^Badge:/)).toBeNull()
+  })
+
+  describe('the badge switches live in Edit about you only (A 04): Me draws chips and says where to change them', () => {
+    it('badges off: the earned chips, "shown to nobody" and where to change it, and no switch on Me', async () => {
+      await mount({ success: true, data: { profile: { show_badges: false, earned_badges: badges } } })
+      expect(await screen.findByTestId('me-badges')).toBeTruthy()
+      expect(screen.getByLabelText('Badge: Shows up')).toBeTruthy()
+      expect(screen.getByText(SHOWN_TO_NOBODY)).toBeTruthy()
+      expect(screen.queryByTestId('me-show-badges')).toBeNull()
+      expect(screen.queryByTestId('me-shows-up')).toBeNull()
+    })
+
+    it('an older server with badges off sends neither badges nor earned_badges: the card still says so', async () => {
+      await mount({ success: true, data: { profile: { show_badges: false } } })
+      expect(await screen.findByText(SHOWN_TO_NOBODY)).toBeTruthy()
+    })
   })
 
   it('draws no Badges card when the server sent none (badges off, or an older server)', async () => {
@@ -326,5 +377,32 @@ describe('what GET /profiles/:you adds (blendn-admin #716): badges and photos ta
     expect(screen.queryByTestId('me-badges')).toBeNull()
     expect(screen.queryByTestId('me-photo-pulled')).toBeNull()
     expect(screen.getByLabelText('Sam, 28')).toBeTruthy()
+  })
+})
+
+/*
+ * Flow 7 6-A: the Friends row draws three faces and a compact count ("12k"), heard whole ("12,480"); with none it says no number
+ * at all, never "0 FRIENDS". Negative control: the old stat card's "0 Friends" fails the second.
+ */
+describe('the Friends row', () => {
+  const people = ['Aarav Menon', 'प्रियंका शर्मा', 'Marc-André Lefebvre-Desrosiers', 'Diya Thomas'].map((name, i) => ({ userId: `f${i}`, name, photo: null, since: '2026-11-01T00:00:00Z' }))
+
+  it('12,480 friends: three faces, 12k to the eye and 12,480 to a screen reader', async () => {
+    api.getPublicProfile.mockResolvedValue(PROFILE as never)
+    api.getFriends.mockResolvedValue({ success: true, data: { count: 100, friends: people, pagination: { limit: 100, hasMore: true, nextCursor: 'c', totalCount: 12480 } } } as never)
+    await render(<Profile />)
+    await waitFor(() => expect(screen.getByLabelText(/^Friends, 12,480/)).toBeTruthy())
+    expect(screen.getByText('12k', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.queryByText('12,480', { includeHiddenElements: true })).toBeNull()
+  })
+
+  it('no friends: the row says Friends and no number', async () => {
+    api.getPublicProfile.mockResolvedValue(PROFILE as never)
+    api.getFriends.mockResolvedValue({ success: true, data: { count: 0, friends: [] } } as never)
+    await render(<Profile />)
+    await waitFor(() => expect(screen.getByTestId('friends-row')).toBeTruthy())
+    await act(async () => {})
+    expect(screen.queryByText('0', { includeHiddenElements: true })).toBeNull()
+    expect(screen.queryByLabelText(/0 Friends|Friends, 0/)).toBeNull()
   })
 })

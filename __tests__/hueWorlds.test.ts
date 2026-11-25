@@ -16,9 +16,12 @@ const ROSE = [
   'app/crews/invite/[crewId].tsx',
   'app/friends/index.tsx',
   'app/room/friends-here.tsx',
+  // Waved at you (Wave PR (b)): rose, as the Room and the Banter it opens over.
+  'app/waves/[eventId].tsx',
   'app/friends/add.tsx',
   'app/friends/requests.tsx',
   'app/friends/[userId].tsx',
+  'app/c/[token].tsx',
   'app/f/[token].tsx',
   'app/notifications.tsx',
   'app/(tabs)/chat.tsx',
@@ -27,8 +30,10 @@ const ROSE = [
   'app/board/[eventId].tsx',
   'app/private-chat/[conversationId].tsx',
   'app/rate/[eventId].tsx',
+  // A person's "You've both been to" (SCRUM-1042): rose, as the person's page it opens from.
+  'app/shared-events/[id].tsx',
   'components/blendn/BlendnScreen.tsx',
-  'app/chat/[id].tsx',
+  'components/chat/RoomChat.tsx',
   'app/chat-info/[id].tsx',
   'components/PresenceSheets.tsx',
 ]
@@ -41,6 +46,10 @@ const CARRIED: Record<string, string> = {
   'components/plus/TonightHost.tsx': '<HueProvider value="violet">',
   // A person's page is rose; your own is violet, you (rc7 D11). One provider, its value picked by whose page it is.
   'app/user/[id].tsx': '<HueProvider value={profileHue(own)}>',
+  // The photo warning in the rose Lobby's compose sheet is about you (C-A `cA-anon`: violet, Use it lit violet).
+  'components/board/ComposePhoto.tsx': '<HueProvider value="violet">',
+  // The Lobby is rose wherever it shows (P-A on the ember event page: Post something lit rose, `pA-rest`).
+  'components/board/LobbyPreview.tsx': '<HueProvider value="rose">',
 }
 /** Going out: ember is the default, so none of these sets a hue. */
 const EMBER = [

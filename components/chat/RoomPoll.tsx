@@ -34,6 +34,7 @@ export function RoomPoll({
   eventId,
   pollId,
   question,
+  host,
   viewable = true,
   onRoomRefusal,
   testID,
@@ -41,6 +42,8 @@ export function RoomPoll({
   eventId: string
   pollId: string
   question: string
+  /** The host's public name, as the message carries it (the server names the org, never a person). */
+  host?: string
   /** The row is on screen: the first read waits for this. */
   viewable?: boolean
   onRoomRefusal?: (reason: PollRefusal) => void
@@ -114,6 +117,7 @@ export function RoomPoll({
       picked={view.picked}
       closed={view.closed}
       withheldLine={view.withheldLine}
+      host={host}
       onVote={view.closed ? undefined : (i) => void vote(i)}
     />
   )

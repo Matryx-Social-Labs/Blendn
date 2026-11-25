@@ -31,7 +31,10 @@ jest.mock('react-native-gesture-handler', () => ({
   ...jest.requireActual('react-native-gesture-handler'),
   GestureDetector: ({ children }: { children: React.ReactNode }) => children,
 }))
-jest.mock('expo-router', () => ({ router: { push: jest.fn(), navigate: jest.fn(), back: jest.fn(), replace: jest.fn() } }))
+jest.mock('expo-router', () => ({
+  router: { push: jest.fn(), navigate: jest.fn(), back: jest.fn(), replace: jest.fn() },
+  useFocusEffect: (effect: () => void | (() => void)) => require('react').useEffect(effect, [effect]),
+}))
 jest.mock('../lib/logger', () => ({
   Logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn(), journey: jest.fn() },
 }))
@@ -123,14 +126,15 @@ jest.mock('../components/blendn/RoomStage', () => {
   const { forwardRef } = jest.requireActual('react')
   return {
     RoomStage: forwardRef(({ children }: { children: React.ReactNode }, _ref: unknown) => children),
-    useStageScroll: () => ({ onScroll: undefined, native: {}, scrollEventThrottle: 16 }),
-    useStage: () => ({ scrollY: mockScrollY, pan: {} }),
+    useStageScroll: () => ({ onScroll: undefined, native: {}, scrollEventThrottle: 16, scrolled: false, atTop: () => {} }),
+    useStage: () => ({ scrollY: mockScrollY, pan: {}, setDragToClose: () => {} }),
   }
 })
 jest.mock('../components/blendn/RoomSections', () => ({
   faceOf: () => ({ kind: 'creature', pseudonym: 'Night Cat' }),
   RoomSkeleton: () => null,
-  useNow: () => Date.now(),
+  // Still between ticks, as the real hook is: a fresh Date.now() per render never settles the meet-next latch (frontCardPass.test.tsx).
+  useNow: () => jest.requireActual('react').useState(Date.now)[0],
   useGridCell: () => 100,
 }))
 /* The Room, counting its mounts: the one pre-mounted under the pour must be the one that stays. */
@@ -166,7 +170,7 @@ const { mockRoomLoads, mockRoomReset, mockRoomReadyUnsettled } = jest.requireMoc
 const submit = submitCheckIn as jest.Mock
 const HIDDEN = { includeHiddenElements: true }
 const advance = (ms: number) => act(async () => jest.advanceTimersByTime(ms))
-const fresh = (askIntent: boolean): CheckInOutcome => ({ kind: 'checkedIn', checkInId: 'c1', askIntent, revealSuggestion: false })
+const fresh = (askIntent: boolean): CheckInOutcome => ({ kind: 'checkedIn', checkInId: 'c1', askIntent, revealSuggestion: false, left: [] })
 const roomShowing = () => screen.queryByTestId('room', HIDDEN) !== null
 const tonightShowing = () => screen.queryByTestId('tonight', HIDDEN) !== null
 /** The pre-mounted Room laid out on the native side: the hand-off waits for this, as on a device. */

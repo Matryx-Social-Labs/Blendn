@@ -4,7 +4,6 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { subscribeCheckInChanged } from '../../lib/checkIn'
 import {
   blendWith,
-  CREW_REPORT_REASONS,
   crewMessage,
   likeAs,
   mergeCrewPage,
@@ -14,14 +13,22 @@ import {
   type CrewCard,
   type CrewsAtEvent,
 } from '../../lib/crews'
+import { blockCrewSheet, reportCrewSheet } from '../../lib/crewSafety'
 import { crewsApi } from '../../lib/crewsApi'
+import { onOpenedToCrews } from '../../lib/crewWaveBack'
 import { isOrganiserSuspended } from '../../lib/noLongerAvailable'
+import { ignoreCrewWaves } from '../../lib/roomWaves'
 import { showSheet } from '../../lib/sheet'
-import type { TellState } from '../ds/CrewStrip'
 import { useToast } from '../Toast'
 
 /** A page of cards: the server's default, well under its 50. */
 const PAGE = 30
+/**
+ * A crewmate who holds after you is named on your strip without leaving the room (4-A3): a rise in the room's count re-reads,
+ * once a window and trailing, so the last of a burst is read too. Only for someone with a crew -- a room of thousands
+ * filling up costs everyone else nothing.
+ */
+export const CREW_ARRIVALS_RELOAD_MS = 20_000
 
 export type CrewsHere =
   | { status: 'loading' }
@@ -38,6 +45,18 @@ export type CrewsHere =
  */
 const openToCrewsByCheckIn = new Map<string, boolean>()
 
+/** "Hide this crew tonight" (advisor S-A): this session only, per room; the server never hears of it. */
+const hiddenTonight = new Set<string>()
+const tonightKey = (eventId: string, crewId: string) => `${eventId}|${crewId}`
+/**
+ * A page as you see it: the crews you hid tonight left out, and out of the count. The server's total counts them on every
+ * page, so every hidden crew it has served this read (`served`) comes off. The paging offset stays the server's.
+ */
+function withoutHidden(eventId: string, data: CrewsAtEvent, served: ReadonlySet<string>): CrewsAtEvent {
+  const isHidden = (crewId: string) => hiddenTonight.has(tonightKey(eventId, crewId))
+  return { ...data, crews: data.crews.filter((c) => !isHidden(c.crewId)), total: Math.max(0, data.total - [...served].filter(isHidden).length) }
+}
+
 /**
  * The crews here now at this event, a page at a time (`GET /events/:id/crews`),
  * and your own crews (`GET /crews`).
@@ -47,12 +66,14 @@ const openToCrewsByCheckIn = new Map<string, boolean>()
  * starts a new generation, so a page from an older one never lands on top of
  * it; a new event starts over.
  */
-export function useCrewsHere(eventId: string | null) {
+export function useCrewsHere(eventId: string | null, hereCount?: number) {
   const [state, setState] = useState<CrewsHere>({ status: 'loading' })
   const [mine, setMine] = useState<Crew[] | null>(null)
   const [loadingMore, setLoadingMore] = useState(false)
   const [pageFailed, setPageFailed] = useState(false)
   const generation = useRef(0)
+  /** Every crew the server has listed since the last reload, hidden ones included (`withoutHidden`). */
+  const served = useRef<ReadonlySet<string>>(new Set())
 
   const reload = useCallback(async () => {
     if (!eventId) return
@@ -66,9 +87,28 @@ export function useCrewsHere(eventId: string | null) {
       setState({ status: isOrganiserSuspended(page) ? 'gone' : page.errorCode === 'NOT_CHECKED_IN' ? 'not_here' : 'error' })
       return
     }
-    const data = page.data
-    setState({ status: 'ready', data: { ...data, crews: mergeCrewPage([], data.crews, 0) }, offset: nextCrewOffset(0, data.crews) })
+    served.current = new Set(page.data.crews.map((c) => c.crewId))
+    const data = withoutHidden(eventId, page.data, served.current)
+    setState({ status: 'ready', data: { ...data, crews: mergeCrewPage([], data.crews, 0) }, offset: nextCrewOffset(0, page.data.crews) })
   }, [eventId])
+
+  /** A card that goes for you (hidden tonight, or blocked): out of the list and the count. */
+  const drop = useCallback((crewId: string) => {
+    setState((prev) =>
+      prev.status === 'ready' && prev.data.crews.some((c) => c.crewId === crewId)
+        ? { ...prev, data: { ...prev.data, crews: prev.data.crews.filter((c) => c.crewId !== crewId), total: Math.max(0, prev.data.total - 1) } }
+        : prev
+    )
+  }, [])
+
+  const hideTonight = useCallback(
+    (crewId: string) => {
+      if (!eventId) return
+      hiddenTonight.add(tonightKey(eventId, crewId))
+      drop(crewId)
+    },
+    [eventId, drop]
+  )
 
   // A different event is a different room: nothing of the last one carries over.
   // (Adjusted in render, on the change itself; the reload below starts a new generation.)
@@ -87,6 +127,27 @@ export function useCrewsHere(eventId: string | null) {
   )
   useEffect(() => subscribeCheckInChanged(() => void reload()), [reload])
 
+  const hasCrew = !!mine?.length
+  const lastCount = useRef(hereCount)
+  const arrivalTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    const rose = hereCount !== undefined && lastCount.current !== undefined && hereCount > lastCount.current
+    lastCount.current = hereCount
+    if (!rose || !hasCrew || arrivalTimer.current) return
+    arrivalTimer.current = setTimeout(() => {
+      arrivalTimer.current = null
+      void reload()
+    }, CREW_ARRIVALS_RELOAD_MS)
+  }, [hereCount, hasCrew, reload])
+  // A different room (or leaving) drops a read still waiting for the last one.
+  useEffect(
+    () => () => {
+      if (arrivalTimer.current) clearTimeout(arrivalTimer.current)
+      arrivalTimer.current = null
+    },
+    [reload]
+  )
+
   const loadMore = useCallback(async () => {
     if (!eventId || state.status !== 'ready' || !state.data.hasMore || loadingMore) return
     const gen = generation.current
@@ -100,24 +161,26 @@ export function useCrewsHere(eventId: string | null) {
       setPageFailed(true)
       return
     }
-    const data = page.data
+    const listed = page.data.crews
+    served.current = new Set([...served.current, ...listed.map((c) => c.crewId)])
+    const data = withoutHidden(eventId, page.data, served.current)
     setState((prev) =>
       prev.status === 'ready'
-        ? { status: 'ready', data: { ...data, crews: mergeCrewPage(prev.data.crews, data.crews, offset) }, offset: nextCrewOffset(offset, data.crews) }
+        ? { status: 'ready', data: { ...data, crews: mergeCrewPage(prev.data.crews, data.crews, offset) }, offset: nextCrewOffset(offset, listed) }
         : prev
     )
   }, [eventId, state, loadingMore])
 
-  /** A like landed: the card says so without a refetch. */
+  /** A wave landed: the card says so without a refetch. */
   const markLiked = useCallback((crewId: string) => {
     setState((prev) =>
       prev.status === 'ready'
-        ? { ...prev, data: { ...prev.data, crews: prev.data.crews.map((c) => (c.crewId === crewId ? { ...c, youLiked: true } : c)) } }
+        ? { ...prev, data: { ...prev.data, crews: prev.data.crews.map((c) => (c.crewId === crewId ? { ...c, youLiked: true, youWaved: true } : c)) } }
         : prev
     )
   }, [])
 
-  return { state, mine, reload, loadMore, loadingMore, pageFailed, markLiked }
+  return { state, mine, reload, loadMore, loadingMore, pageFailed, markLiked, drop, hideTonight }
 }
 
 export type CrewsHereState = ReturnType<typeof useCrewsHere>
@@ -142,7 +205,7 @@ export function chooseCrew(myCrews: CrewsAtEvent['myCrews'], title: string): Pro
       kind: 'actions',
       hue: 'rose',
       title,
-      message: 'Your crew chat says who liked on its behalf.',
+      message: 'Your crew chat says who waved on its behalf.',
       onDismiss: () => resolve(null),
       actions: [
         ...myCrews.map((c) => ({ label: c.name, then: () => resolve(c.crewId) })),
@@ -153,7 +216,7 @@ export function chooseCrew(myCrews: CrewsAtEvent['myCrews'], title: string): Pro
 }
 
 /**
- * Liking and reporting a card, and "We're here" — the Crews view's writes.
+ * Liking and reporting a card — the Crews view's writes.
  * Each guarded by a ref, so a fast second tap sends nothing. `onBlend` plays
  * the Blend moment when a like makes one (Flow 10 · 10.8); without it the
  * Blend opens directly.
@@ -165,29 +228,14 @@ export function useCrewActions(
 ) {
   const { showToast } = useToast()
   const [liking, setLiking] = useState<string | null>(null)
-  /** "We're here" per crew (Flow 10 · 10.6, CrewStrip): on its way, told, or already told tonight. */
-  const [told, setTold] = useState<Record<string, TellState>>({})
-  const inFlight = useRef(false)
-  const { markLiked, reload } = crews
+  // A like waiting on its choose-a-crew sheet sends nothing more on a fast second tap.
+  const likeInFlight = useRef(false)
+  const { markLiked, reload, drop } = crews
   const myCrewsHere = crews.state.status === 'ready' ? crews.state.data.myCrews : []
 
-  const here = async (crew: Pick<Crew, 'crewId'>) => {
-    if (!eventId || inFlight.current) return
-    inFlight.current = true
-    setTold((t) => ({ ...t, [crew.crewId]: 'sending' }))
-    const result = await crewsApi.here(crew.crewId, eventId)
-    inFlight.current = false
-    if (result.success && result.data) {
-      setTold((t) => ({ ...t, [crew.crewId]: result.data!.repeated ? 'already' : 'yes' }))
-      return
-    }
-    setTold((t) => ({ ...t, [crew.crewId]: 'no' }))
-    showToast(crewMessage(result, 'crew', 'Couldn’t tell your crew. Try again.'), 'error', { haptic: 'error' })
-  }
-
-  const like = async (card: CrewCard) => {
-    if (!eventId || inFlight.current) return
-    inFlight.current = true
+  const wave = async (card: CrewCard) => {
+    if (!eventId || likeInFlight.current) return
+    likeInFlight.current = true
     try {
       const as = likeAs(myCrewsHere)
       // The Liking-as chip's choice wins; otherwise the one crew here, or ask.
@@ -197,14 +245,14 @@ export function useCrewActions(
           : as.as === 'crew'
             ? as.crewId
             : as.as === 'choose'
-              ? await chooseCrew(myCrewsHere, `Like ${card.name} as…`)
+              ? await chooseCrew(myCrewsHere, `Wave at ${card.name} as…`)
               : undefined
       if (likeAsCrewId === undefined && as.as === 'choose' && !asCrewId) return
       setLiking(card.crewId)
-      const result = await crewsApi.likeCrew(eventId, card.crewId, asCrewId ?? undefined)
+      const result = await crewsApi.waveCrew(eventId, card.crewId, asCrewId ?? undefined)
       setLiking(null)
       if (!result.success || !result.data) {
-        showToast(crewMessage(result, 'card', 'Couldn’t send the like. Try again.'), 'error', { haptic: 'error' })
+        showToast(crewMessage(result, 'card', 'Couldn’t send the wave. Try again.'), 'error', { haptic: 'error' })
         if (result.errorCode === 'NOT_FOUND') void reload()
         return
       }
@@ -212,34 +260,26 @@ export function useCrewActions(
       if (result.data.blend) {
         if (onBlend) onBlend(result.data.blend, card, asCrewId ?? null)
         else {
-          showToast("It’s a Blend", 'success')
+          showToast("It’s a Mix", 'success')
           openBlend(result.data.blend, blendWith(card.name))
         }
       }
     } finally {
-      inFlight.current = false
+      likeInFlight.current = false
     }
   }
 
-  const report = (card: CrewCard) =>
-    showSheet({
-      kind: 'reasons',
-      hue: 'rose',
-      title: `Report ${card.name}`,
-      message: 'What’s wrong with this crew’s name or bio? Nobody in the crew is told who reported it.',
-      reasons: CREW_REPORT_REASONS.map((r) => ({ value: r.value, label: r.label })),
-      submitLabel: 'Send report',
-      run: async (reason, description) => {
-        const result = await crewsApi.report(card.crewId, {
-          reason: reason as (typeof CREW_REPORT_REASONS)[number]['value'],
-          ...(description ? { description } : {}),
-        })
-        if (!result.success) return { ok: false, error: crewMessage(result, 'card', 'Couldn’t send the report. Try again.') }
-        return { ok: true, toast: 'Thanks — our team will look at it' }
-      },
-    })
+  const report = (card: CrewCard) => showSheet(reportCrewSheet(card))
+  /** Block this crew; its card goes, and so do its waves at you. */
+  const block = (card: CrewCard) =>
+    showSheet(
+      blockCrewSheet(card, () => {
+        drop(card.crewId)
+        ignoreCrewWaves(card.crewId)
+      })
+    )
 
-  return { liking, like, report, here, told }
+  return { liking, wave, report, block }
 }
 
 export type CrewActions = ReturnType<typeof useCrewActions>
@@ -248,7 +288,8 @@ export type CrewActions = ReturnType<typeof useCrewActions>
  * "Open to joining a crew tonight": read once per check-in, written on a tap.
  * The latest tap wins — an older answer landing late never reverts it — and
  * the switch holds still while a write is in flight. A failed read keeps the
- * switch on screen (off) with a retry, rather than hiding it.
+ * switch on screen (off) with a retry, rather than hiding it; the retry steps
+ * aside while a write is in flight, whose answer settles it either way.
  */
 export function useOpenToCrews(eventId: string, checkInKey: string) {
   const { showToast } = useToast()
@@ -296,14 +337,28 @@ export function useOpenToCrews(eventId: string, checkInKey: string) {
     }
   }, [eventId, key])
 
+  // Turned on from a Wave back (`askOpenToCrews`): the switch follows.
+  useEffect(
+    () =>
+      onOpenedToCrews((openedAt) => {
+        if (openedAt !== eventId) return
+        latest.current += 1
+        openToCrewsByCheckIn.set(key, true)
+        setReadFailed(false)
+        setValue(true)
+      }),
+    [eventId, key]
+  )
+
   const set = async (next: boolean) => {
     const seq = ++latest.current
     const before = value
     setValue(next)
     setBusy(true)
     const result = await crewsApi.openToCrews(eventId, next)
-    if (seq !== latest.current) return
+    // Before the latest-wins check: a retry of the read while this was in flight must not leave the switch dead (M19).
     setBusy(false)
+    if (seq !== latest.current) return
     if (!result.success || !result.data) {
       setValue(before)
       showToast(crewMessage(result, 'card', 'Couldn’t save that. Try again.'), 'error', { haptic: 'error' })
@@ -314,5 +369,6 @@ export function useOpenToCrews(eventId: string, checkInKey: string) {
     setReadFailed(false)
   }
 
-  return { value, readFailed, busy, set, read }
+  // While a write is out it is the read: a retry sent beside it answers from before the tap and wins (M19 drive).
+  return { value, readFailed: readFailed && !busy, busy, set, read }
 }

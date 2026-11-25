@@ -67,3 +67,26 @@ describe('the Blend’n overlay store', () => {
     expect(renders).toBe(before)
   })
 })
+
+describe('returning to the opener (ROOM-13)', () => {
+  const { openPass, takeReturnTo } = require('../lib/blendnOverlay') as typeof import('../lib/blendnOverlay')
+  const pass = { id: 'e7' } as never
+  afterEach(() => blendnClosed())
+
+  it('openPass with returnToEvent stores the event id; taking it clears it', () => {
+    openPass(pass, { returnToEvent: true })
+    expect(takeReturnTo()).toBe('e7')
+    expect(takeReturnTo()).toBeNull()
+  })
+  it('openPass without it, and openBlendn, store nothing', () => {
+    openPass(pass)
+    expect(takeReturnTo()).toBeNull()
+    openBlendn()
+    expect(takeReturnTo()).toBeNull()
+  })
+  it('a close that nobody took drops it, so the next opening never returns to a stale event', () => {
+    openPass(pass, { returnToEvent: true })
+    blendnClosed()
+    expect(takeReturnTo()).toBeNull()
+  })
+})

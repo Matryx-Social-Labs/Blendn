@@ -25,10 +25,11 @@ jest.mock('../lib/apiClient', () => ({
   apiClient: {
     getPublicProfile: jest.fn(),
     getProfile: jest.fn(),
+    getWorkFields: jest.fn(),
     getConversations: jest.fn(),
+    getSharedEvents: jest.fn(() => Promise.resolve({ success: true, data: { events: [], pagination: { limit: 5, hasMore: false, nextCursor: null, totalCount: 0 } } })),
     getMessageRequests: jest.fn(),
     createMessageRequest: jest.fn(),
-    likeAtEvent: jest.fn(),
     respondToMessageRequest: jest.fn(),
   },
 }))
@@ -64,7 +65,8 @@ jest.mock('../components/profile/ProfileHeroStage', () => {
   const { Text } = require('react-native')
   return {
     heroHeightFor: (w: number) => Math.round(w * 1.3),
-    ProfileHeroStage: (p: { name: string; age?: number | null }) => React.createElement(Text, null, p.age ? `${p.name}, ${p.age}` : p.name),
+    ProfileHeroStage: (p: { name: string; age?: number | null; subtitle?: string | null }) =>
+      React.createElement(React.Fragment, null, React.createElement(Text, null, p.age ? `${p.name}, ${p.age}` : p.name), p.subtitle ? React.createElement(Text, { testID: 'hero-subtitle' }, p.subtitle) : null),
   }
 })
 jest.mock('../components/profile/ProfileSections', () => {
@@ -90,6 +92,11 @@ import { showUserSafetyActions } from '../lib/safetyUtils'
 import UserProfile, { SELF_PREVIEW, stillAnonymous } from '../app/user/[id]'
 import { PROFILE_EMPTY } from '../components/profile/ProfileSections'
 import { COLOR, MAX_FONT_SCALE } from '../lib/design/tokens'
+import { isLitControl } from './helpers/lit'
+
+/** Message as a request (C7: "Connect" retired): the dock's label is Message either way; only the ask says what it sends. */
+const ASK = /^Message .+\. Sends a request and shows them your name and photo$/
+
 
 const api = apiClient as jest.Mocked<typeof apiClient>
 const BEN = { id: 'rh_ben', name: 'Ben', photos: ['https://cdn/ben.jpg'], bio: 'Hi', identityVisible: true }
@@ -143,15 +150,16 @@ describe('with the server’s `connection`', () => {
     expect(await screen.findByText('Requested')).toBeTruthy()
   })
 
-  it('offers Connect when it says there is nothing, without second-guessing it from the lists', async () => {
+  it('offers Message as a request when it says there is nothing, without second-guessing it from the lists', async () => {
     api.getPublicProfile.mockResolvedValue({
       success: true,
       data: { ...BEN, connection: { conversationId: null, request: null } },
     })
     await render(<UserProfile />)
 
-    expect(await screen.findByText('Connect')).toBeTruthy()
-    expect(screen.getByText('Connect sends a request and reveals your name and photo.')).toBeTruthy()
+    expect(await screen.findByLabelText(ASK)).toBeTruthy()
+    // No line under it: the request sheet says what sending costs (C7).
+    expect(screen.queryByText('You can message each other.')).toBeNull()
     expect(api.getConversations).not.toHaveBeenCalled()
   })
 })
@@ -186,17 +194,17 @@ describe('without it — an older server, or somebody still anonymous to you', (
     expect(await screen.findByText('Requested')).toBeTruthy()
   })
 
-  it('offers Connect when neither list has them', async () => {
+  it('offers Message as a request when neither list has them', async () => {
     api.getPublicProfile.mockResolvedValue({ success: true, data: BEN })
     await render(<UserProfile />)
 
-    expect(await screen.findByText('Connect')).toBeTruthy()
+    expect(await screen.findByLabelText(ASK)).toBeTruthy()
     expect(api.getConversations).toHaveBeenCalled()
     expect(api.getMessageRequests).toHaveBeenCalled()
   })
 })
 
-describe('Connect', () => {
+describe('Message, as a request', () => {
   const NOTHING = { ...BEN, connection: { conversationId: null, request: null } }
 
   it('says Requested once the request is sent', async () => {
@@ -204,7 +212,7 @@ describe('Connect', () => {
     api.createMessageRequest.mockResolvedValue({ success: true, data: {} } as never)
     await render(<UserProfile />)
 
-    fireEvent.press(await screen.findByText('Connect'))
+    fireEvent.press(await screen.findByLabelText(ASK))
     fireEvent.press(await screen.findByText('Send request'))
 
     expect(await screen.findByText('Requested')).toBeTruthy()
@@ -215,13 +223,13 @@ describe('Connect', () => {
     api.createMessageRequest.mockResolvedValue({ success: false, error: 'No internet connection.' })
     await render(<UserProfile />)
 
-    fireEvent.press(await screen.findByText('Connect'))
+    fireEvent.press(await screen.findByLabelText(ASK))
     fireEvent.press(await screen.findByText('Send request'))
 
     // In the sheet, under the note — a toast sat dimmed behind the sheet's scrim (drive 2026-10-27).
     expect(await screen.findByText("Your request didn’t send. Try again.")).toBeTruthy()
     expect(mockShowToast).not.toHaveBeenCalled()
-    expect(screen.getByText('Connect')).toBeTruthy()
+    expect(screen.getByLabelText(ASK)).toBeTruthy()
     expect(screen.queryByText('Requested')).toBeNull()
     // The sheet stays open, with the message in it.
     expect(screen.getByText('Send request')).toBeTruthy()
@@ -232,7 +240,7 @@ describe('Connect', () => {
     api.createMessageRequest.mockResolvedValue({ success: false, error: 'exists', errorCode: 'CONFLICT' })
     await render(<UserProfile />)
 
-    fireEvent.press(await screen.findByText('Connect'))
+    fireEvent.press(await screen.findByLabelText(ASK))
     fireEvent.press(await screen.findByText('Send request'))
 
     expect(await screen.findByText('Requested')).toBeTruthy()
@@ -259,7 +267,7 @@ describe('Connect', () => {
     await render(<UserProfile />)
 
     expect(await screen.findByText('Slow Kite, 27')).toBeTruthy()
-    fireEvent.press(await screen.findByText('Connect'))
+    fireEvent.press(await screen.findByLabelText(ASK))
     fireEvent.press(await screen.findByText('Send request'))
 
     expect(await screen.findByText('Requested')).toBeTruthy()
@@ -268,33 +276,12 @@ describe('Connect', () => {
   })
 })
 
-describe('Like', () => {
-  const NOTHING = { ...BEN, connection: { conversationId: null, request: null } }
-
-  it('says why a like did not land', async () => {
-    api.getPublicProfile.mockResolvedValue({ success: true, data: NOTHING })
-    api.likeAtEvent.mockResolvedValue({ success: false, error: 'Check in before liking anyone here', errorCode: 'FORBIDDEN' })
+describe('no Like (Wave replaced it, SCRUM-1042)', () => {
+  it('a profile with an event but no room card offers Message as a request and no Like; Wave lives on the room page (profileLensPage)', async () => {
+    api.getPublicProfile.mockResolvedValue({ success: true, data: { ...BEN, connection: { conversationId: null, request: null } } })
     await render(<UserProfile />)
-
-    fireEvent.press(await screen.findByText('Like'))
-
-    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('Check in before liking anyone here', 'info'))
-  })
-
-  it('gives a mutual like its match moment, and Say hi opens the chat', async () => {
-    api.getPublicProfile.mockResolvedValue({ success: true, data: NOTHING })
-    api.likeAtEvent.mockResolvedValue({
-      success: true,
-      data: { mutual: true, conversationId: 'conv-7', pseudonyms: { you: 'Quiet Fox', them: 'Ben' } },
-    })
-    await render(<UserProfile />)
-
-    fireEvent.press(await screen.findByText('Like'))
-    fireEvent.press(await screen.findByText('You and Ben matched'))
-
-    expect(router.push).toHaveBeenCalledWith(
-      expect.objectContaining({ params: expect.objectContaining({ conversationId: 'conv-7' }) })
-    )
+    expect(await screen.findByLabelText(ASK)).toBeTruthy()
+    expect(screen.queryByText('Like')).toBeNull()
   })
 })
 
@@ -307,7 +294,7 @@ describe('when the profile does not load', () => {
     expect(await screen.findByText('This profile didn’t load')).toBeTruthy()
     api.getPublicProfile.mockResolvedValueOnce({ success: true, data: { ...BEN, connection: { conversationId: null, request: null } } })
     fireEvent.press(screen.getByText('Try again'))
-    expect(await screen.findByText('Connect')).toBeTruthy()
+    expect(await screen.findByLabelText(ASK)).toBeTruthy()
   })
 
   it('keeps a way back, since the top bar over the hero never drew', async () => {
@@ -411,7 +398,7 @@ describe('a request they sent you, opened from their profile (R4.1 6.2)', () => 
     expect(screen.getByLabelText('Accept Ben’s request')).toBeTruthy()
     expect(screen.getByLabelText('Decline Ben’s request')).toBeTruthy()
     // The tray is theirs: no Like and no Connect beside it.
-    expect(screen.queryByText('Connect')).toBeNull()
+    expect(screen.queryByLabelText(ASK)).toBeNull()
   })
 
   it('Accept answers that request, says success once, and opens the chat', async () => {
@@ -455,7 +442,7 @@ describe('their badges', () => {
   const openWith = async (users: Record<string, unknown>) => {
     api.getPublicProfile.mockResolvedValue({ success: true, data: { ...BEN, connection, ...users } } as never)
     await render(<UserProfile />)
-    await screen.findByText('Connect')
+    await screen.findByLabelText(ASK)
   }
 
   it('reads them from the one answer, and asks nothing more', async () => {
@@ -482,7 +469,7 @@ describe('their badges', () => {
   it('draws none for somebody still anonymous to you, whatever the payload carries', async () => {
     api.getPublicProfile.mockResolvedValue({ success: true, data: { id: 'rh_ben', name: 'Amber Fox', identityVisible: false, badges: NIGHTS } })
     await render(<UserProfile />)
-    await screen.findByText('Connect')
+    await screen.findByLabelText(ASK)
     expect(screen.queryByLabelText(/^Badge:/)).toBeNull()
     expect(api.getProfile).not.toHaveBeenCalled()
   })
@@ -521,6 +508,32 @@ describe('one profile body', () => {
     expect(screen.queryByText(PROFILE_EMPTY)).toBeNull()
   })
 
+  it('the work field is a label, never the stored code (MED-1, OD-3 keeps it on an unrevealed profile)', async () => {
+    api.getWorkFields.mockResolvedValue({ success: true, data: { workFields: [{ slug: 'data_ai', label: 'Data & AI' }] } } as never)
+    api.getPublicProfile.mockResolvedValue({ success: true, data: { id: 'rh_ben', identityVisible: false, work_field: 'data_ai', location: 'Bengaluru' } } as never)
+    await render(<UserProfile />)
+    expect(await screen.findByText('Data & AI · Bengaluru')).toBeTruthy()
+    expect(screen.queryByText(/data_ai/)).toBeNull()
+  })
+
+  it('when GET /users/:id fails the /profiles/:id fallback still shows age and location, which it nests under profile (YOU-13)', async () => {
+    api.getPublicProfile.mockResolvedValue({ success: false, error: 'boom' } as never)
+    api.getProfile.mockResolvedValue({ success: true, data: { name: 'Ben', interests: [], profile: { age: 29, location: 'Bengaluru', photos: ['https://cdn/ben.jpg'] } } } as never)
+    await render(<UserProfile />)
+    expect(await screen.findByText(/, 29$/)).toBeTruthy()
+    expect(screen.getByTestId('hero-subtitle').props.children).toBe('Bengaluru')
+  })
+
+  it('an unrevealed profile opened by id draws no interest chips, whatever the payload carries (YOU-03)', async () => {
+    api.getPublicProfile.mockResolvedValue({
+      success: true,
+      data: { id: 'rh_ben', identityVisible: false, interests: [{ name: 'Vinyl' }, { name: 'Chess' }], sharedInterests: ['Vinyl'], work_field: 'Design' },
+    } as never)
+    await render(<UserProfile />)
+    expect(await screen.findByText(/hasn’t revealed who they are yet/)).toBeTruthy()
+    for (const chip of ['Vinyl', 'Chess', 'Interests']) expect(screen.queryByText(chip)).toBeNull()
+  })
+
   it('your own profile says it is how others see you, with Edit', async () => {
     mockParams = { id: 'u_me' }
     api.getPublicProfile.mockResolvedValue({ success: true, data: { ...BEN, id: 'u_me', isOwnProfile: true } })
@@ -530,13 +543,13 @@ describe('one profile body', () => {
     expect(router.push).toHaveBeenCalledWith('/edit-profile')
   })
 
-  it('your own profile is the violet world (you), not rose: its Edit is lit violet (rc7 D11)', async () => {
+  it('your own profile is the violet world (you), not rose: its Edit is lit (rc7 D11; board C: one positive look)', async () => {
     mockParams = { id: 'u_me' }
     api.getPublicProfile.mockResolvedValue({ success: true, data: { ...BEN, id: 'u_me', isOwnProfile: true } })
     await render(<UserProfile />)
     await screen.findByText(SELF_PREVIEW)
     const fills = JSON.stringify(screen.toJSON())
-    expect(fills).toContain(COLOR.selectionVioletFill)
+    expect(isLitControl(screen.getByTestId('profile-self-edit'))).toBe(true)
     expect(fills).not.toContain(COLOR.selectionRoseFill)
   })
 })

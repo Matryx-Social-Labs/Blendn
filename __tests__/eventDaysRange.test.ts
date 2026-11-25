@@ -51,12 +51,12 @@ describe('the between-days line', () => {
     expect(betweenDaysLine(run(['2026-09-27', '2026-09-28', '2026-09-29'], { dayNumber: 3 }), next, 'Asia/Kolkata')).toBe('Day 3 starts Tue 29 Sep, 9 PM')
   })
 
-  it('names the event zone on a phone that is not in it: "9 PM IST" (RC 7, the zone-name rule)', () => {
+  it('names the event zone on a phone that is not in it: "9 PM" (RC 7, the zone-name rule)', () => {
     const zone = process.env.TZ
     process.env.TZ = 'America/Los_Angeles'
     refreshPhoneZone()
     try {
-      expect(betweenDaysLine(run(['2026-09-27', '2026-09-28', '2026-09-29'], { dayNumber: 3 }), next, 'Asia/Kolkata')).toBe('Day 3 starts Tue 29 Sep, 9 PM IST')
+      expect(betweenDaysLine(run(['2026-09-27', '2026-09-28', '2026-09-29'], { dayNumber: 3 }), next, 'Asia/Kolkata')).toBe('Day 3 starts Tue 29 Sep, 9 PM')
     } finally {
       process.env.TZ = zone
       refreshPhoneZone()

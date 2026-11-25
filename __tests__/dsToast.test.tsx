@@ -107,8 +107,8 @@ describe('<Toast>', () => {
     expect(flat('t-body')).toMatchObject({ backgroundColor: COLOR.surfaceRaised, borderRadius: RADIUS.pressedAndroid })
     expect(flat('t').bottom).toBe(SPACE.lg)
     await render(<Toast kind="error" text="Couldn’t save." onDismiss={jest.fn()} aboveTabBar testID="t" />)
-    // Over the bar and over the centre button's check-in pill, which rises 36 above it (drive 3).
-    expect(TAB_BAR_HINT_RISE).toBe(36)
+    // Over the bar and over the centre button's check-in pill, which rises 40 above it (drive 3; 8 over the edge, the tab-bar board).
+    expect(TAB_BAR_HINT_RISE).toBe(40)
     expect(flat('t').bottom).toBe(SPACE.tabBarBottomGapAndroid + SIZE.tabBar + TAB_BAR_HINT_RISE + SPACE.md)
   })
 

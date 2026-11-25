@@ -85,6 +85,8 @@ export function DateField({
               onBlur={() => setFocused((f) => (f === i ? null : f))}
               editable={!disabled}
               keyboardType="number-pad"
+              // A full box drops further keystrokes (maxLength); selected, the next digit replaces it (SCRUM-923).
+              selectTextOnFocus
               maxLength={box.length}
               placeholder={box.placeholder}
               placeholderTextColor={COLOR.textTertiary}

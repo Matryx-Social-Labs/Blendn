@@ -1,18 +1,23 @@
-import { ReactNode } from 'react'
+import { isValidElement, ReactNode } from 'react'
 import { StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 
 import { COLOR, FONT_FAMILY, ICON, MAX_FONT_SCALE, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import type { FriendPerson } from '../../lib/friends'
 import { Avatar } from '../ds/Avatar'
+import { IconButton } from '../ds/IconButton'
+import { FitText } from '../ds/Title'
 import { MonoRun } from '../ds/MonoFamily'
 import { font, useBoldText, useIncreaseContrast, useLargeText } from '../ds/shared'
 import ScalePress from '../motion/ScalePress'
-import { OptimizedImage } from '../OptimizedImage'
 import { SkeletonCircle, SkeletonLine } from '../Skeleton'
 import { Icon } from '../ui/Icon'
+import { personFace } from '../../lib/personFace'
 
 /** The avatar's box and its decode hint, one number so they cannot drift (Flow 6 `personRow`: 48). */
 const AVATAR = 48
+/** The face on Flow 7's friend rows and requests (fr.js `av(p)`: 44). */
+// design-exception: the Flow 7 board's row face is 44, between the DS avatar steps
+export const LIST_FACE = 44
 /** The row's height at the default text size: the frame's 64. A minimum: past the default size a row can grow. */
 export const PERSON_ROW_HEIGHT = SIZE.primary + SPACE.sm
 const ROW = PERSON_ROW_HEIGHT
@@ -30,7 +35,7 @@ export function usePersonRowsFixed(): boolean {
 
 /**
  * One person on a friend surface (Flow 6 `personRow`): a 48 pt photo, the name in 500 17/24, a line under it, and whatever the screen
- * needs on the right (a chevron, Withdraw). A date in the line is `detailMono`, drawn in Geist Mono right after `detail`.
+ * needs on the right (a chevron, Withdraw; at the AX sizes a labelled action goes under the text, an icon-only one stays). A date in the line is `detailMono`, drawn in Geist Mono right after `detail`.
  *
  * Real name and photo, because every place this is drawn is one both people agreed to: the friends list, requests, a link someone
  * handed out, and Friends here in a Room (a friend who turned on "Friends can see I'm here", which is their consent to be named
@@ -38,14 +43,20 @@ export function usePersonRowsFixed(): boolean {
  */
 export function PersonRow({
   person,
+  named = true,
   detail,
   detailMono,
   detailTail,
   onPress,
   trailing,
   chevron = false,
+  avatar = AVATAR,
 }: {
   person: FriendPerson
+  /** False for a blocked person: their creature, never a face (E10). */
+  named?: boolean
+  /** The face's size: 48 on Flow 6's surfaces, 44 on Flow 7's friends list (fr.js `av`). */
+  avatar?: number
   detail?: string
   /** Drawn in Geist Mono right after `detail` ("Friends since " + "Mar 2026"). */
   detailMono?: string
@@ -60,24 +71,36 @@ export function PersonRow({
   const contrast = useIncreaseContrast()
   const largeText = useLargeText()
   const line = [detail, detailMono, detailTail].filter(Boolean).join('')
+  // At the AX sizes a labelled action goes under the text, at its leading edge, so the text keeps the row (owner pick a,
+  // 2026-11-20). An icon-only one (an IconButton with no label) stays beside it, centred: alone under the line it read
+  // detached from its row (decided per advisor, 2026-11-20).
+  const stack = largeText && !isIconOnly(trailing)
+  const action = trailing ? (
+    <View testID="person-trailing" style={stack ? styles.under : styles.trailing}>
+      {trailing}
+    </View>
+  ) : null
   const body = (
     <>
-      <PersonAvatar person={person} />
-      <View style={styles.text}>
+      <PersonAvatar person={person} size={avatar} named={named} />
+      <View testID="person-text" style={styles.text}>
         {/*
           Reading text, as Banter's request card (fc5eb48): the name grows to its role's cap and the line under it to meta's,
           and at the accessibility sizes each doubles its lines, so the name never stops at the control cap on one line while
           the line under it grows past it (D-M5). With no line under it the name may take that line's place. The row's height
           is a minimum, so nothing is cut (P5: the line truncated at 360 dp and 1.3).
         */}
-        <Text
+        {/* The DS word fit: a word too wide for its line shrinks rather than splitting (SCRUM-1041 A, names in rows). */}
+        <FitText
           testID="person-name"
+          variant="bodyStrong"
+          family={FONT_FAMILY.brand[500]}
           numberOfLines={line && !largeText ? 1 : NAME_LINES_ALONE}
           maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong}
-          style={[font('bodyStrong', bold, FONT_FAMILY.brand[500]), styles.ink]}
+          style={styles.ink}
         >
           {person.name}
-        </Text>
+        </FitText>
         {line ? (
           <Text testID="person-detail" numberOfLines={largeText ? 4 : 2} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.muted]}>
             {detail}
@@ -89,8 +112,9 @@ export function PersonRow({
             {detailTail}
           </Text>
         ) : null}
+        {stack ? action : null}
       </View>
-      {trailing ? <View style={styles.trailing}>{trailing}</View> : null}
+      {stack ? null : action}
       {/* SettingsRow's chevron on SettingsRow's right edge, so the Friend requests card above and these rows share one (r7 M9). */}
       {chevron ? (
         <View style={styles.chevron}>
@@ -120,25 +144,28 @@ export function PersonRow({
 }
 
 /**
- * Photo, or the name's creature (the frame's `avatar(r, p, 48)`): a disc of its own on any surface, where the initial on `surface`
- * vanished into a request card of the same colour. Decorative: the name beside it says who this is.
+ * Their face by `personFace`: a friend (or a request, which names its sender) is named, so their photo, else their initial
+ * on their hue disc, never a creature. A blocked person is not (`named={false}`): always their creature (E10). Decorative.
  */
-export function PersonAvatar({ person }: { person: FriendPerson }) {
+export function PersonAvatar({ person, size = AVATAR, named = true }: { person: FriendPerson; size?: number; named?: boolean }) {
+  const face = personFace({ named, name: person.name, photo: person.photo })
   return (
     <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-      {person.photo ? (
-        <OptimizedImage source={person.photo} style={styles.avatar} width={AVATAR} height={AVATAR} contentFit="cover" />
-      ) : (
-        <Avatar kind="creature" pseudonym={person.name} size={AVATAR} testID="person-creature" />
-      )}
+      {/* A photo goes through Avatar too, so it loads over the person's initial, never a blank disc (SCRUM-1088). */}
+      <Avatar {...face} size={size} testID={FACE_TEST_ID[face.kind]} />
     </View>
   )
 }
 
+const FACE_TEST_ID = { photo: 'person-photo', creature: 'person-creature', initial: 'person-face' } as const
+
+/** A disc with no words: a DS IconButton without a label. */
+const isIconOnly = (node: ReactNode): boolean => isValidElement<{ label?: string }>(node) && node.type === IconButton && !node.props.label
+
 /** Rows at `PersonRow`'s geometry while a list loads (Flow 6 friends 02), so it does not jump when it lands. Still: nothing loops. */
 export function PersonRowSkeleton() {
   return (
-    <View testID="person-skeleton" style={styles.skeleton} accessibilityLabel="Loading" accessibilityState={{ busy: true }}>
+    <View accessible testID="person-skeleton" style={styles.skeleton} accessibilityLabel="Loading" accessibilityState={{ busy: true }}>
       {[50, 60, 70, 80].map((width) => (
         <View key={width} style={styles.skeletonRow}>
           <SkeletonCircle width={AVATAR} />
@@ -158,11 +185,12 @@ const styles = StyleSheet.create({
   // A minimum (shared.ts): at the default size every row is exactly this, which is when a list may window them (`usePersonRowsFixed`).
   row: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md, minHeight: ROW },
   skeletonRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md, height: ROW },
-  avatar: { width: AVATAR, height: AVATAR, borderRadius: RADIUS.capsule },
   chevron: { marginRight: SPACE.lg },
   text: { flex: 1, minWidth: 0 },
   // Centred on the row: a small button inside hugs its label, and without this it would sit at the row's top.
   trailing: { alignSelf: 'center' },
+  // Under the text: room above and below for a small button's slop to its 44/48 target, inside the row, clear of the next row.
+  under: { alignSelf: 'flex-start', marginVertical: SPACE.sm },
   ink: { color: COLOR.textPrimary },
   muted: { color: COLOR.textSecondary },
 })

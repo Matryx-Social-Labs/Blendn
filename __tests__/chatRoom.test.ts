@@ -41,8 +41,16 @@ describe('the bubble points at its sender', () => {
     expect(src).not.toMatch(/pseudonym: m\.sender_id/)
   })
 
-  it('never hands the room bubble a photo', () => {
-    expect(ROW()).not.toMatch(/photoUri|profile_photos|photo=\{/)
+  /*
+   * ROOM-07 (SV-6): the rule is "a photo only where the room names them". An event's room sends `image: null`, so it stays
+   * a creature; a crew's room names its members and sends the photo. The row has ONE photo source, the message's
+   * `sender_image` (what the server sent), and never reaches for a profile.
+   */
+  it('hands the room bubble only the photo the server sent for that message', () => {
+    const src = ROW()
+    expect(src).not.toMatch(/profile_photos|photo=\{/)
+    expect(src).toContain('photoUri: m.sender_image')
+    expect(src.match(/photoUri/g)).toHaveLength(1)
   })
 
   it('counts reactions without naming who left them', () => {
@@ -73,7 +81,7 @@ describe('the composer offers only what the server accepts', () => {
      * Attendees post no media in a room (R9; the server refuses it, admin
      * #697). A DM takes a photo once both are named to each other.
      */
-    expect(codeOnly(read('app/chat/[id].tsx'))).not.toMatch(/onAttach|ImagePicker|pickImage/)
+    expect(codeOnly(read('components/chat/RoomChat.tsx'))).not.toMatch(/onAttach|ImagePicker|pickImage/)
     const dm = codeOnly(read('app/private-chat/[conversationId].tsx'))
     expect(dm).toContain('const photosAllowed = !!reveal && (!reveal.pseudonymous || (reveal.youRevealed && reveal.theyRevealed))')
     expect(dm).toContain('onAttach={photosAllowed ? () => void attach() : undefined}')
@@ -81,7 +89,7 @@ describe('the composer offers only what the server accepts', () => {
 })
 
 describe('the screen renders through the redesign', () => {
-  const SCREEN = () => codeOnly(read('app/chat/[id].tsx'))
+  const SCREEN = () => codeOnly(read('components/chat/RoomChat.tsx'))
   const ROW = () => codeOnly(read('components/chat/RoomFeed.tsx'))
 
   it('draws every message kind through the DS chat components', () => {
@@ -118,7 +126,8 @@ describe('the screen renders through the redesign', () => {
   it('keeps the end in view as the list finishes laying out', () => {
     const src = SCREEN()
     expect(src).toMatch(/onContentSizeChange=\{follow\.onContentSizeChange\}/)
-    expect(src).toMatch(/onScrollBeginDrag=\{follow\.onScrollBeginDrag\}/)
+    // A reader's drag stops the follow (and folds From the Lobby, SCRUM-1026 H-A).
+    expect(src).toMatch(/onScrollBeginDrag=\{\(\) => \{\s*follow\.onScrollBeginDrag\(\)/)
     expect(src).toMatch(/follow\.noteAtEnd\(atBottom\)/)
   })
 
@@ -183,9 +192,9 @@ describe('the Me tab is your profile, with no separate preview', () => {
     expect(src).toContain("label: 'Settings'")
   })
 
-  it('puts the header flat on the page: one display line, and Edit profile as the DS lit button', () => {
+  it('puts the header flat on the page: the name as the DS title (word fit, never clamped), and Edit profile as the DS lit button', () => {
     const me = codeOnly(read('components/profile/MeSections.tsx'))
-    expect(me.match(/font\('display'/g)).toHaveLength(2)
+    expect(me).toContain('<Title testID="me-name"')
     expect(me).toContain('<Button kind="lit" size="md" icon="pencil" label="Edit profile"')
     expect(OWN()).not.toContain('surfaceMedia')
   })
@@ -203,16 +212,16 @@ describe('the Me tab is your profile, with no separate preview', () => {
     expect(src).not.toContain('EMBER.accent')
   })
 
-  it('shows counts in one container, opens Going from them, and hides a role you do not have', () => {
+  it('folds the counts into Nights out (A 01): the heading counts, Saved and Hosted are lines only above zero', () => {
     /*
      * `eventsOrganized` is hidden at zero: a permanent "0 Hosted" reads as
-     * something you failed to do rather than a role you do not have.
+     * something you failed to do rather than a role you do not have. Saved too ("0 SAVED", device 2026-11-18).
      */
     const src = OWN()
-    const me = codeOnly(read('components/profile/MeSections.tsx'))
-    expect(me).toContain('hosted > 0')
-    expect(me).toContain('label="Nights" onPress={onGoing}')
-    expect(me).toContain('label="Saved" onPress={onGoing}')
+    const nights = codeOnly(read('components/profile/NightsOut.tsx'))
+    expect(nights).toContain('(n > 0 ? `${n.toLocaleString(\'en-US\')} hosted` : null)')
+    expect(nights).toContain('countStyle="lit"')
+    expect(src).not.toContain('StatsCard')
     expect(src).toContain("router.navigate('/going')")
   })
 
@@ -288,7 +297,7 @@ describe('direct messages use the same bubble, minus what a DM does not need', (
   })
 
   it('keeps receipts out of the room', () => {
-    expect(codeOnly(read('app/chat/[id].tsx')) + codeOnly(read('components/chat/RoomFeed.tsx'))).not.toContain('receipt=')
+    expect(codeOnly(read('components/chat/RoomChat.tsx')) + codeOnly(read('components/chat/RoomFeed.tsx'))).not.toContain('receipt=')
   })
 
   it('does not offer to report your own message, but lets you copy it', () => {
@@ -300,7 +309,7 @@ describe('direct messages use the same bubble, minus what a DM does not need', (
 
 describe('the send button does not pretend the message is still in flight', () => {
   const COMPOSER = () => codeOnly(read('components/ds/Composer.tsx'))
-  const ROOM = () => codeOnly(read('app/chat/[id].tsx'))
+  const ROOM = () => codeOnly(read('components/chat/RoomChat.tsx'))
   const DM = () => codeOnly(read('app/private-chat/[conversationId].tsx'))
   const LOCK = () => codeOnly(read('lib/useComposerLock.ts'))
 
@@ -314,7 +323,7 @@ describe('the send button does not pretend the message is still in flight', () =
 
   it('locks only for a reason it can name, in the server’s words', () => {
     const src = COMPOSER()
-    for (const state of ['muted', 'automuted', 'locked', 'closed', 'ratelimited', 'notcheckedin', 'notopen', 'hidden']) {
+    for (const state of ['muted', 'automuted', 'closed', 'ratelimited', 'notcheckedin', 'notopen', 'hidden']) {
       expect(src).toMatch(new RegExp(`${state}: \\{\\s*icon: '`))
     }
     expect(src).toContain('const body = reason ?? fallback')
@@ -329,18 +338,20 @@ describe('the send button does not pretend the message is still in flight', () =
 
   it('turns the server’s refusal into a lock, alongside the kept failed bubble', () => {
     const lock = LOCK()
-    for (const [code, state] of [['USER_MUTED', 'muted'], ['CHAT_LOCKED', 'locked'], ['NOT_CHECKED_IN', 'notcheckedin'], ['RATE_LIMITED', 'ratelimited']]) {
+    for (const [code, state] of [['USER_MUTED', 'muted'], ['CHAT_LOCKED', 'closed'], ['NOT_CHECKED_IN', 'notcheckedin'], ['RATE_LIMITED', 'ratelimited']]) {
       expect(lock).toMatch(new RegExp(`case '${code}':[\\s\\S]*?state: '${state}'`))
     }
     // A rate limit lifts on its own; the server says when, and the clock counts it down.
     expect(lock).toContain('retryAfter ?? DEFAULT_WAIT_S')
     // Every answer re-decides it: a send that got through lifts it.
-    expect(ROOM()).toContain('composer.apply(result.success ? null : result.errorCode, result.retryAfter, result.error)')
+    expect(ROOM()).toContain('composer.apply(result.success ? null : result.errorCode, result.retryAfter, result.error, result.success ? null : result.reasonCode)')
     expect(ROOM()).toContain('countdown={composer.countdown}')
   })
 
   it('locks a DM for the server’s cooldown when it rate-limits or spam-blocks', () => {
-    expect(LOCK()).toMatch(/case 'RATE_LIMITED':\s*case 'SPAM_BLOCKED':\s*return \{ state: 'ratelimited' \}/)
+    // Both lock as `ratelimited`; a burst carries its sentence (Flow 5 F-A, flow5ChatBubbles.test.tsx).
+    expect(LOCK()).toMatch(/case 'SPAM_BLOCKED':\s*return serverText \? \{ state: 'ratelimited', reason: serverText \} : \{ state: 'ratelimited' \}/)
+    expect(LOCK()).toMatch(/case 'RATE_LIMITED':\s*return \{ state: 'ratelimited' \}/)
     expect(DM()).toContain('composer.apply(result.errorCode, result.retryAfter, result.error)')
   })
 

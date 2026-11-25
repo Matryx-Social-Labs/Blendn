@@ -29,7 +29,7 @@ const EXCEPTIONS: Record<string, string> = {
   // (the next test holds every caller to that), and a nested span inherits that Text's cap.
   'components/ds/MonoFamily.tsx:36': 'MonoRun divider span, nested in the caller’s capped Text',
   'components/ds/MonoFamily.tsx:40': 'MonoRun struck span, nested in the caller’s capped Text',
-  'components/ds/MonoFamily.tsx:57': 'MonoRun space span, nested in the caller’s capped Text',
+  'components/ds/MonoFamily.tsx:58': 'MonoRun space span, nested in the caller’s capped Text',
 }
 
 /** `app/preview` is the design gallery: it redirects home outside a development build (`app/preview/_layout.tsx`). */

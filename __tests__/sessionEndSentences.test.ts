@@ -2,9 +2,10 @@
  * The three server sentences `lib/sessionEnd.ts` reads until the server sends codes (`fromSentence`). If the server's copy
  * is edited, the client quietly falls back to the generic notice: a suspended person is told "You were signed out" again
  * (SCRUM-93). So the sentences are pinned here word for word, and checked against the server's source when that repo is
- * beside this one (set ADMIN_REPO to its path; skipped otherwise, as CI has no admin checkout).
+ * beside this one (read from its `origin/dev` with git; ADMIN_REPO overrides the default clone, and the check is skipped without one, as CI has none).
  */
-import { existsSync, readFileSync } from 'fs'
+import { execFileSync } from 'child_process'
+import { existsSync } from 'fs'
 import { join } from 'path'
 
 import { accountRefusalOf, classifySessionEnd } from '../lib/sessionEnd'
@@ -30,17 +31,27 @@ it('"Account not found" as a 401 from a social sign-in is a deleted account, and
   expect(classifySessionEnd({ errorCode: 'NOT_FOUND', error: SERVER.deleted })).toBe('expired')
 })
 
-const ADMIN = process.env.ADMIN_REPO ?? join(process.env.HOME ?? '', 'conductor/workspaces/blendn-admin/seville')
-const mobileAuth = join(ADMIN, 'lib/mobile-auth.ts')
-const present = existsSync(mobileAuth)
-const text = (rel: string) => readFileSync(join(ADMIN, rel), 'utf8').replace(/\s+/g, ' ')
-const maybe = present ? it : it.skip
+/**
+ * The server's source at its `origin/dev`, never a working tree: a sibling worktree on another branch is not what ships.
+ * ADMIN_REPO is the admin clone; it defaults to the main checkout when that exists, and the check is skipped without one.
+ */
+const DEFAULT_ADMIN_REPO = join(process.env.HOME ?? '', 'conductor/repos/blendn-admin')
+const ADMIN = process.env.ADMIN_REPO ?? (existsSync(DEFAULT_ADMIN_REPO) ? DEFAULT_ADMIN_REPO : undefined)
+const adminFile = (rel: string): string | null => {
+  if (!ADMIN) return null
+  try {
+    return execFileSync('git', ['-C', ADMIN, 'show', `origin/dev:${rel}`], { encoding: 'utf8' }).replace(/\s+/g, ' ')
+  } catch {
+    return null
+  }
+}
+const mobileAuth = adminFile('lib/mobile-auth.ts')
+const maybe = mobileAuth ? it : it.skip
 
 maybe('the server still says them: a copy edit there fails here, loudly', () => {
-  const src = text('lib/mobile-auth.ts')
-  expect(src).toContain(SERVER.suspended)
-  expect(src).toContain(SERVER.staff)
+  expect(mobileAuth).toContain(SERVER.suspended)
+  expect(mobileAuth).toContain(SERVER.staff)
   for (const route of ['google', 'apple']) {
-    expect(text(`app/api/mobile/auth/${route}/route.ts`)).toContain('errorResponse("Account not found", 401')
+    expect(adminFile(`app/api/mobile/auth/${route}/route.ts`)).toContain('errorResponse("Account not found", 401')
   }
 })

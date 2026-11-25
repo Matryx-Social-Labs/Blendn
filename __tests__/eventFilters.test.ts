@@ -128,9 +128,18 @@ describe('filtersToQuery', () => {
     expect(q).not.toHaveProperty('categorySlug')
   })
 
-  it('carries the date range through', () => {
-    const q = filtersToQuery({ when: 'today' }, at('2026-08-19T14:00:00'))
+  it('carries the date range through (the weekend: a window)', () => {
+    const q = filtersToQuery({ when: 'weekend' }, at('2026-08-19T14:00:00'))
     expect(q.startDate).toBeDefined()
     expect(q.endDate).toBeDefined()
+  })
+
+  it('Tonight is everything not over that starts by the day’s end: what is on now, and a night that ends after midnight (N1)', () => {
+    // Happening now's "See all" lands on Tonight: a start bound would drop every live event, an end bound every late one.
+    const now = at('2026-08-19T14:00:00')
+    const q = filtersToQuery({ when: 'today' }, now)
+    expect(q.startDate).toBeUndefined()
+    expect(q.endDate).toBeUndefined()
+    expect(q.startBefore).toBe(whenToRange('today', now).endDate)
   })
 })

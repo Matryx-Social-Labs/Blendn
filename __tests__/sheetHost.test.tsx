@@ -15,6 +15,7 @@ import { StyleSheet } from 'react-native'
 import { SheetHost } from '../components/SheetHost'
 import { COLOR } from '../lib/design/tokens'
 import { closeSheet, showSheet, type SheetOutcome } from '../lib/sheet'
+import { isLitControl } from './helpers/lit'
 /* eslint-enable import/first */
 
 const settle = async () => {
@@ -81,22 +82,26 @@ describe('rows: a positive action is lit in the world, a state is quiet and does
 describe('the affirmative is lit in the world the sheet is asked from', () => {
   const ask = (hue?: 'rose' | 'violet') =>
     showSheet({ kind: 'actions', hue, title: 'Sign out?', actions: [{ label: 'Sign out', variant: 'primary', then: jest.fn() }, { label: 'Cancel', cancel: true }] })
-  const fill = () => StyleSheet.flatten(screen.getByRole('button', { name: 'Sign out' }).props.style).backgroundColor
+  const button = () => screen.getByRole('button', { name: 'Sign out' })
 
-  it.each([
-    ['violet', COLOR.selectionVioletFill],
-    ['rose', COLOR.selectionRoseFill],
-  ] as const)('%s: the caller’s hue', async (hue, expected) => {
+  it.each(['violet', 'rose', undefined] as const)('%s: the one positive look whatever the caller’s hue (buttons board C)', async (hue) => {
     await render(<SheetHost />)
     await act(async () => ask(hue))
-    expect(fill()).toBe(expected)
+    expect(isLitControl(button())).toBe(true)
+    expect(StyleSheet.flatten(button().props.style).backgroundColor).not.toBe(COLOR.textPrimary)
   })
+})
 
-  it('ember when the caller names none; never the white strong', async () => {
+describe('Clear all is the neutral button (strong is retired, buttons board C): not red, not a yes', () => {
+  it.each(['rose', 'violet'] as const)('%s: the secondary, never lit', async (hue) => {
     await render(<SheetHost />)
-    await act(async () => ask())
-    expect(fill()).toBe(COLOR.selectionEmberFill)
-    expect(fill()).not.toBe(COLOR.textPrimary)
+    await act(async () =>
+      showSheet({ kind: 'actions', hue, title: 'Clear all notifications?', actions: [{ label: 'Clear all', variant: 'secondary', then: jest.fn() }, { label: 'Cancel', cancel: true }] })
+    )
+    const button = screen.getByRole('button', { name: 'Clear all' })
+    expect(isLitControl(button)).toBe(false)
+    expect(StyleSheet.flatten(button.props.style).backgroundColor).not.toBe(COLOR.destructiveFill)
+    expect(StyleSheet.flatten(screen.getByText('Clear all').props.style).color).toBe(COLOR.textPrimary)
   })
 })
 
@@ -154,4 +159,57 @@ it('a tertiary action is drawn as Cancel is, not as the secondary (You hand-off 
   const look = (name: string) => StyleSheet.flatten(screen.getByRole('button', { name }).props.style)
   expect(look('What’s kept')).toEqual(look('Cancel'))
   expect(look('What’s kept')).not.toEqual(look('Keep it'))
+})
+
+describe('a sheet replaced by another is told it went unanswered (motion audit M33)', () => {
+  it('a caller awaiting a choice hears onDismiss when a different sheet takes its place', async () => {
+    const onDismiss = jest.fn()
+    await render(<SheetHost />)
+    await act(async () => showSheet({ kind: 'actions', title: 'Like as…', onDismiss, actions: [{ label: 'Cancel', cancel: true }] }))
+    await act(async () => showSheet({ kind: 'actions', title: 'Something else', actions: [{ label: 'Cancel', cancel: true }] }))
+    expect(onDismiss).toHaveBeenCalledTimes(1)
+    expect(screen.getByText('Something else')).toBeTruthy()
+  })
+
+  it('a step of the same flow (`next`) is not a dismissal: the flow goes on', async () => {
+    const onDismiss = jest.fn()
+    await render(<SheetHost />)
+    await act(async () =>
+      showSheet({
+        kind: 'actions',
+        title: 'Step one',
+        onDismiss,
+        actions: [
+          { label: 'On', next: () => ({ kind: 'actions', title: 'Step two', actions: [{ label: 'Cancel', cancel: true }] }) },
+          { label: 'Cancel', cancel: true },
+        ],
+      })
+    )
+    await act(async () => fireEvent.press(screen.getByLabelText('On')))
+    expect(screen.getByText('Step two')).toBeTruthy()
+    expect(onDismiss).not.toHaveBeenCalled()
+  })
+})
+
+it('rows: an action marked apart (the room’s Check out) stands on its own after a gap, with no hairline; control: the rest keep theirs', async () => {
+  await render(<SheetHost />)
+  await act(async () =>
+    showSheet({
+      kind: 'actions',
+      title: 'Rooftop Sundowner',
+      layout: 'rows',
+      actions: [
+        { label: 'Room info', icon: 'info', then: jest.fn() },
+        { label: 'Room settings', icon: 'settings', then: jest.fn() },
+        { label: 'Check out', icon: 'log-out', variant: 'destructive', apart: true, then: jest.fn() },
+        { label: 'Cancel', cancel: true },
+      ],
+    })
+  )
+  const row = (label: string) => StyleSheet.flatten(screen.getByLabelText(label).props.style)
+  expect(row('Room settings').borderTopWidth).toBe(StyleSheet.hairlineWidth)
+  expect(row('Check out').borderTopWidth ?? 0).toBe(0)
+  expect(row('Check out').marginTop).toBeGreaterThan(0)
+  expect(row('Room settings').marginTop ?? 0).toBe(0)
+  expect(StyleSheet.flatten(screen.getByText('Check out').props.style).color).toBe(COLOR.destructive)
 })

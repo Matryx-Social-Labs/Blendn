@@ -48,7 +48,7 @@ jest.mock('../lib/notifications', () => ({
   removePushTokenFromProfile: jest.fn(),
 }))
 
-import SettingsScreen from '../app/settings'
+import AboutScreen from '../app/about'
 import { RoomGuidelinesBanner } from '../components/chat/RoomGuidelinesBanner'
 import { AI_MODERATION_NOTICE, COMMUNITY_GUIDELINES_URL, roomGuidelinesKey } from '../lib/communityGuidelines'
 import { BLENDN_LINKS } from '../lib/links'
@@ -90,7 +90,7 @@ it('"community guidelines" in the copy is a link: white, underlined, and it open
   // Two links: the guidelines and, with the AI-moderation notice, the privacy policy.
   expect(screen.getAllByRole('link')).toHaveLength(2)
   await fireEvent.press(words)
-  expect(WebBrowser.openBrowserAsync).toHaveBeenCalledWith(COMMUNITY_GUIDELINES_URL, expect.any(Object))
+  await waitFor(() => expect(WebBrowser.openBrowserAsync).toHaveBeenCalledWith(COMMUNITY_GUIDELINES_URL, expect.any(Object)))
 })
 
 // App Review 5.1.2(i): what people post goes to OpenAI for moderation, said where they first post. The wording is a
@@ -107,7 +107,7 @@ describe('the AI-moderation notice', () => {
     const words = screen.getByText('privacy policy')
     expect(StyleSheet.flatten(words.props.style)).toMatchObject({ color: '#FFFFFF', textDecorationLine: 'underline' })
     await fireEvent.press(notice)
-    expect(WebBrowser.openBrowserAsync).toHaveBeenCalledWith(BLENDN_LINKS.privacy, expect.any(Object))
+    await waitFor(() => expect(WebBrowser.openBrowserAsync).toHaveBeenCalledWith(BLENDN_LINKS.privacy, expect.any(Object)))
   })
 
   it('goes with the banner: once per room, like the ask', async () => {
@@ -158,14 +158,15 @@ it('shows when the stored flag cannot be read — the safe direction', async () 
 it('the link opens the guidelines', async () => {
   await openRoom('u_me', 'room_a')
   await fireEvent.press(screen.getByRole('link', { name: 'Community guidelines' }))
-  expect(WebBrowser.openBrowserAsync).toHaveBeenCalledWith(COMMUNITY_GUIDELINES_URL, expect.any(Object))
+  await waitFor(() => expect(WebBrowser.openBrowserAsync).toHaveBeenCalledWith(COMMUNITY_GUIDELINES_URL, expect.any(Object)))
   // Reading the rules is not agreeing to them: the banner stays.
   expect(screen.getByTestId(BANNER)).toBeTruthy()
 })
 
 // A link: it opens a web page, and says so with its role and its open-outline mark.
-it('the Settings row opens the same page', async () => {
-  await render(<SettingsScreen />)
+// Settings' row moved to About Blend’n (Me + settings A 05: one door to each legal page).
+it('About Blend’n opens the same page', async () => {
+  await render(<AboutScreen />)
   await fireEvent.press(await screen.findByRole('link', { name: /^Community guidelines/ }))
   await waitFor(() => expect(WebBrowser.openBrowserAsync).toHaveBeenCalledWith(COMMUNITY_GUIDELINES_URL, expect.any(Object)))
 })

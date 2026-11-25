@@ -27,11 +27,11 @@ jest.mock('../lib/apiClient', () => ({
     getConversation: jest.fn(),
     getConversationMessages: jest.fn(),
     sendPrivateMessage: jest.fn(),
-    requestReveal: jest.fn(),
+    cancelReveal: jest.fn(),
     revealInConversation: jest.fn(),
   },
 }))
-const mockLive: { onMessage?: (data: unknown) => void }[] = []
+const mockLive: { onMessage?: (data: unknown) => void; onRevealed?: () => void }[] = []
 const mockToast = jest.fn()
 jest.mock('../lib/socketClient', () => {
   const noop = () => () => {}
@@ -61,7 +61,10 @@ jest.mock('../lib/logger', () => ({
 
 /* eslint-disable import/first */
 import PrivateChat from '../app/private-chat/[conversationId]'
+import { router } from 'expo-router'
+
 import { apiClient } from '../lib/apiClient'
+import { H } from '../lib/haptics'
 import { clearOutbox, dmThread, keepFailed } from '../lib/chatOutbox'
 import { queryCache } from '../lib/queryCache'
 import { RECEIPT_POLL_MS } from '../lib/receipts'
@@ -158,31 +161,90 @@ describe('a warning before contact details in a DM (5.10)', () => {
   })
 })
 
-describe('the reveal bar', () => {
-  it('both anonymous: Show them and Ask them; asking turns it to Asked', async () => {
-    api.requestReveal.mockResolvedValue({ success: true } as never)
+describe('Swap names (identity model; board swap-names/, advisor pick A)', () => {
+  it('neither tapped: one Swap names, no Ask them and no confirm; the tap goes straight to the server and waits', async () => {
+    api.revealInConversation.mockResolvedValue({ success: true, data: { revealed: true, mutual: false } } as never)
+    const success = jest.spyOn(H, 'success').mockImplementation(() => {})
     await open()
     expect(screen.getByText('Both anonymous')).toBeTruthy()
-    expect(screen.getByLabelText('Show them who you are')).toBeTruthy()
-    await act(async () => fireEvent.press(screen.getByLabelText('Ask them')))
-    await flush()
-    expect(api.requestReveal).toHaveBeenCalledWith('c1')
-    expect(screen.getByText('Asked · they’ll decide in their own time')).toBeTruthy()
     expect(screen.queryByLabelText('Ask them')).toBeNull()
-  })
-
-  it('you revealed: they can see you, and there is nothing to press', async () => {
     api.getConversation.mockResolvedValue({ success: true, data: { ...anonymous, youRevealed: true } } as never)
-    await open()
-    expect(screen.getByText('They see you · you don’t see them')).toBeTruthy()
-    expect(screen.queryByLabelText('Show them who you are')).toBeNull()
+    await act(async () => fireEvent.press(screen.getByLabelText('Swap names')))
+    await flush()
+    expect(api.revealInConversation).toHaveBeenCalledWith('c1')
+    expect(screen.queryByTestId('dm-reveal-sheet')).toBeNull()
+    expect(screen.getByText('Waiting for them to swap too')).toBeTruthy()
+    expect(screen.getByLabelText('Cancel your swap')).toBeTruthy()
+    // One-sided: nothing to celebrate yet.
+    expect(success).not.toHaveBeenCalled()
   })
 
-  it('both revealed: no bar, and the line says so', async () => {
+  it('the tap that completes the swap is felt once, and the names come from the server', async () => {
+    api.getConversation.mockResolvedValue({ success: true, data: { ...anonymous, revealRequested: true } } as never)
+    api.revealInConversation.mockResolvedValue({ success: true, data: { revealed: true, mutual: true } } as never)
+    const success = jest.spyOn(H, 'success').mockImplementation(() => {})
+    await open()
+    expect(screen.getByText('Arctic Falcon wants to swap names')).toBeTruthy()
+    api.getConversation.mockResolvedValue({ success: true, data: named } as never)
+    await act(async () => fireEvent.press(screen.getByLabelText('Swap names')))
+    await flush()
+    expect(success).toHaveBeenCalledTimes(1)
+    expect(screen.getByText('Names swapped')).toBeTruthy()
+    expect(screen.queryByLabelText('Swap names')).toBeNull()
+  })
+
+  it('you tapped: Cancel takes it back (DELETE) and Swap names returns', async () => {
+    api.getConversation.mockResolvedValue({ success: true, data: { ...anonymous, youRevealed: true } } as never)
+    api.cancelReveal.mockResolvedValue({ success: true, data: { revealed: false } } as never)
+    await open()
+    expect(screen.getByText('Waiting for them')).toBeTruthy()
+    api.getConversation.mockResolvedValue({ success: true, data: anonymous } as never)
+    await act(async () => fireEvent.press(screen.getByLabelText('Cancel your swap')))
+    await flush()
+    expect(api.cancelReveal).toHaveBeenCalledWith('c1')
+    expect(screen.getByLabelText('Swap names')).toBeTruthy()
+  })
+
+  it('a cancel that lost the race (409: they just tapped) is not an error: the read again shows you swapped', async () => {
+    api.getConversation.mockResolvedValue({ success: true, data: { ...anonymous, youRevealed: true } } as never)
+    api.cancelReveal.mockResolvedValue({ success: false, errorCode: 'CONFLICT', error: 'You have already swapped names' } as never)
+    await open()
+    api.getConversation.mockResolvedValue({ success: true, data: named } as never)
+    await act(async () => fireEvent.press(screen.getByLabelText('Cancel your swap')))
+    await flush()
+    expect(screen.queryByText('You have already swapped names')).toBeNull()
+    expect(screen.getByText('Names swapped')).toBeTruthy()
+  })
+
+  it('no photo yet: the Not yet sheet in the server’s words, with Add a photo; any other refusal is said in the strip', async () => {
+    api.revealInConversation.mockResolvedValue({ success: false, errorCode: 'reveal_incomplete', error: 'Add a photo to your profile first' } as never)
+    await open()
+    await act(async () => fireEvent.press(screen.getByLabelText('Swap names')))
+    await flush()
+    expect(screen.getByTestId('dm-not-yet')).toBeTruthy()
+    expect(screen.getByText('Add a photo to your profile first')).toBeTruthy()
+    api.revealInConversation.mockResolvedValue({ success: false, errorCode: 'NOT_FOUND', error: 'This conversation has ended' } as never)
+    await act(async () => fireEvent.press(screen.getByLabelText('Close')))
+    await act(async () => fireEvent.press(screen.getByLabelText('Swap names')))
+    await flush()
+    expect(screen.getByTestId('dm-reveal-error')).toBeTruthy()
+  })
+
+  it('both swapped: no strip, the line says so, and the header is never their profile', async () => {
     api.getConversation.mockResolvedValue({ success: true, data: named } as never)
     await open()
-    expect(screen.getByText('You see each other')).toBeTruthy()
-    expect(screen.queryByLabelText('Show them who you are')).toBeNull()
+    expect(screen.getByText('Names swapped')).toBeTruthy()
+    expect(screen.queryByLabelText('Swap names')).toBeNull()
+    // The name is a first name in this chat only: nothing to open.
+    expect(screen.queryByRole('button', { name: 'Mika' })).toBeNull()
+    expect(router.push).not.toHaveBeenCalledWith(expect.objectContaining({ pathname: '/user/[id]' }))
+  })
+
+  it('an accepted message request (never pseudonymous) still opens their profile', async () => {
+    api.getConversation.mockResolvedValue({ success: true, data: { ...named, pseudonymous: false, fromMatch: false } } as never)
+    await open()
+    await act(async () => fireEvent.press(screen.getByLabelText('Mika')))
+    expect(router.push).toHaveBeenCalledWith(expect.objectContaining({ pathname: '/user/[id]' }))
   })
 })
 
@@ -221,10 +283,10 @@ describe('the reveal panel folds away (drive: it stayed over the thread on Andro
 
   it('a touch on the thread folds it, and the feed gives its room back', async () => {
     await open()
-    expect(screen.getByLabelText('Show them who you are')).toBeTruthy()
+    expect(screen.getByLabelText('Swap names')).toBeTruthy()
     await touch()
     await flush()
-    expect(screen.queryByLabelText('Show them who you are')).toBeNull()
+    expect(screen.queryByLabelText('Swap names')).toBeNull()
     // The header still says where things stand.
     expect(screen.getByText('Both anonymous')).toBeTruthy()
   })
@@ -233,7 +295,7 @@ describe('the reveal panel folds away (drive: it stayed over the thread on Andro
     await open()
     await act(async () => fireEvent(feed(), 'scrollEndDrag', { nativeEvent: { contentOffset: { x: 0, y: 0 }, contentSize: { width: 393, height: 2000 }, layoutMeasurement: { width: 393, height: 800 }, velocity: { x: 0, y: 0 } } }))
     await flush()
-    expect(screen.queryByLabelText('Show them who you are')).toBeNull()
+    expect(screen.queryByLabelText('Swap names')).toBeNull()
   })
 
   it('nothing moves while the finger is down: the first tap on a message is not cancelled by the feed shifting', async () => {
@@ -246,12 +308,12 @@ describe('the reveal panel folds away (drive: it stayed over the thread on Andro
     await act(async () => fireEvent(feed(), 'touchStart'))
     await act(async () => fireEvent(feed(), 'touchMove'))
     await flush()
-    expect(screen.getByLabelText('Show them who you are')).toBeTruthy()
+    expect(screen.getByLabelText('Swap names')).toBeTruthy()
     expect(padding()).toBe(before)
     // The press lands on the message first, and only then does the panel fold.
     await act(async () => fireEvent(feed(), 'touchEnd'))
     await flush()
-    expect(screen.queryByLabelText('Show them who you are')).toBeNull()
+    expect(screen.queryByLabelText('Swap names')).toBeNull()
     expect(padding()).toBeLessThan(before as number)
   })
 
@@ -261,31 +323,27 @@ describe('the reveal panel folds away (drive: it stayed over the thread on Andro
     await flush()
     await act(async () => fireEvent.press(screen.getByLabelText('Arctic Falcon')))
     await flush()
-    expect(screen.getByLabelText('Show them who you are')).toBeTruthy()
+    expect(screen.getByLabelText('Swap names')).toBeTruthy()
   })
 
-  it('a new state brings it back: they asked, or you did', async () => {
-    api.requestReveal.mockResolvedValue({ success: true } as never)
+  it('a new state brings it back: their tap arrives after a fold', async () => {
     await open()
     await touch()
     await flush()
-    await act(async () => fireEvent.press(screen.getByLabelText('Arctic Falcon')))
+    expect(screen.queryByLabelText('Swap names')).toBeNull()
+    api.getConversation.mockResolvedValue({ success: true, data: { ...anonymous, revealRequested: true } } as never)
+    await act(async () => mockLive.at(-1)?.onRevealed?.())
     await flush()
-    await act(async () => fireEvent.press(screen.getByLabelText('Ask them')))
-    await flush()
-    expect(screen.getByText('Asked · they’ll decide in their own time')).toBeTruthy()
-    await touch()
-    await flush()
-    expect(screen.queryByText('Asked · they’ll decide in their own time')).toBeNull()
+    expect(screen.getByText('Arctic Falcon wants to swap names')).toBeTruthy()
   })
 
-  it('once both have revealed there is no panel to fold and the header is their profile', async () => {
+  it('once both have swapped there is no panel to fold', async () => {
     api.getConversation.mockResolvedValue({ success: true, data: named } as never)
     await open()
     await touch()
     await flush()
-    expect(screen.queryByLabelText('Show them who you are')).toBeNull()
-    expect(screen.getByLabelText('Mika')).toBeTruthy()
+    expect(screen.queryByLabelText('Swap names')).toBeNull()
+    expect(screen.getByText('Names swapped')).toBeTruthy()
   })
 })
 
@@ -329,6 +387,60 @@ describe('the thread’s states', () => {
       expect(scrollToEnd).toHaveBeenCalledTimes(calls)
     } finally {
       responder.mockRestore()
+    }
+  })
+
+  /*
+   * SCRUM-958: with 65 unread the first one is a page back, so the thread opens, loads that page, then scrolls to the rule.
+   * Three things moved it off screen on Android: older pages put above it (the list's top asks for them), the jump landing
+   * short of rows not yet measured (so it must be kept in place while they lay out), and that short landing reading as "at
+   * the end", which followed the thread to its newest message. The rule is scrolled to by its index now, not the one from
+   * the failed scroll.
+   */
+  it('65 unread: scrolls to the rule and keeps it there until the reader drags; the jump never follows the end', async () => {
+    const message = (n: number) => ({ ...theirs, id: `m${n}`, isRead: false, createdAt: '2026-10-15T19:00:00.000Z' })
+    const newest = Array.from({ length: 50 }, (_, i) => message(100 - i)) // the API answers newest first
+    const older = Array.from({ length: 50 }, (_, i) => message(50 - i))
+    api.getConversationMessages.mockImplementation((async (_c: string, q: { before?: string }) =>
+      q.before
+        ? { success: true, data: { messages: older, hasMore: false, nextCursor: null } }
+        : { success: true, data: { messages: newest, hasMore: true, nextCursor: 'm51', firstUnreadId: 'm36', unreadCount: 65 } }) as never)
+    const scrollToIndex = jest.spyOn(FlatList.prototype, 'scrollToIndex').mockImplementation(() => {})
+    const scrollToEnd = jest.fn()
+    const responder = jest.spyOn(FlatList.prototype, 'getScrollResponder').mockReturnValue({ scrollToEnd } as never)
+    try {
+      await open()
+      await act(async () => new Promise((r) => setTimeout(r, 50)))
+      const feed = screen.getByTestId('dm-feed')
+      const rule = (feed.props.data as { kind: string }[]).findIndex((i) => i.kind === 'unread')
+      expect(rule).toBeGreaterThan(30)
+      expect(scrollToIndex).toHaveBeenCalledWith(expect.objectContaining({ index: rule }))
+      // A scroll that failed while pages were still arriving names an index from before them: the retry goes to the rule.
+      scrollToIndex.mockClear()
+      await act(async () => {
+        feed.props.onScrollToIndexFailed({ index: 2, highestMeasuredFrameIndex: 1, averageItemLength: 60 })
+        await new Promise((r) => setTimeout(r, 200))
+      })
+      expect(scrollToIndex).toHaveBeenCalledTimes(1)
+      expect(scrollToIndex).toHaveBeenCalledWith(expect.objectContaining({ index: rule }))
+      expect(feed.props.maintainVisibleContentPosition).toBeTruthy() // FlatList moves minIndexForVisible past its header
+      // Rows laid out after the jump moved the rule: while nobody has touched the list, every layout pass puts it back.
+      scrollToIndex.mockClear()
+      await act(async () => fireEvent(screen.getByTestId('dm-feed'), 'contentSizeChange', 393, 4000))
+      expect(scrollToIndex).toHaveBeenCalledWith(expect.objectContaining({ index: rule }))
+      // The jump landing short reads as "at the end" while the list lays out: that must not follow the end, past the rule.
+      const atEnd = { contentSize: { height: 2000 }, contentOffset: { y: 1200 }, layoutMeasurement: { height: 800 } }
+      await act(async () => fireEvent.scroll(screen.getByTestId('dm-feed'), { nativeEvent: atEnd }))
+      await act(async () => fireEvent(screen.getByTestId('dm-feed'), 'contentSizeChange', 393, 2600))
+      expect(scrollToEnd).not.toHaveBeenCalled()
+      // A drag is the reader's: the list is theirs from then on.
+      await act(async () => fireEvent(screen.getByTestId('dm-feed'), 'scrollBeginDrag'))
+      scrollToIndex.mockClear()
+      await act(async () => fireEvent(screen.getByTestId('dm-feed'), 'contentSizeChange', 393, 4600))
+      expect(scrollToIndex).not.toHaveBeenCalled()
+    } finally {
+      responder.mockRestore()
+      scrollToIndex.mockRestore()
     }
   })
 
@@ -649,4 +761,18 @@ describe('re-opening from the cache keeps older history reachable', () => {
     const cached = queryCache.get<unknown[]>('private_messages_u-a_c1')
     expect(cached).toHaveLength(50)
   })
+})
+
+/* SCRUM-1040: as the room's feed (flow5Room): the instant jump under Reduce Motion landed on detached rows on Android. */
+it('the DM feed keeps its rows attached, so an instant jump to the newest never lands on a blank frame (SCRUM-1040)', async () => {
+  // FlatList's default is per platform (true on Android only), so the screen is drawn as Android draws it.
+  const { Platform } = jest.requireActual('react-native')
+  const os = Platform.OS
+  Object.defineProperty(Platform, 'OS', { value: 'android', configurable: true })
+  try {
+    await open()
+    expect(screen.getByTestId('dm-feed').props.removeClippedSubviews).toBe(false)
+  } finally {
+    Object.defineProperty(Platform, 'OS', { value: os, configurable: true })
+  }
 })

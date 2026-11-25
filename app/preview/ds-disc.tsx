@@ -3,13 +3,14 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { Disc } from '../../components/ds/Disc'
+import { Title } from '../../components/ds/Title'
 import ScalePress from '../../components/motion/ScalePress'
 import { Material } from '../../components/ui/Material'
 import { COLOR, RADIUS, SIZE, SPACE, TYPE } from '../../lib/design/tokens'
 import type { RoomButtonTarget } from '../../lib/roomButton'
 
 /**
- * The centre disc in every state, and the night played one step at a time.
+ * The center disc in every state, and the night played one step at a time.
  *
  * Deep-link `exp+blendn:///preview/ds-disc`.
  *
@@ -38,7 +39,7 @@ export default function DsDiscPreview() {
 
   return (
     <ScrollView style={styles.page} contentContainerStyle={[styles.content, { paddingTop: insets.top + SPACE.xl }]}>
-      <Text style={styles.title}>The centre disc</Text>
+      <Title style={styles.title}>The center disc</Title>
       <Text style={styles.meta}>Variant A, “the disc fills”. Each state as a still.</Text>
 
       <View style={styles.grid}>
@@ -76,7 +77,7 @@ const LABEL_ROOM = SPACE.xxxl
 const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: COLOR.ink },
   content: { paddingHorizontal: SPACE.gutter, paddingBottom: SPACE.xxxl, gap: SPACE.lg },
-  title: { ...TYPE.title, color: COLOR.textPrimary },
+  title: { color: COLOR.textPrimary },
   meta: { ...TYPE.meta, color: COLOR.textSecondary },
   grid: { flexDirection: 'row', flexWrap: 'wrap', rowGap: SPACE.xl },
   cell: { width: '33.3%', alignItems: 'center', gap: SPACE.sm, paddingTop: LABEL_ROOM },

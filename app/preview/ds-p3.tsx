@@ -324,7 +324,7 @@ const MENUS: [string, MenuItem[], number?][] = [
     [
       { icon: 'bell-off', label: 'Mute', onPress: noop },
       { icon: 'info', label: 'Room info', onPress: noop },
-      { icon: 'log-out', label: 'Leave room', destructive: true, onPress: noop },
+      { icon: 'log-out', label: 'Check out', destructive: true, onPress: noop },
     ],
   ],
   ['pressed', MESSAGE_MENU.slice(1, 4), 1],
@@ -351,7 +351,7 @@ const COMPOSERS: [string, Partial<ComposerProps>][] = [
   ['focused', { previewState: 'focused' }],
   ['the counter · 100 left', { value: 'x'.repeat(900) }],
 ]
-const LOCKED: ComposerState[] = ['muted', 'automuted', 'locked', 'closed', 'ratelimited', 'notcheckedin']
+const LOCKED: ComposerState[] = ['muted', 'automuted', 'closed', 'ratelimited', 'notcheckedin']
 
 function Composers() {
   const [value, setValue] = useState('')

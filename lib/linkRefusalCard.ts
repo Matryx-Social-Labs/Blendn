@@ -35,7 +35,7 @@ export function linkRefusalCard(
         icon: 'unlink',
         title: 'This link is broken',
         body: 'It’s missing a part. Ask whoever sent it for a fresh one.',
-        actions: [{ label: 'Go to the Pulse', kind: 'strong', pressHaptic: false, onPress: go.toPulse }],
+        actions: [{ label: 'Go to the Pulse', kind: 'primary', pressHaptic: false, onPress: go.toPulse }],
         testID: 'link-broken',
       }
     default:
@@ -44,7 +44,7 @@ export function linkRefusalCard(
         icon: 'calendar-off',
         title: NO_LONGER_AVAILABLE.title,
         body: NO_LONGER_AVAILABLE.body,
-        actions: [{ label: 'See what’s on tonight', kind: 'strong', pressHaptic: false, onPress: go.toPulse }],
+        actions: [{ label: 'See what’s on tonight', kind: 'primary', pressHaptic: false, onPress: go.toPulse }],
         testID: 'link-gone',
       }
   }

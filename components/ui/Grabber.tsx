@@ -16,8 +16,9 @@ export function Grabber({ style }: { style?: StyleProp<ViewStyle> }) {
 const styles = StyleSheet.create({
   grabber: {
     alignSelf: 'center',
-    width: 40,
-    height: 4,
+    // kit.css `.grab` (the foundations): 36 × 5.
+    width: 36,
+    height: 5,
     borderRadius: RADIUS.capsule,
     backgroundColor: COLOR.textTertiary,
   },

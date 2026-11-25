@@ -96,6 +96,14 @@ describe('<Material>', () => {
     expect(contrast(COLOR.textPrimary, `#${v}${v}${v}`)).toBeGreaterThanOrEqual(3)
   })
 
+  it('toast glass has the toast’s ink floor: liquid glass showed the Going title straight through an Undo toast (SCRUM-1074 drive)', async () => {
+    on('ios', { glass: true })
+    await draw('toast')
+    const floor = StyleSheet.flatten(screen.getByTestId('material-toast-floor', { includeHiddenElements: true }).props.style)
+    expect(floor.backgroundColor).toBe(MATERIAL.glassTintToast)
+    expect(screen.queryByTestId('material-media-floor', { includeHiddenElements: true })).toBeNull()
+  })
+
   it('no other role, and no other tier, draws the floor', async () => {
     on('ios', { glass: true })
     await draw('bar')

@@ -60,6 +60,14 @@ beforeEach(async () => {
 })
 
 const { blockEpoch } = require('../lib/blockEpoch') as typeof import('../lib/blockEpoch')
+const { queryCache } = require('../lib/queryCache') as typeof import('../lib/queryCache')
+const { clearDirtyDomains, isDomainDirty } = require('../lib/liveSyncState') as typeof import('../lib/liveSyncState')
+
+const PEOPLE = 'personal_chats_u1'
+const cachePeople = () => {
+  queryCache.set(PEOPLE, [{ conversation_id: 'c1' }], 60_000)
+  clearDirtyDomains(['chat'])
+}
 
 const paths: [string, () => Promise<{ success: boolean }>][] = [
   ['blockUser', () => apiClient.blockUser('u1')],
@@ -96,5 +104,42 @@ describe('what is not a block', () => {
     const before = blockEpoch()
     await run()
     expect(blockEpoch()).toBe(before)
+  })
+})
+
+/*
+ * A block or a leave closes the conversation on the server. The Banter's People list is a 60 s copy, and a read that
+ * races the forced one the block starts can leave it on screen until a pull-to-refresh (SCRUM-919): the copy goes, and
+ * the next read is the server's.
+ */
+describe('the conversation a block or a leave closes leaves the cached People (SCRUM-919)', () => {
+  it.each([
+    ...paths,
+    ['leaveConversation (unmatch)', () => apiClient.leaveConversation('c1', { action: 'unmatch' })] as [string, () => Promise<{ success: boolean }>],
+  ])('%s drops it when the server says yes', async (_n, run) => {
+    server(ok({ blocked: true }))
+    cachePeople()
+    await run()
+    expect(queryCache.get(PEOPLE)).toBeNull()
+    // Not the open conversation's own sync: it has just been closed.
+    expect(isDomainDirty('chat')).toBe(false)
+  })
+
+  it.each(paths)('%s leaves it when the server refuses', async (_n, run) => {
+    server(() => json(403, { success: false, error: 'No', errorCode: 'FORBIDDEN' }))
+    cachePeople()
+    await run()
+    expect(queryCache.get(PEOPLE)).not.toBeNull()
+    expect(isDomainDirty('chat')).toBe(false)
+  })
+
+  it.each([
+    ['accepting a request', () => apiClient.respondToMessageRequest('q1', 'accept')],
+    ['unblocking', () => apiClient.unblockUser('u1')],
+  ])('%s leaves it', async (_n, run) => {
+    server(ok({}))
+    cachePeople()
+    await run()
+    expect(queryCache.get(PEOPLE)).not.toBeNull()
   })
 })

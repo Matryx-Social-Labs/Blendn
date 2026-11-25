@@ -1,13 +1,14 @@
 import { router } from 'expo-router'
+import { handRoomPerson } from '../../lib/roomPersonHandoff'
 import { useEffect, useState } from 'react'
 
 import { apiClient } from '../../lib/apiClient'
 import type { RoomAttendee } from '../../lib/activeRoom'
 import { Logger } from '../../lib/logger'
 import { likeRefusal } from '../../lib/likeRefusal'
-import { overlapOf } from '../../lib/overlapLine'
-import { reasonLine } from '../../lib/roomMoments'
-import { markSeed } from '../../lib/pseudonymAvatar'
+import { shouldSendWave, waveRefusal, waveStateAfter, waveStatusFor, WAVE_SETTLE_MS, type WaveStatus } from '../../lib/waves'
+import { lensView, parseLens, type RoomLens } from '../../lib/roomLens'
+import { markSeed } from '../../lib/creatureSeed'
 import { attendeeFromMatch } from '../../lib/roomLive'
 import { showUserSafetyActions } from '../../lib/safetyUtils'
 import { PersonCard, type PersonState } from '../ds/PersonCard'
@@ -38,17 +39,24 @@ export function SenderCard({
   chatGroupId,
   onClose,
   onBlocked,
+  eventTitle,
 }: {
   sender: Sender | null
   eventId: string | null
   chatGroupId: string
+  /** The sheet's context line ("In the room at …"); none when the caller does not know it. */
+  eventTitle?: string | null
   onClose: () => void
   onBlocked: (senderId: string) => void
 }) {
   const [shown, setShown] = useState<Sender | null>(sender)
   if (sender && sender !== shown) setShown(sender)
   const [card, setCard] = useState<RoomAttendee | null>(null)
+  const [lens, setLens] = useState<RoomLens | null>(null)
   const [state, setState] = useState<PersonState>('none')
+  /** This session's wave at them (`lib/waves.ts`), over the deck's flags; and the conversation a mutual opened. */
+  const [waveLocal, setWaveLocal] = useState<WaveStatus | undefined>(undefined)
+  const [opened, setOpened] = useState<string | null>(null)
   const [refusal, setRefusal] = useState<string | null>(null)
   const [connectOpen, setConnectOpen] = useState(false)
   const [sending, setSending] = useState(false)
@@ -59,6 +67,8 @@ export function SenderCard({
     setCardFor(sender.id)
     setCard(null)
     setState('none')
+    setWaveLocal(undefined)
+    setOpened(null)
     setRefusal(null)
   }
 
@@ -72,7 +82,7 @@ export function SenderCard({
         if (!live || !r.success) return
         const found = (r.data?.matches as RoomAttendee[] | undefined)?.find((m) => m.userId === senderId) ?? null
         setCard(found)
-        if (found?.youLiked) setState('liked')
+        setLens(parseLens(r.data?.lens))
       })
       .catch((error) => Logger.warn('chat', 'Roster lookup failed', { error }))
     return () => {
@@ -84,37 +94,43 @@ export function SenderCard({
   if (!who) return null
   const attendee = card ? attendeeFromMatch(card) : null
 
-  const like = async () => {
-    if (!eventId || state === 'liked') return
-    setState('liked')
+  // This card's own mutual first, then the deck's (one from before a restart).
+  const mutualConversation = opened ?? card?.conversationId ?? null
+  const waveStatus = waveStatusFor({ youWaved: card?.youWaved, wavedAtYou: card?.wavedAtYou, conversationId: mutualConversation }, waveLocal)
+
+  const openChat = (conversationId: string | null) => {
+    onClose()
+    // No conversation known (an older server, or a friend the mutual opened nothing with): the chats list has it.
+    if (conversationId) router.push({ pathname: '/private-chat/[conversationId]', params: { conversationId } } as never)
+    else router.navigate('/(tabs)/chat' as never)
+  }
+
+  /** Wave, or wave back (SCRUM-1042): the hand swings until both the server and 07-motion's 800 ms are done. */
+  const wave = async () => {
+    if (!eventId || !shouldSendWave(waveStatus)) return
+    setWaveLocal('sending')
     setRefusal(null)
-    const result = await apiClient.likeAtEvent(eventId, who.id)
-    if (!result.success) {
-      setState('none')
-      setRefusal(likeRefusal(result.errorCode, result.error).message)
-      return
-    }
-    const conversationId = result.data?.mutual ? result.data.conversationId : undefined
-    if (!conversationId) void askPushInContext('like')
-    if (conversationId) {
-      onClose()
-      router.push({ pathname: '/private-chat/[conversationId]', params: { conversationId } } as never)
+    try {
+      const [result] = await Promise.all([apiClient.sendWave(eventId, who.id), new Promise((r) => setTimeout(r, WAVE_SETTLE_MS))])
+      setWaveLocal(waveStateAfter({ ok: !!result.success, mutual: result.data?.mutual }))
+      if (!result.success) return setRefusal(waveRefusal(result.errorCode, result.error).message)
+      if (!result.data?.mutual) return void askPushInContext('like')
+      setOpened(result.data.conversationId ?? null)
+      openChat(result.data.conversationId ?? null)
+    } catch (error) {
+      Logger.warn('chat', 'Wave failed', { error })
+      setWaveLocal(undefined)
+      setRefusal(waveRefusal(undefined, undefined).message)
     }
   }
 
-  const wave = async () => {
-    if (!eventId) return
-    setState('waveBusy')
-    setRefusal(null)
-    const result = await apiClient.sendWave(eventId, who.id)
-    // Once per ten minutes: a wave already sent reads as waved, not as a failure.
-    if (result.success || result.errorCode === 'WAVE_TOO_SOON') return setState('waved')
-    setState(card?.youLiked ? 'liked' : 'none')
-    setRefusal(likeRefusal(result.errorCode, result.error).message)
-  }
+  // Their deck card, as the lens reads it: only what the deck sent (never a name, photo or bio).
+  const lensPerson = card ? { workField: card.workField ?? null, sharedIntents: card.sharedIntents ?? [], interests: card.sharedInterests, overlaps: card.overlaps ?? [], badges: card.badges ?? [], age: card.age, tonightAnswer: card.tonightAnswer, workIntent: card.workIntent } : null
 
   const viewProfile = () => {
     onClose()
+    // P-A page: their deck card goes with them (lead pills, In common), in memory, never in the link.
+    if (lensPerson) handRoomPerson(who.id, { person: lensPerson, lens })
     router.push({
       pathname: '/user/[id]',
       params: { id: who.id, ...(eventId ? { eventId } : {}), pseudonym: who.name, roomSeed: `${chatGroupId}:${who.id}` },
@@ -131,15 +147,22 @@ export function SenderCard({
           face: { kind: 'creature', pseudonym: markSeed(who.name, `${chatGroupId}:${who.id}`) },
           name: who.name,
           age: attendee?.age,
-          reason: attendee ? reasonLine(attendee) : undefined,
-          chips: card?.sharedInterests,
-          overlap: card ? overlapOf({ overlaps: card.overlaps, sharedIntents: card.sharedIntents, interests: card.sharedInterests, sign: card.sign }) : undefined,
+          // P-A: their deck card through the room's lens (the sheet draws only what the deck sent for them).
+          ...(card && lensPerson
+            ? lensView(
+                lensPerson,
+                lens,
+                eventTitle ? { title: eventTitle } : null,
+                !!card.photo
+              )
+            : {}),
         }}
-        variant={card ? (card.insideNow === false ? 'was' : 'here') : 'thin'}
+        variant={!card ? 'thin' : waveStatus === 'mutual' ? 'matched' : card.insideNow === false ? 'was' : 'here'}
         state={state}
+        wave={waveStatus}
         refusal={refusal ? { text: refusal } : undefined}
-        onLike={() => void like()}
         onWave={() => void wave()}
+        onSayHi={() => openChat(mutualConversation)}
         onMessage={() => setConnectOpen(true)}
         onMore={() => {
           onClose()

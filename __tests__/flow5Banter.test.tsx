@@ -19,6 +19,7 @@ jest.mock('expo-router', () => {
   return {
     router: { push: jest.fn(), back: jest.fn(), replace: jest.fn() },
     useScrollToTop: () => {},
+    useIsFocused: () => true,
     // The screen is focused once, on mount.
     useFocusEffect: (effect: () => void | (() => void)) => {
       mockRefocus = effect
@@ -36,6 +37,7 @@ jest.mock('../lib/useAuth', () => ({ useAuth: () => mockAuth }))
 jest.mock('../lib/apiClient', () => ({
   apiClient: {
     getChatGroups: jest.fn(),
+    getWavesWaiting: jest.fn(async () => ({ success: true, data: { rooms: [] } })),
     getConversations: jest.fn(),
     getMessageRequests: jest.fn(),
     markAllConversationsRead: jest.fn(),
@@ -74,12 +76,22 @@ jest.mock('../lib/useLiveSync', () => ({
 }))
 jest.mock('../lib/board', () => ({ ...jest.requireActual('../lib/board'), BOARD_ENABLED: false }))
 jest.mock('../components/pulse/NotificationBell', () => ({ NotificationBell: () => null }))
-jest.mock('../components/RealtimeStatusBanner', () => ({ __esModule: true, default: () => null }))
+jest.mock('../components/RealtimeStatusBanner', () => {
+  const { View } = require('react-native')
+  return { __esModule: true, default: () => <View testID="mock-realtime-banner" /> }
+})
 jest.mock('../components/board/BoardRequestsSection', () => ({ BoardRequestsSection: () => null }))
 jest.mock('../components/OptimizedImage', () => ({ preloadImages: jest.fn() }))
 jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: jest.fn() }) }))
 const mockRefreshBadge = jest.fn()
 jest.mock('../lib/appBadge', () => ({ refreshAppIconBadge: () => mockRefreshBadge(), scheduleIconBadgeRefresh: jest.fn() }))
+
+const mockSpots: { active: boolean; text?: string }[] = []
+jest.mock('../components/ds/CoachMarkHost', () => ({
+  useCoachMarkSpot: (active: boolean, spot: { text: string }) => {
+    mockSpots.push({ active, text: spot.text })
+  },
+}))
 
 /* eslint-disable import/first */
 import { router } from 'expo-router'
@@ -87,7 +99,7 @@ import Banter from '../app/(tabs)/chat'
 import { apiClient } from '../lib/apiClient'
 import { clearOutbox, dmThread, keepFailed, roomThread, setDraft } from '../lib/chatOutbox'
 import { markDomainsDirty } from '../lib/liveSyncState'
-import { queryCache } from '../lib/queryCache'
+import { forgetMessageRequests, forgetPersonalChats, queryCache } from '../lib/queryCache'
 import { resetRoomMembership } from '../lib/roomMembership'
 import { noteBlocked } from '../lib/blockEpoch'
 import { H } from '../lib/haptics'
@@ -126,23 +138,60 @@ beforeEach(() => {
   serve()
 })
 
-it('draws Live now, Requests, People and Past rooms, with a request’s note verbatim', async () => {
-  await open()
-  for (const heading of ['Live now', 'Requests', 'People', 'Past rooms']) expect(screen.getAllByText(heading).length).toBeGreaterThan(0)
-  expect(screen.getAllByText('Vinyl Night').length).toBeGreaterThan(0)
-  expect(screen.getByText('Loved your take on the set — coffee next week?')).toBeTruthy()
-  expect(screen.getByLabelText('Accept the request from Quiet Otter')).toBeTruthy()
-  expect(screen.getByLabelText('Decline the request from Quiet Otter')).toBeTruthy()
+// First in the file on purpose: a coach mark is once per account per launch (module state), so a later render would find it spent.
+describe('the fourth tip: "Swipe a chat left to mute it." (ROOM-18)', () => {
+  it('is placed on the Banter once a chat can be muted, and not before the list has loaded', async () => {
+    mockSpots.length = 0
+    serve()
+    await open()
+    await flush() // the stored "seen" flag is read asynchronously
+    expect(mockSpots.some((s) => s.active && s.text === 'Swipe a chat left to mute it.')).toBe(true)
+  })
+
+  it('finds its row by a flag on the row, not by matching the tray’s label', () => {
+    const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'app', '(tabs)', 'chat.tsx'), 'utf8')
+    expect(src).toContain('i.row.canMute === true')
+    expect(src).not.toMatch(/label === 'Mute'/)
+    // Crews, Lobby rooms (Flow 5 C5) and past rooms: the rooms that can be muted.
+    expect(src.match(/canMute: true/g)).toHaveLength(3)
+  })
+
+  it('a swipe-open counts as use, so it never shows to somebody who already knows', async () => {
+    const { COACH_TIPS } = jest.requireActual('../lib/coachMarks') as typeof import('../lib/coachMarks')
+    expect(COACH_TIPS.find((t) => t.id === 'banter_swipe_mute')?.text).toBe('Swipe a chat left to mute it.')
+  })
 })
 
-it('says a locked room’s state as a chip, not as its last message', async () => {
+it('draws Live now, Message requests, People and Past rooms, with a request’s note verbatim', async () => {
   await open()
-  expect(screen.getByText(/Locked by the organizer/)).toBeTruthy()
-  expect(screen.queryByText(/Thanks all/)).toBeNull()
+  for (const heading of ['Live now', 'Message requests', 'People', 'Past rooms']) expect(screen.getAllByText(heading).length).toBeGreaterThan(0)
+  expect(screen.getAllByText('Vinyl Night').length).toBeGreaterThan(0)
+  // Answers live on the Requests page: the Banter says who and how many, in one row.
+  expect(screen.getByLabelText('Message requests, 1')).toBeTruthy()
+  expect(screen.queryByLabelText('Accept the request from Quiet Otter')).toBeNull()
+})
+
+// Requests placement A (owner 2026-11-15): crew invites leave Banter. Today's row counted them with the message requests (72 = 60 + 12).
+it('counts message requests only on its row: crew invites waiting add nothing, and alone draw no row', async () => {
+  const { crewsApi } = jest.requireMock('../lib/crewsApi')
+  const invite = { crewId: 'c1', name: 'Run Club', invitedBy: 'Asha', invitedAt: '2026-01-01T00:00:00Z', emblemSeed: 's', tags: [], size: 3, bio: null }
+  crewsApi.myCrews.mockResolvedValue({ success: true, data: { crews: [], invites: [invite, { ...invite, crewId: 'c2' }], invitesPagination: { hasMore: false, nextCursor: null, totalCount: 2 } } })
+  try {
+    await open()
+    expect(screen.getByLabelText('Message requests, 1')).toBeTruthy()
+    expect(screen.queryByLabelText('Message requests, 3')).toBeNull()
+  } finally {
+    crewsApi.myCrews.mockResolvedValue({ success: true, data: { crews: [], invites: [] } })
+  }
+})
+
+it('a room with a `locked` status says no organizer lock (SCRUM-893): its last message, like any past room', async () => {
+  await open()
+  expect(screen.queryByText(/Locked by the organi/)).toBeNull()
+  expect(screen.getByText(/Thanks all/)).toBeTruthy()
 })
 
 it('line 2 is your unsent message, then your draft — never another account’s', async () => {
-  // An open room: a locked one says its state before anything of yours.
   serve({ rooms: [liveRoom, { ...pastRoom, status: 'open' }] })
   keepFailed(dmThread('c1', 'u-a'), [{ id: 'local-1' }])
   setDraft(roomThread('g-past', 'u-a'), 'see you at   ten')
@@ -152,6 +201,19 @@ it('line 2 is your unsent message, then your draft — never another account’s
   expect(screen.getByText('Not sent · Tap to retry')).toBeTruthy()
   expect(screen.getByText(/see you at ten/)).toBeTruthy()
   expect(screen.queryByText(/somebody else’s draft/)).toBeNull()
+})
+
+it('the Live now card says your unsent message too, not your last sent one (SCRUM-633)', async () => {
+  keepFailed(roomThread('g-live', 'u-a'), [{ id: 'local-1' }])
+  await open()
+  expect(within(screen.getByTestId('banter-live-g-live')).getByText('Not sent · Tap to retry')).toBeTruthy()
+  expect(screen.queryByText(/Stage is open/)).toBeNull()
+})
+
+it('the Live now card shows your draft before the room’s last message', async () => {
+  setDraft(roomThread('g-live', 'u-a'), 'meet at the bar')
+  await open()
+  expect(within(screen.getByTestId('banter-live-g-live')).getByText(/Draft · meet at the bar/)).toBeTruthy()
 })
 
 it('shows B none of A’s drafts or unsent messages', async () => {
@@ -411,6 +473,18 @@ describe('the app icon follows what the Banter reads (badgeCount counts unread c
     expect(mockRefreshBadge).toHaveBeenCalledTimes(1)
   })
 
+  it('Mark all read is drawn only while something is unread (Flow 9 A · 4)', async () => {
+    serve({ dms: [{ ...dm, unreadCount: 0 }] })
+    await open()
+    expect(screen.getByText('Banter')).toBeTruthy()
+    expect(screen.queryByTestId('banter-mark-all')).toBeNull()
+  })
+
+  it('negative control: with an unread conversation it is there', async () => {
+    await open()
+    expect(screen.getByTestId('banter-mark-all')).toBeTruthy()
+  })
+
   it('and not when the server refused: the count did not change', async () => {
     api.markAllConversationsRead.mockResolvedValue({ success: false, error: 'no' } as never)
     await open()
@@ -571,22 +645,19 @@ describe('a Banter of thousands (SCRUM-760 b)', () => {
     expect(screen.getAllByText('Fox 1').length).toBeGreaterThan(0)
   })
 
-  it('the Requests section is a strip of three with the server’s true count and a "See all" to the screen of them', async () => {
-    const rs = (from: number, n: number) => Array.from({ length: n }, (_, i) => ({ id: `r${from + i}`, senderId: `s${from + i}`, sender: { id: `s${from + i}`, name: `Asker ${from + i}` }, message: `hello ${from + i}`, createdAt: at }))
+  it('Requests is one row with the server’s true count, so 140 waiting never push a chat below the fold', async () => {
+    const rs = (from: number, n: number) => Array.from({ length: n }, (_, i) => ({ id: `r${from + i}`, senderId: `s${from + i}`, sender: { id: `s${from + i}`, name: `Fox ${from + i}` }, createdAt: '2026-01-01T00:00:00Z' }))
     api.getMessageRequests.mockResolvedValue({ success: true, data: { requests: rs(0, 20), totalCount: 140 } } as never)
     await open()
-    expect(screen.getByLabelText('Requests, 140')).toBeTruthy()
-    expect(screen.getAllByLabelText(/^Accept the request from/)).toHaveLength(3)
-    await act(async () => fireEvent.press(screen.getByLabelText('See all 140')))
+    expect(screen.queryByLabelText(/^Accept the request from/)).toBeNull()
+    await act(async () => fireEvent.press(screen.getByLabelText('Message requests, 140')))
     expect(router.push).toHaveBeenCalledWith('/message-requests')
-    // The strip stays a strip: nothing expands in place.
-    expect(screen.getAllByLabelText(/^Accept the request from/)).toHaveLength(3)
   })
 
-  it('a few requests are all shown, with no "Show all"', async () => {
+  it('one request is still the row, and says one', async () => {
     serve()
     await open()
-    expect(screen.getByLabelText('Requests, 1')).toBeTruthy()
+    expect(screen.getByLabelText('Message requests, 1')).toBeTruthy()
     expect(screen.queryByLabelText(/^Show all/)).toBeNull()
   })
 })
@@ -639,4 +710,156 @@ it('reads the room’s own line from lastMessage.type: system has no "You:", a p
   expect(await screen.findByText('You liked Crew Nebula for the crew')).toBeTruthy()
   expect(screen.getByText('Crew Two is on the board')).toBeTruthy()
   expect(screen.getByText('You: liked Lot S9 for the crew')).toBeTruthy()
+})
+
+describe('the Banter is fresh when you come back to it (SCRUM-907)', () => {
+  const requestRow = 'Message requests, 1'
+  // The server has the request; the SWR copy is still the empty list, and only a forced read has it.
+  const serveRequestAfterSwr = () =>
+    api.getMessageRequests.mockImplementation((async (_p?: unknown, o?: { force?: boolean }) => ({
+      success: true,
+      data: { requests: o?.force ? [request] : [] },
+    })) as never)
+
+  it('a request that arrived while the tab was away shows on the next sync once the bell has said so', async () => {
+    // Arrange: the Banter loaded with no requests (and cached that); then someone sends one.
+    serve({ requests: [] })
+    await open()
+    expect(screen.queryByLabelText(requestRow)).toBeNull()
+    serveRequestAfterSwr()
+    // Act: the bell's row for it lands (lib/inboxBadge), and the Banter syncs.
+    forgetMessageRequests()
+    await act(async () => void (await mockSync.onSync?.()))
+    await flush()
+    // Assert
+    expect(screen.getByLabelText(requestRow)).toBeTruthy()
+  })
+
+  it('a Banter that has only just mounted (what View on a notification pushes) reads the server, not the stale copy', async () => {
+    // Nothing cached in this instance, and `apiClient`'s stale-while-revalidate copy still says there are none.
+    serveRequestAfterSwr()
+    serve({ requests: [] })
+    serveRequestAfterSwr()
+    await open()
+    expect(screen.getByLabelText(requestRow)).toBeTruthy()
+    expect(api.getMessageRequests).toHaveBeenLastCalledWith({ status: 'pending' }, { force: true })
+  })
+
+  it('a conversation made by an accepted request shows on the next sync once the bell has said so (SCRUM-918)', async () => {
+    // Arrange: People loaded empty (and cached); the other person accepts, and the SWR copy still says empty.
+    serve({ dms: [], requests: [] })
+    await open()
+    expect(screen.queryByText(/See you there/)).toBeNull()
+    api.getConversations.mockImplementation((async (o?: { force?: boolean }) => ({ success: true, data: o?.force ? [dm] : [] })) as never)
+    // Act: the bell's row for the response lands (lib/inboxBadge), and the Banter syncs.
+    forgetPersonalChats()
+    await act(async () => void (await mockSync.onSync?.()))
+    await flush()
+    // Assert
+    expect(screen.getByText(/See you there/)).toBeTruthy()
+    expect(api.getConversations).toHaveBeenLastCalledWith({ force: true })
+  })
+
+  it('a quiet sync with nothing known asks for no requests inside the throttle', async () => {
+    serve({ requests: [] })
+    await open()
+    expect(api.getMessageRequests).toHaveBeenCalledTimes(1)
+    await act(async () => void (await mockSync.onSync?.()))
+    await flush()
+    expect(api.getMessageRequests).toHaveBeenCalledTimes(1)
+  })
+
+  it('a read that fails leaves the requests on screen: it is not "no requests"', async () => {
+    serve()
+    await open()
+    expect(screen.getByLabelText(requestRow)).toBeTruthy()
+    api.getMessageRequests.mockResolvedValue({ success: false, error: 'offline' } as never)
+    forgetMessageRequests()
+    await act(async () => void (await mockSync.onSync?.()))
+    await flush()
+    expect(api.getMessageRequests).toHaveBeenCalledTimes(2)
+    expect(screen.getByLabelText(requestRow)).toBeTruthy()
+  })
+
+  it('a room you opened stays read when a background sync repaints from the cache behind you', async () => {
+    // Arrange: an unread room; the server marks it read the moment it opens.
+    const unreadRoom = { ...pastRoom, status: 'open', unreadCount: 2 }
+    const label = /Jazz Brunch, .*unread/
+    serve({ rooms: [unreadRoom], dms: [], requests: [] })
+    await open()
+    await act(async () => fireEvent.press(screen.getByLabelText(label)))
+    api.getChatGroups.mockResolvedValue({ success: true, data: { groups: [{ ...unreadRoom, unreadCount: 0 }] } } as never)
+    // Act: back on the Banter, then the next background sync (the 8 s tick while the socket is down).
+    await act(async () => void mockRefocus?.())
+    await act(async () => void (await mockSync.onSync?.()))
+    await flush()
+    // Assert: read from the server, not painted from the 60 s copy that still said 2.
+    expect(screen.queryByLabelText(label)).toBeNull()
+    expect(api.getChatGroups).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('one exit (I-A): a room row swipes to Mute only', () => {
+  const actionsOf = (testID: string) =>
+    (within(screen.getByTestId(testID)).getAllByRole('button').find((n) => Array.isArray(n.props.accessibilityActions))!.props
+      .accessibilityActions as { name: string }[]).map((a) => a.name)
+
+  it('a room you are not in offers Mute alone: no Leave, no Check out', async () => {
+    await open()
+    expect(actionsOf('banter-swipe-g:g-past')).toEqual(['Mute'])
+  })
+
+  it('the room you are in is Live now’s card, with no swipe (its Check out is in the room’s ⋯)', async () => {
+    await open()
+    expect(screen.getByTestId('banter-live-g-live')).toBeTruthy()
+    expect(screen.queryByTestId('banter-swipe-g:g-live', { includeHiddenElements: true })).toBeNull()
+  })
+})
+
+// Flow 5 C5 · B-A (owner 2026-11-10; line 2 pick A 2026-11-20): the Lobby rooms you are seated in, as Rooms, above Crews.
+it('draws Rooms for the Lobby rooms you are in: the post’s kind, who with and its words, and opens the room', async () => {
+  const ride = {
+    id: 'g-ride',
+    kind: 'board_post',
+    name: 'Car from Saint-Jean-sur-Richelieu via the Gardiner at 5:30',
+    boardPost: { id: 'p1', eventId: 'e1', kind: 'offer', subKind: 'ride', yours: false },
+    others: { names: ['Lunar Fox', 'Velvet Owl', 'Amber Lynx'], count: 12 },
+    unreadCount: 1,
+    lastMessageAt: at,
+    lastMessage: { content: 'Leaving in 10', createdAt: at, user: { id: 'rh_x', name: 'Velvet Owl' } },
+    mute: { muted: false, until: null },
+  }
+  api.getChatGroups.mockResolvedValue({ success: true, data: { groups: [liveRoom, pastRoom], rooms: [ride] } } as never)
+  await open()
+  expect(screen.getAllByText('Rooms').length).toBeGreaterThan(0)
+  expect(screen.getAllByText('Your ride').length).toBeGreaterThan(0)
+  expect(screen.getAllByText('With Lunar Fox and 11 others · Car from Saint-Jean-sur-Richelieu via the Gardiner at 5:30').length).toBeGreaterThan(0)
+  fireEvent.press(screen.getAllByText('Your ride')[0])
+  expect(jest.requireMock('expo-router').router.push).toHaveBeenCalledWith({ pathname: '/chat/[id]', params: { id: 'g-ride', roomName: 'Your ride' } })
+})
+
+it('draws no Rooms section when you are in no Lobby room (an older server lists none)', async () => {
+  await open()
+  expect(screen.queryByText('Rooms')).toBeNull()
+})
+
+describe('the realtime banner pinned over the list (t13 drive, Android: "Updates paused" sat on the Message requests row)', () => {
+  const paddingTop = () => StyleSheet.flatten(screen.getByTestId('banter-list').props.contentContainerStyle).paddingTop as number
+  const layout = (height: number) =>
+    fireEvent(screen.getByTestId('banter-banner-slot'), 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 360, height } } })
+
+  it('pushes the first row down by its own height while it shows, so it never covers a row', async () => {
+    await open()
+    const rest = paddingTop()
+    await act(async () => layout(56))
+    expect(paddingTop()).toBe(rest + 56)
+  })
+
+  it('negative control: gone (no banner, no height), the list sits where it always did', async () => {
+    await open()
+    const rest = paddingTop()
+    await act(async () => layout(56))
+    await act(async () => layout(0))
+    expect(paddingTop()).toBe(rest)
+  })
 })

@@ -21,6 +21,6 @@ const FLOW = readFileSync(join(__dirname, '..', 'lib', 'useCheckInFlow.ts'), 'ut
 
 describe('check-in sends the accuracy it already measured', () => {
   it('passes the whole fix to the request, not a rebuilt lat/lng pair', () => {
-    expect(FLOW).toContain('submitCheckIn(eventId, location)')
+    expect(FLOW).toContain('submitCheckIn(eventId, location, withCrew.current')
   })
 })

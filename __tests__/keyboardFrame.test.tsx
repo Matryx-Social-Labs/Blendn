@@ -41,7 +41,7 @@ it('the root layout wraps the app in the keyboard provider', () => {
 })
 
 it('both chat lists keep the interactive dismiss on iOS', () => {
-  for (const file of ['app/chat/[id].tsx', 'app/private-chat/[conversationId].tsx']) {
+  for (const file of ['components/chat/RoomChat.tsx', 'app/private-chat/[conversationId].tsx']) {
     expect(readFileSync(join(__dirname, '..', file), 'utf8')).toMatch(/KEYBOARD_DISMISS = Platform\.OS === 'ios' \? 'interactive' : 'on-drag'/)
   }
 })

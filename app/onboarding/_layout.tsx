@@ -41,13 +41,7 @@ export default function OnboardingLayout() {
           animation: reduceMotion ? 'fade' : Platform.OS === 'ios' ? 'ios_from_right' : 'slide_from_right',
           contentStyle: { backgroundColor: COLOR.ink },
         }}
-      >
-        {/*
-          After the last step, with the finished steps still underneath: a swipe
-          here would reopen one. See app/onboarding/friends.tsx.
-        */}
-        <Stack.Screen name="friends" options={{ gestureEnabled: false }} />
-      </Stack>
+      />
     </HueProvider>
   )
 }

@@ -21,7 +21,7 @@ jest.mock('expo-linear-gradient', () => {
   return { LinearGradient: (props: object) => <View {...props} /> }
 })
 jest.mock('../components/blendn/RoomStage', () => ({
-  useStageScroll: () => ({ onScroll: undefined, native: {}, scrollEventThrottle: 16 }),
+  useStageScroll: () => ({ onScroll: undefined, native: {}, scrollEventThrottle: 16, scrolled: false, atTop: () => {} }),
 }))
 
 const HIDDEN = { includeHiddenElements: true }
@@ -87,16 +87,18 @@ describe('the head', () => {
 
 describe('the deck (#02–#05)', () => {
   it('the card reads the design’s one date grammar and "N going"', () => {
-    const card = deckEvent(event('a', { startsAt: at(25) }), Date.now())
+    const card = deckEvent(event('a', { startsAt: at(25) }), Date.now(), 'exact')
     expect(card).toMatchObject({ time: 'In 25 min', going: 9, venue: 'That Comedy Club', distance: '2.1 km' })
+    // Precise Location off: the deck says what the Pulse card says (SCRUM-1080).
+    expect(deckEvent(event('a', { startsAt: at(25) }), Date.now(), 'approximate').distance).toBe('about 2 km')
   })
 
   it('saved today: "You’re going · 9 PM" (the ribbon), and only for tonight', () => {
     const nine = new Date()
     nine.setHours(21, 0, 0, 0)
-    expect(deckEvent(event('a', { going: true, startsAt: nine.toISOString() }), nine.getTime() - 3600_000).saved).toBe('9 PM')
-    expect(deckEvent(event('a', { going: true, startsAt: new Date(nine.getTime() + 86_400_000).toISOString() }), nine.getTime()).saved).toBeUndefined()
-    expect(deckEvent(event('a', { going: false }), Date.now()).saved).toBeUndefined()
+    expect(deckEvent(event('a', { going: true, startsAt: nine.toISOString() }), nine.getTime() - 3600_000, 'exact').saved).toBe('9 PM')
+    expect(deckEvent(event('a', { going: true, startsAt: new Date(nine.getTime() + 86_400_000).toISOString() }), nine.getTime(), 'exact').saved).toBeUndefined()
+    expect(deckEvent(event('a', { going: false }), Date.now(), 'exact').saved).toBeUndefined()
   })
 
   it('one card: no pips; three: three pips', async () => {
@@ -162,13 +164,19 @@ describe('the banners', () => {
 })
 
 describe('the pass (#06, #07)', () => {
-  it('docks the door’s VenuePass, the copy as drawn, and keeps its event off the deck', async () => {
+  it('docks the door’s VenuePass, the copy as drawn', async () => {
     await draw({ insideEvent: event('door', { title: 'Vinyl Night', hereCount: 12, tasteMatchCount: 3 }) })
     expect(screen.getByTestId('tonight-pass', HIDDEN)).toBeTruthy()
     expect(screen.getByText('YOU’RE HERE', HIDDEN)).toBeTruthy()
-    expect(screen.getByText('3 people here share your taste', HIDDEN)).toBeTruthy()
+    expect(screen.getByText('3+ here share your taste', HIDDEN)).toBeTruthy()
     expect(screen.getByText('Checks you in. Other people at this event will see you.', HIDDEN)).toBeTruthy()
-    expect(screen.queryByText('Event door', HIDDEN)).toBeNull()
+  })
+
+  it('the pass’s event is the deck’s front card, not a card taken out of it (SCRUM-965)', async () => {
+    const door = event('door', { title: 'Vinyl Night' })
+    await draw({ events: [door, event('a')], insideEvent: door })
+    expect(screen.getAllByText('Vinyl Night', HIDDEN).length).toBeGreaterThan(1)
+    expect(screen.getByTestId('tonight-deck-pip-1', HIDDEN)).toBeTruthy()
   })
 
   it('the pass alone when nothing else is on', async () => {
@@ -186,10 +194,27 @@ describe('the pass (#06, #07)', () => {
     expect(screen.getByLabelText('Turn on Precise Location', HIDDEN)).toBeTruthy()
   })
 
+  it('away from the door: the same pass, the hold disabled, one short line, no venue or distance (owner ruling 2026-10-28)', async () => {
+    await draw({ insideEvent: event('door', { title: 'Vinyl Night' }), reach: 'far' })
+    const hold = screen.getByRole('button', { name: 'Hold to Blend’n' })
+    expect(hold.props.accessibilityState).toMatchObject({ disabled: true })
+    // The reason is the hold's hint: "Hold to Blend’n, dimmed, button. You’re too far away."
+    expect(hold.props.accessibilityHint).toBe('You’re too far away')
+    expect(screen.getByText('You’re too far away', HIDDEN)).toBeTruthy()
+    expect(screen.queryByText('YOU’RE HERE', HIDDEN)).toBeNull()
+    expect(screen.queryByText('You’re at an event. Hold the pass below to check in.')).toBeNull()
+  })
+
+  it('location off with a door docked: disabled, "Location is off"', async () => {
+    await draw({ insideEvent: event('door'), reach: 'locationOff' })
+    expect(screen.getByRole('button', { name: 'Hold to Blend’n' }).props.accessibilityState).toMatchObject({ disabled: true })
+    expect(screen.getByText('Location is off', HIDDEN)).toBeTruthy()
+  })
+
   it('in another room already: the hold is a switch out of it (ROUND4 8.3 #06)', async () => {
     await draw({ insideEvent: event('door'), switchFrom: 'Vinyl Night' })
     expect(screen.getAllByText('Hold to switch', HIDDEN).length).toBeGreaterThan(0)
-    expect(screen.getByText('You’ll leave Vinyl Night', HIDDEN)).toBeTruthy()
+    expect(screen.getByText('Leaves Vinyl Night and checks you in here.', HIDDEN)).toBeTruthy()
   })
 
   it('after the server’s yes the pass holds "You’re in" and Tell your crew (R2-D1 "success")', async () => {
@@ -208,6 +233,6 @@ describe('the pass (#06, #07)', () => {
 
 describe('a Tonight event with no cover (rc7 ruling 5)', () => {
   it('hands its category to the card, so the plate carries the category glyph', () => {
-    expect(deckEvent(event('a', { photo: null, category: 'music' }), Date.now())).toMatchObject({ cover: null, category: 'music' })
+    expect(deckEvent(event('a', { photo: null, category: 'music' }), Date.now(), 'exact')).toMatchObject({ cover: null, category: 'music' })
   })
 })

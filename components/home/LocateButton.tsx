@@ -14,7 +14,8 @@ import { Icon } from '../ui/Icon'
  * Following you: the glyph bright, its stroke stepped up; moved away: dimmer
  * and lighter (the icon set is outlined only). Asking for a fix: dimmed and
  * busy until the ask settles, so a second tap is not lost in silence.
- * PLACEHOLDER DESIGN — the design kit has no recenter control (SCRUM-667).
+ * One glyph always (owner 2026-11-20: the "Back to you" pill is gone): a tap is the default view again, on you, north up
+ * (`locateTarget`), and following. Your touch ended every automatic move; this is the way to have them back.
  */
 export function LocateButton({
   visible,
@@ -22,6 +23,7 @@ export function LocateButton({
   pending,
   drawerTop,
   drawer,
+  lift,
   onPress,
 }: {
   /** False at full: still drawn while its fade finishes, but neither tapped nor read. */
@@ -33,10 +35,12 @@ export function LocateButton({
   drawerTop: SharedValue<number>
   /** The drawer's top edge at half and at full. */
   drawer: { half: number; full: number }
+  /** How far a banner on the map pushes it up (the banner's height and its gap; 0 with none). */
+  lift?: SharedValue<number>
   onPress: () => void
 }) {
   const ride = useAnimatedStyle(() => {
-    const { translateY, opacity } = locateRide(drawerTop.get(), drawer)
+    const { translateY, opacity } = locateRide(drawerTop.get(), drawer, lift ? lift.get() : 0)
     return { transform: [{ translateY }], opacity }
   })
   return (
@@ -52,7 +56,11 @@ export function LocateButton({
         style={[styles.button, pending && styles.pending]}
         accessibilityRole="button"
         accessibilityLabel="Show my location"
-        accessibilityState={{ selected: following, busy: pending, disabled: pending }}
+        accessibilityState={{
+          selected: following,
+          busy: pending,
+          disabled: pending,
+        }}
       >
         <Icon name="navigation" size={GLYPH.control} color={following ? COLOR.textPrimary : COLOR.textSecondary} active={following} />
       </ScalePress>

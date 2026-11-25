@@ -37,6 +37,12 @@ describe('the shareable event', () => {
     expect(JSON.stringify(e)).not.toContain('Toit')
   })
 
+  it('names the area, not the city, for an unlisted event; the city only when no area was sent (ROOM-17)', () => {
+    const base = { ...NEON, visibility: 'unlisted', city: 'Bengaluru' }
+    expect(shareEventOf({ ...base, area: 'Indiranagar' })!.area).toBe('Indiranagar')
+    expect(shareEventOf(base)!.area).toBe('Bengaluru')
+  })
+
   it('is null for a private event, a draft, and a row that does not say (the tray asks the event first)', () => {
     expect(shareEventOf({ ...NEON, visibility: 'private' })).toBeNull()
     expect(shareEventOf({ ...NEON, status: 'draft' })).toBeNull()
@@ -93,4 +99,10 @@ it('venueTarget names a place of type other "Venue", and keeps every other typeâ
   const venue = { id: 'v1', name: 'Hall 3', venueType: 'other', venueTypeLabel: 'Something else', city: 'Bengaluru' }
   expect(venueTarget(venue)).toMatchObject({ typeLabel: 'Venue' })
   expect(venueTarget({ ...venue, venueType: 'brewery', venueTypeLabel: 'Brewery' })).toMatchObject({ typeLabel: 'Brewery' })
+})
+
+it('the event page maps the detail routeâ€™s area and hands it to the share (ROOM-17)', () => {
+  const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'components', 'screens', 'EventDetailScreen.tsx'), 'utf8')
+  expect(src).toContain('area: (d as { area?: string | null }).area')
+  expect(src).toContain('area: event.area,')
 })

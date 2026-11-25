@@ -56,6 +56,7 @@ export function ConnectSheet({
   theyAreRevealed = false,
   sending,
   error,
+  draft,
   onSend,
   onDismiss,
 }: {
@@ -70,12 +71,30 @@ export function ConnectSheet({
    * and gone in seconds (drive 2026-10-27). Shown until the text is edited.
    */
   error?: string
+  /** An opener the person tapped (SCRUM-1042): the note starts as it, for this opening only. Nothing sends until Send. */
+  draft?: string
   onSend: (message: string) => void
   onDismiss: () => void
 }) {
-  const [message, setMessage] = useState('')
+  const [message, setMessage] = useState(draft ?? '')
   // The text the shown error is about: editing it clears the error (DS: in error until the value changes).
   const [sentAs, setSentAs] = useState<string | null>(null)
+
+  /*
+   * The note is written to ONE person. Every opening, and every change of person while open, starts empty: `SenderCard` mounts a
+   * single sheet for every sender in a chat, so state that outlived the opening was sent to the next person (SCRUM-912).
+   * Where the caller keeps the sheet open after a refused send the note stays (same person, same opening). Adjusted in render,
+   * on the same change, so no frame shows the old note.
+   */
+  const openFor = visible ? displayName : null
+  const [shownFor, setShownFor] = useState<string | null>(openFor)
+  if (openFor !== shownFor) {
+    setShownFor(openFor)
+    if (openFor !== null) {
+      setMessage(draft ?? '')
+      setSentAs(null)
+    }
+  }
 
   const trimmed = message.trim()
   /* Required, not optional — the server refuses an empty one either way. */
@@ -87,7 +106,7 @@ export function ConnectSheet({
       visible={visible}
       onClose={onDismiss}
       icon="message-circle"
-      title={`Connect with ${displayName}`}
+      title={`Message ${displayName}`}
       /*
        * Above the field, not in a confirmation after it. Somebody who has typed a paragraph has already decided; the cost
        * belongs before the effort, where it can still change the answer.

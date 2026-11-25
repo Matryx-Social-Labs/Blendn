@@ -17,7 +17,8 @@ jest.mock('../lib/roomVisibilityStorage', () => ({
 /* eslint-disable import/first */
 import { readFileSync } from 'fs'
 import { join } from 'path'
-import { askIntentRoute, checkOutOf, CHECK_IN_TIMEOUT_MS, submitCheckIn, subscribeCheckInChanged } from '../lib/checkIn'
+import { getLiveEventId, setLiveHint } from '../lib/blendnOverlay'
+import { askIntentRoute, checkOutOf, revealOffer, CHECK_IN_TIMEOUT_MS, submitCheckIn, subscribeCheckInChanged } from '../lib/checkIn'
 /* eslint-enable import/first */
 
 const mockApi = jest.requireMock('../lib/apiClient').apiClient as Record<
@@ -52,14 +53,35 @@ describe('submitCheckIn', () => {
     expect(mockApi.checkIn.mock.calls[0][1].deviceInfo.gpsAccuracy).toBeUndefined()
   })
 
+  it('"With {crew}" on: sends withCrewId, and reads crewTold back (crews 4-A2)', async () => {
+    mockApi.checkIn.mockResolvedValue({ success: true, data: { checkIn: { id: 'c1' }, crewTold: true } })
+    const outcome = await submitCheckIn('e1', at, 'crew-1')
+    expect(mockApi.checkIn.mock.calls[0][1].withCrewId).toBe('crew-1')
+    expect(outcome).toMatchObject({ kind: 'checkedIn', crewTold: true })
+  })
+
+  it('"With {crew}" off: no withCrewId at all, and no crewTold (you are not on the crew’s strip)', async () => {
+    mockApi.checkIn.mockResolvedValue({ success: true, data: { checkIn: { id: 'c1' } } })
+    const outcome = await submitCheckIn('e1', at)
+    expect('withCrewId' in mockApi.checkIn.mock.calls[0][1]).toBe(false)
+    expect(outcome).not.toHaveProperty('crewTold')
+  })
+
+  it('a crew the server would not tell (not yours, crews off, a ban) is still a check-in: crewTold false', async () => {
+    mockApi.checkIn.mockResolvedValue({ success: true, data: { checkIn: { id: 'c1' }, crewTold: false } })
+    expect(await submitCheckIn('e1', at, 'crew-x')).toMatchObject({ kind: 'checkedIn', crewTold: false })
+  })
+
   it('reads intentNeeded and revealSuggestion off a success', async () => {
     mockApi.checkIn.mockResolvedValue({
       success: true,
-      data: { checkInId: 'c1', intentNeeded: true, revealSuggestion: true },
+      // The route's real shape (events/[eventId]/checkin/route.ts): `checkIn.id`, and `left` named for "You left {A}."
+      data: { checkIn: { id: 'c1', status: 'checked_in' }, intentNeeded: true, revealSuggestion: true, left: [{ eventId: 'e0', kind: 'event', name: 'Vinyl Night' }] },
     })
     expect(await submitCheckIn('e1', at)).toEqual({
       kind: 'checkedIn',
       checkInId: 'c1',
+      left: ['Vinyl Night'],
       askIntent: true,
       revealSuggestion: true,
     })
@@ -152,6 +174,18 @@ describe('a check-in change drops the cached event detail too', () => {
     expect(getEventDetailCache('e2')).not.toBeNull()
   })
 
+  it('the room a switch took you out of is dropped too: its page must not still say you are in (SCRUM-970)', async () => {
+    mockApi.checkIn.mockResolvedValue({ success: true, data: { left: [{ eventId: 'e0', kind: 'event', name: 'Vinyl Night' }] } })
+    setEventDetailCache('e0', { userStatus: { isCheckedIn: true } })
+    setEventDetailCache('e1', { userStatus: { isCheckedIn: false } })
+    setEventDetailCache('e2', { userStatus: { isCheckedIn: false } })
+    await submitCheckIn('e1', at)
+    expect(mockApi.forgetEvent).toHaveBeenCalledWith('e0')
+    expect(getEventDetailCache('e0')).toBeNull()
+    expect(getEventDetailCache('e1')).toBeNull()
+    expect(getEventDetailCache('e2')).not.toBeNull()
+  })
+
   it('and not on a refusal that changed nothing', async () => {
     mockApi.checkIn.mockResolvedValue({ success: false, errorCode: 'EVENT_ENDED', error: 'over' })
     await submitCheckIn('e1', at)
@@ -168,18 +202,23 @@ describe('the event screen hears check-in changes', () => {
     expect(screen).toMatch(/subscribeCheckInChanged\(\(\) => void fetchEventDetails\(\)\)/)
   })
 
-  it('checks in only through the pass: "Blend in" opens this event’s VenuePass (Flow 3 #04–#06, Flow 4)', () => {
+  it('checks in only through the one flow: "Blend in" is the page’s hold (SCRUM-966), "You’re in" leads to the Room’s Chat', () => {
     expect(screen).not.toContain('useCheckInFlow(')
     expect(screen).not.toContain('<MomentPour')
-    expect(screen).toMatch(/if \(!isCheckedIn\) \{\s*openThisPass\(\)/)
-    // Checked in, "You're in" leads to the Room.
-    expect(screen).toMatch(/openThisPass\(\)\s*return\s*\}\s*toTheOverlay\(openBlendn\)/)
+    // At the doors the hold is the dock (Hold to Blend’n: the dock row is null); checked in, "You're in" leads to the Room.
+    expect(screen).toMatch(/\{dock \? \([\s\S]*\) : \([\s\S]*<EventHold \{\.\.\.hold\}/)
+    // Flow 5 C1b: "Open the room" opens the Room's Chat tab (the disc opens People), and closing it comes back here (ROOM-13).
+    expect(screen).toMatch(/room: \(\) => toTheOverlay\(\(\) => openRoomChat\(String\(id\)\)\)/)
+    // …and the way out is the dock's "Check out" link, opening the sheet with the hold (option A, SCRUM-1035): the dock is one line.
+    expect(screen).not.toMatch(/<EventCheckOut \{/)
+    expect(screen).toMatch(/onPressState=\{dock\.change \? [^:]+ : dock\.checkOut \? openCheckOut : undefined\}/)
+    expect(screen).toMatch(/<EventCheckOutSheet \{\.\.\.checkOut\}/)
   })
 
   it('apiClient drops only the detail, not the attendee list', () => {
     const src = readFileSync(join(__dirname, '..', 'lib', 'apiClient.ts'), 'utf8')
     const body = src.slice(src.indexOf('forgetEvent(eventId: string): void {'), src.indexOf('private setCache<T>'))
-    expect(body).toContain('const detail = `:/api/mobile/events/${eventId}`')
+    expect(body).toContain('const detail = `:/api/mobile/events/${pathSegment(eventId)}`')
     expect(body).toContain('key.includes(`${detail}:`) || key.includes(`${detail}?`)')
   })
 })
@@ -193,6 +232,22 @@ describe('checkOutOf', () => {
     expect(mockForgetRoster).toHaveBeenCalledWith('e1')
     expect(heard).toHaveBeenCalledTimes(1)
     off()
+  })
+
+  it('forgets the live room it left at once, so no page offers "Hold to switch · Leaves" a room you are out of (SCRUM-1035 drive)', async () => {
+    // A page opened from a link has no tab bar under it to re-poll: the hint stayed on the room until a restart.
+    mockApi.checkOut.mockResolvedValue({ success: true, data: {} })
+    setLiveHint('e1', 'Rooftop Sundowner')
+    await checkOutOf('e1')
+    expect(getLiveEventId()).toBeNull()
+    // Leaving one room never clears another's hint (the poll says which room you are in).
+    setLiveHint('e2', 'Vinyl Night')
+    await checkOutOf('e1')
+    expect(getLiveEventId()).toBe('e2')
+    mockApi.checkOut.mockResolvedValue({ success: false, error: 'no' })
+    await checkOutOf('e2')
+    expect(getLiveEventId()).toBe('e2')
+    setLiveHint(null)
   })
 
   it('changes nothing when the server refuses', async () => {
@@ -209,10 +264,17 @@ describe('checkOutOf', () => {
 
 describe('every check-out goes through checkOutOf', () => {
   // The room checks out through `useRoomControls` (see the next test).
-  it.each(['lib/useRoomControls.ts', 'app/(tabs)/events.tsx', 'components/PresenceMonitor.tsx'])('%s', (file) => {
+  it.each(['lib/useRoomControls.ts', 'components/PresenceMonitor.tsx'])('%s', (file) => {
     const src = readFileSync(join(__dirname, '..', file), 'utf8')
     expect(src).toContain('checkOutOf(')
     expect(src).not.toContain('apiClient.checkOut(')
+  })
+
+  it('and the Events list’s ⋯ checks out through the room’s CheckOutSheet (useCheckOut), not around it', () => {
+    const src = readFileSync(join(__dirname, '..', 'app/(tabs)/events.tsx'), 'utf8')
+    expect(src).toMatch(/<CheckOutSheet\b/)
+    expect(src).not.toContain('apiClient.checkOut(')
+    expect(src).not.toContain('checkOutOf(')
   })
 
   it("and the Blend’n room checks out through useRoomControls, not around it", () => {
@@ -224,5 +286,22 @@ describe('every check-out goes through checkOutOf', () => {
   it('and the tab bar listens', () => {
     const src = readFileSync(join(__dirname, '..', 'app', '(tabs)', '_layout.tsx'), 'utf8')
     expect(src).toContain('subscribeCheckInChanged(')
+  })
+})
+
+describe('revealOffer reads the main photo (L4)', () => {
+  const seen = jest.requireMock('../lib/roomVisibilityStorage').hasSeenPublicCheckInWarning as jest.Mock
+  it('a first-time warning only when there is a photo to reveal; none without one', async () => {
+    seen.mockResolvedValue(false)
+    const withPhoto = await revealOffer({ id: 'u1', firstName: 'Sneha', photo: 'https://cdn/p.jpg' })
+    const without = await revealOffer({ id: 'u1', firstName: 'Sneha', photo: null })
+    expect(withPhoto.title).not.toBe(without.title)
+    expect(without.title).toBe('Show your name here?')
+    seen.mockResolvedValue(true)
+  })
+  it('the check-in flow hands it myMainPhoto, never User.image', () => {
+    const src = readFileSync(join(__dirname, '..', 'lib', 'useCheckInFlow.ts'), 'utf8')
+    expect(src).toContain('photo: myMainPhoto(user)')
+    expect(src).not.toMatch(/image: user\.image/)
   })
 })

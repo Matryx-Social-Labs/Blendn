@@ -57,5 +57,5 @@ it('cancels the wait on unmount, and sets nothing afterwards', async () => {
 it('HomeShell mounts the map only once it has painted', () => {
   const src = readFileSync(join(__dirname, '../components/home/HomeShell.tsx'), 'utf8')
   expect(src).toContain('const mapPainted = useAfterFirstPaint()')
-  expect(src).toContain('mapHeight !== null && mapPainted ? (')
+  expect(src).toContain('mapHeight !== null && mapPainted && fallbackCentre ? (')
 })

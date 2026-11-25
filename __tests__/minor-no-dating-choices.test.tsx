@@ -46,17 +46,16 @@ describe('mayDate: the client twin of the server rule', () => {
 })
 
 describe('Looking for', () => {
-  it('offers Dating to an adult', async () => {
-    await render(<LookingForCards selected={[]} onToggle={noop} />)
-    expect(screen.getByLabelText('Dating')).toBeTruthy()
+  // Edit profile's four intents (owner, 2026-11-01); a minor is never shown the Dating tile at all.
+  it('offers Dating to someone who may date', async () => {
+    await render(<LookingForCards selected={[]} onToggle={noop} offerDating />)
+    for (const option of ['Friendship', 'Networking', 'Dating']) expect(screen.getByLabelText(option)).toBeTruthy()
   })
 
-  it('does not offer Dating to a minor, and keeps the other four', async () => {
-    await render(<LookingForCards selected={[]} onToggle={noop} withoutDating />)
+  it('offers a minor no Dating tile, even with a stale dating intent', async () => {
+    await render(<LookingForCards selected={['dating']} onToggle={noop} offerDating={false} />)
     expect(screen.queryByLabelText('Dating')).toBeNull()
-    for (const option of ['Friendship', 'Networking', 'Travel', 'Open']) {
-      expect(screen.getByLabelText(option)).toBeTruthy()
-    }
+    expect(screen.getByLabelText('Friendship')).toBeTruthy()
   })
 })
 
@@ -88,9 +87,8 @@ describe('every screen asks', () => {
     expect(src).toMatch(/if \(savedIntents\.includes\('dating'\)\)/)
   })
 
-  it('onboarding hides the card and does not send a stale "Dating" for a minor', () => {
+  it('onboarding offers no Dating card and does not send a stale "Dating" for a minor', () => {
     const src = read('app/onboarding/preferences.tsx')
-    expect(src).toMatch(/<LookingForCards[^>]*withoutDating=\{under18\}/)
-    expect(src).toMatch(/looking_for: under18 \? withoutDatingChoice\(lookingFor\) : lookingFor/)
+    expect(src).toContain("filter((i) => !(under18 && i === 'dating'))")
   })
 })

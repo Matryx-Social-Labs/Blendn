@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Platform, StyleSheet, Text, View, type ViewStyle } from 'react-native'
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated'
 
@@ -9,6 +9,7 @@ import { COLOR, DURATION, EASING, FONT_FAMILY, ICON, MATERIAL, PRESS, RADIUS, SI
 import { H } from '../../lib/haptics'
 import { useReducedMotion } from '../../lib/motion'
 import { OPACITY, tint } from '../../lib/theme'
+import { DashedFrame } from './DashedFrame'
 import { monoCaption } from './MonoFamily'
 import { chipRest, CONTROL_FONT_CAP, focusRing, font, LIGHT, minTarget, PRESSED_WASH, useBoldText, useGround, useIncreaseContrast, useSelection } from './shared'
 
@@ -70,7 +71,12 @@ function MoreChevron({ expanded, testID }: { expanded: boolean; testID?: string 
   )
 }
 
-export type ChipVariant = 'default' | 'outline'
+export type ChipVariant = 'default' | 'outline' | 'dashed'
+/**
+ * `lg`: the 44 pt capsule in body, for a set that is the screen's one question (onboarding's interests, direction A).
+ * `header`: the 36 pt capsule of a header row (the Pulse's chips and city chip, board `.qc` / `.cc`).
+ */
+export type ChipSize = 'md' | 'lg' | 'header'
 /** `single` picks one of a set; `multi` is pick-any and draws the + / ✓ slot. */
 export type ChipSelection = 'single' | 'multi'
 
@@ -84,6 +90,11 @@ export type ChipProps = {
   onRemove?: () => void
   /** A 16 pt glyph before the label (in a `multi` chip it is the slot's off glyph, instead of the plus). */
   icon?: IconName
+  /**
+   * A picture before the label in place of the glyph ("With {crew}": the crew's emblem). A `multi` chip with one draws its
+   * check after the label, as board crews/04 A2 does ("[emblem] With Nebula ✓").
+   */
+  lead?: ReactNode
   /** `multi`: a 16 pt slot that is + off and ✓ on, so the chip never changes width (Chip.html, the sweep). */
   selection?: ChipSelection
   /** After the label: a count in Geist Mono. */
@@ -99,8 +110,12 @@ export type ChipProps = {
   disabled?: boolean
   /** A read-only interest you share: a 1 pt white outline, no colour, never counted. */
   shared?: boolean
-  /** `outline`: no fill, a 1 pt edge at 22% white; read-only labels on a card (A31). */
+  /**
+   * `outline`: no fill, a 1 pt edge at 22% white; read-only labels on a card (A31). `dashed`: no fill, the DashedFrame
+   * edge; something offered, not yet yours (a crew's hashtag ideas, board crews/tags/01 A).
+   */
   variant?: ChipVariant
+  size?: ChipSize
   /** Read-only only: what it is read as, when that is more than the label ("Jazz, shared"). */
   accessibilityLabel?: string
   /**
@@ -110,6 +125,8 @@ export type ChipProps = {
   lines?: 1 | 2
   /** The design gallery only: draws a transient state with no finger or keyboard. */
   previewState?: 'pressed' | 'focused'
+  /** A picker's chip (the Pulse's city, board `.cc`): a chevron after the label, saying it opens a choice. */
+  chevron?: boolean
   testID?: string
 }
 
@@ -133,6 +150,7 @@ export function Chip({
   onPress,
   onRemove,
   icon,
+  lead,
   selection = 'single',
   count,
   kind,
@@ -142,9 +160,11 @@ export function Chip({
   disabled = false,
   shared = false,
   variant = 'default',
+  size = 'md',
   accessibilityLabel,
   lines = 1,
   previewState,
+  chevron = false,
   testID,
 }: ChipProps) {
   const more = kind === 'more'
@@ -152,7 +172,7 @@ export function Chip({
   const multi = selection === 'multi' && !more
   const ground = useGround()
   const reduceMotion = useReducedMotion()
-  const outline = variant === 'outline' && !selected
+  const outline = (variant === 'outline' || variant === 'dashed') && !selected
   const android = Platform.OS === 'android'
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
@@ -171,9 +191,26 @@ export function Chip({
     ? { borderWidth: 1, borderColor: COLOR.textPrimary }
     : contrast
       ? { borderWidth: 1, borderColor: MATERIAL.hairlineIncreaseContrast }
-      : variant === 'outline'
-        ? OUTLINE_EDGE
-        : { borderWidth: HAIRLINE, borderColor: COLOR.hairline }
+      : variant === 'dashed'
+        ? null
+        : variant === 'outline'
+          ? OUTLINE_EDGE
+          : { borderWidth: HAIRLINE, borderColor: COLOR.hairline }
+
+  // The + → ✓ slot of a multi chip: before the label, or after it when a `lead` picture leads.
+  const slot = multi ? (
+    <View testID={testID && `${testID}-slot`} style={styles.slot16}>
+      <Animated.View style={[styles.stack, { opacity: selected ? 0 : 1 }, SLOT_FADE]}>
+        <Icon name={icon ?? 'plus'} size={ICON.inline} color={icon ? COLOR.textPrimary : COLOR.textSecondary} />
+      </Animated.View>
+      <Animated.View
+        testID={testID && `${testID}-check`}
+        style={[styles.stack, { opacity: selected ? 1 : 0 }, SLOT_FADE]}
+      >
+        <Glyph name="check" size={ICON.inline} color={sel.glyph} play={selected} testID={testID && `${testID}-check-glyph`} />
+      </Animated.View>
+    </View>
+  ) : null
 
   const body = (
     <>
@@ -190,45 +227,35 @@ export function Chip({
         />
       ) : null}
       {previewState === 'pressed' && android ? <View style={[StyleSheet.absoluteFill, styles.wash]} /> : null}
-      {multi ? (
-        <View testID={testID && `${testID}-slot`} style={styles.slot16}>
-          <Animated.View style={[styles.stack, { opacity: selected ? 0 : 1 }, SLOT_FADE]}>
-            <Icon name={icon ?? 'plus'} size={ICON.inline} color={icon ? COLOR.textPrimary : COLOR.textSecondary} />
-          </Animated.View>
-          <Animated.View
-            testID={testID && `${testID}-check`}
-            style={[styles.stack, { opacity: selected ? 1 : 0 }, SLOT_FADE]}
-          >
-            <Glyph name="check" size={ICON.inline} color={sel.glyph} play={selected} testID={testID && `${testID}-check-glyph`} />
-          </Animated.View>
-        </View>
-      ) : icon ? (
-        <Glyph name={icon} size={ICON.inline} color={selected ? sel.glyph : ink} active={selected} play={selected} />
-      ) : null}
+      {lead ?? null}
+      {multi && !lead ? slot : null}
+      {!multi && !lead && icon ? <Glyph name={icon} size={ICON.inline} color={selected ? sel.glyph : ink} active={selected} play={selected} /> : null}
       <Text
-        style={[font('meta', bold, FONT_FAMILY.brand[500]), styles.label, { color: ink }]}
+        style={[font(size === 'lg' ? 'body' : size === 'header' ? 'control' : 'meta', bold, FONT_FAMILY.brand[500]), styles.label, { color: ink }]}
         maxFontSizeMultiplier={CONTROL_FONT_CAP}
         // Past its lines it ends in an ellipsis; it is read whole either way (the label is the accessibility label).
         numberOfLines={lines}
       >
         {label}
       </Text>
+      {multi && lead ? slot : null}
       {count !== undefined ? (
         <Text
           testID={testID && `${testID}-count`}
           maxFontSizeMultiplier={CONTROL_FONT_CAP}
           style={[
             monoCaption(bold),
-            {
-              color: COLOR.textSecondary,
-            },
+            // Lit with its chip (board `.qc.on .n`): the hue's light tone on the fill, never grey on ember. White while pressed:
+            // the tone is 3.0–3.6:1 under the press wash, white 8:1 (colour re-audit 2026-11-17, themeContrast).
+            { color: selected ? (pressed ? COLOR.textPrimary : sel.glyph) : COLOR.textSecondary },
           ]}
         >
           {count}
         </Text>
       ) : null}
-      {more ? <MoreChevron expanded={expanded} testID={testID && `${testID}-chevron`} /> : null}
+      {more || chevron ? <MoreChevron expanded={expanded} testID={testID && `${testID}-chevron`} /> : null}
       {onRemove ? <Icon name="x" size={ICON.inline} color={ink} /> : null}
+      {variant === 'dashed' && !selected && !contrast ? <DashedFrame radius={radius} testID={testID && `${testID}-dashed`} /> : null}
       <Animated.View
         testID={testID && `${testID}-edge`}
         pointerEvents="none"
@@ -249,6 +276,8 @@ export function Chip({
   )
   const look = [
     styles.chip,
+    size === 'lg' && styles.chipLg,
+    size === 'header' && (chevron ? styles.chipPicker : styles.chipHeader),
     {
       borderRadius: radius,
       backgroundColor: outline ? 'transparent' : chipRest(ground),
@@ -281,7 +310,7 @@ export function Chip({
         onBlur={() => setFocused(false)}
         android_ripple={{ color: PRESSED_WASH.android, foreground: true }}
         accessibilityRole="button"
-        accessibilityLabel={onRemove ? `${label}, remove filter` : (accessibilityLabel ?? (count !== undefined ? `${label}, ${count}` : label))}
+        accessibilityLabel={onRemove ? (accessibilityLabel ?? `${label}, remove filter`) : (accessibilityLabel ?? (count !== undefined ? `${label}, ${count}` : label))}
         accessibilityHint={dimmed ? capHint : undefined}
         accessibilityState={{
           selected: onRemove || more ? undefined : selected,
@@ -331,5 +360,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACE.md,
     overflow: 'hidden',
   },
+  chipLg: { minHeight: SIZE.targetIos, paddingHorizontal: SPACE.lg },
+  // Board `.qc`: 36 tall, 14 either side, 6 between its parts; `.cc` (a picker with a leading pin): 8 before, 10 after.
+  chipHeader: { minHeight: SIZE.tagHeader, paddingHorizontal: SPACE.md + SPACE.xxs, gap: SPACE.xs + SPACE.xxs },
+  chipPicker: { minHeight: SIZE.tagHeader, paddingLeft: SPACE.sm, paddingRight: SPACE.md - SPACE.xxs, gap: SPACE.xs + SPACE.xxs },
   wash: { backgroundColor: PRESSED_WASH.android },
 })

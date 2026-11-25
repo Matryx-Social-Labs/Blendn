@@ -13,6 +13,7 @@ import { COLOR, DURATION, EASING, FONT_FAMILY, ICON, MATERIAL, RADIUS, SIZE, SPA
 import { H } from '../../lib/haptics'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
 import { font, IC_HAIRLINE, minTarget, useBoldText, useIncreaseContrast, useScreenReader } from './shared'
+import { TAB_BAR_PROGRESS } from '../../lib/tabBarSettle'
 import { TAB_BAR_HINT_RISE } from './TabBar'
 
 export type ToastKind = 'success' | 'error' | 'info'
@@ -106,7 +107,8 @@ export type ToastProps = {
  * #19: in from 16 pt on `M.snap`, out over `quick`, a swipe its own way to
  * dismiss. `leave` plays the exit once, then calls `onDismiss`.
  */
-function useToastMotion(onDismiss: () => void) {
+/** `onTabBar`: a snackbar over the tab bar, which follows the bar's top edge down as it settles into its pill. */
+function useToastMotion(onDismiss: () => void, onTabBar: boolean) {
   // The keyboard's own frame (read from the context, not `useReanimatedKeyboardAnimation`, which flips Android's input mode).
   const kb = useKeyboardContext().reanimated
   const android = Platform.OS === 'android'
@@ -166,7 +168,14 @@ function useToastMotion(onDismiss: () => void) {
   // On Android the snackbar stands on the keyboard when one is up, frame by frame; the bottom inset is already under it.
   const motion = useAnimatedStyle(() => ({
     opacity: opacity.get(),
-    transform: [{ translateY: offset.get() - (android ? Math.max(0, -kb.height.get() - insets.bottom) : 0) }],
+    transform: [
+      {
+        translateY:
+          offset.get() -
+          (android ? Math.max(0, -kb.height.get() - insets.bottom) : 0) +
+          (onTabBar ? TAB_BAR_PROGRESS.get() * (SIZE.tabBar - SIZE.tabBarCompact) : 0),
+      },
+    ],
   }))
   return { leave, swipe, motion, height }
 }
@@ -193,7 +202,7 @@ export function Toast({ kind = 'info', text, action, onDismiss, aboveTabBar = fa
   const screenReader = useScreenReader()
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
-  const { leave, swipe, motion, height } = useToastMotion(onDismiss)
+  const { leave, swipe, motion, height } = useToastMotion(onDismiss, aboveTabBar && android)
   const dwell = useDwell(toastDwell(text, { action: !!action, screenReader }), leave)
 
   // Success draws its check on the frame the haptic plays: `Glyph` plays on a false → true, so it is lit as the toast mounts.

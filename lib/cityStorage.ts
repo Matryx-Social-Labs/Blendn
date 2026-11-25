@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 
-import { parseStoredCity, type CitySource, type StoredCity } from './city'
+import { parseStoredCity, type StoredCity } from './city'
 import { Logger } from './logger'
 
 /**
@@ -30,9 +30,10 @@ export async function readStoredCity(): Promise<StoredCity | null> {
   }
 }
 
-export async function storeCity(city: string, source: CitySource): Promise<void> {
+/** The whole record (v3): the city, how it got there, its slug, and whether its travel banner was dismissed. */
+export async function storeCity(stored: StoredCity): Promise<void> {
   try {
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ city, source }))
+    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(stored))
   } catch (error) {
     Logger.warn('events', 'Could not persist the browse city', { error })
   }

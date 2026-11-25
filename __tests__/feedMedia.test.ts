@@ -6,11 +6,9 @@ import { feedPlaylist, feedPoster, type EventMediaItem , clipFirst } from '../li
 /*
  * Which asset a feed card draws.
  *
- * The rule worth testing is the refusal: a clip with no poster is not returned
- * at all, because a card whose video is buffering shows its poster, and a null
- * poster is a black rectangle for the length of a round trip. We would rather
- * show a still event than a broken-looking one — and that decision is invisible
- * in a screenshot taken on a warm cache, which is every screenshot anyone takes.
+ * The rule worth testing is the poster: a clip's own thumbnail or none, never
+ * the event's cover (SCRUM-1066). The cover is another picture at another
+ * ratio, and in the hero's `contain` frame it showed around the clip.
  */
 
 const video = (over: Partial<EventMediaItem> = {}): EventMediaItem => ({
@@ -81,11 +79,12 @@ describe('feedPlaylist', () => {
     expect(p.map((i) => i.url)).toEqual(['a.jpg', 'b.jpg'])
   })
 
-  it('drops a video it cannot poster rather than leaving a gap', () => {
-    // A black rectangle mid-loop is worse than on a static card: it arrives
-    // while somebody is already watching.
-    const p = feedPlaylist([video({ thumbnail_url: null })], null)
-    expect(p).toEqual([])
+  it('keeps a clip with no poster of its own, posterless rather than wearing the cover (SCRUM-1066)', () => {
+    // A clip added by URL has no thumbnail. The cover is another picture at
+    // another ratio, and it showed around the letterboxed clip in the hero;
+    // the frame's dark surface shows until the first frame instead.
+    expect(feedPlaylist([video({ thumbnail_url: null })], null)).toEqual([{ kind: 'video', url: 'https://cdn.example/clip.mp4', posterUrl: null }])
+    expect(feedPlaylist([video({ thumbnail_url: null })], 'https://cdn.example/cover.jpg')).toContainEqual({ kind: 'video', url: 'https://cdn.example/clip.mp4', posterUrl: null })
   })
 
   it('never includes a document', () => {
@@ -159,7 +158,7 @@ describe('a hero clip restarts when the carousel comes back to it', () => {
    * still holds. Keying the reset on `isCurrent` fixed some returns and not
    * others.
    *
-   * `FeedVideo` never had the bug, and not by being cleverer: **mount means
+   * `FeedVideo` (the old Featured card's player, removed with Option C) never had the bug, and not by being cleverer: **mount means
    * play**. An inactive card unmounts, and the next mount is a new
    * `useVideoPlayer` at zero. There is no state to reset because no player
    * survives. The hero uses the same rule now.
@@ -170,7 +169,7 @@ describe('a hero clip restarts when the carousel comes back to it', () => {
   )
 
   it('mounts the clip only while it is the page in view', () => {
-    expect(heroSrc).toContain('item.kind === \'video\' && i === index && mountClip ?')
+    expect(heroSrc).toContain('item.kind === \'video\' && i === index && mountsClip(item) ?')
     // The preload window that let a finished player survive the page.
     expect(heroSrc).not.toContain('Math.abs(i - index) <= 1')
   })
@@ -186,13 +185,56 @@ describe('a hero clip restarts when the carousel comes back to it', () => {
     expect(code).not.toContain('endedOnce')
   })
 
-  it('leaves the feed on the same rule', () => {
-    const feed = readFileSync(
-      join(__dirname, '..', 'components', 'pulse', 'FeedVideo.tsx'),
-      'utf8'
-    )
-    expect(feed).toContain('player.play()')
-    // Its doc is the canonical statement of the policy both now share.
-    expect(feed).toContain('single-active-player policy')
+})
+
+describe('the detail route spells the poster thumbnailUrl (ROOM-12)', () => {
+  // events/[eventId]/route.ts media[]; the list route says thumbnail_url.
+  const clip: EventMediaItem = { id: 'v', url: 'https://cdn.example/clip.mp4', type: 'video', thumbnailUrl: 'https://cdn.example/poster.jpg' }
+  it('a video-only event keeps its clip, posterised by its own thumbnail', () => {
+    expect(feedPlaylist([clip], null)).toEqual([{ kind: 'video', url: 'https://cdn.example/clip.mp4', posterUrl: 'https://cdn.example/poster.jpg' }])
+    expect(feedPoster([clip], null)).toBe('https://cdn.example/poster.jpg')
+  })
+  it('snake_case still wins when both are present', () => {
+    expect(feedPoster([{ ...clip, thumbnail_url: 'https://cdn.example/snake.jpg' }], null)).toBe('https://cdn.example/snake.jpg')
+  })
+})
+
+describe('the server’s media facts ride along (task 21, SCRUM-1066)', () => {
+  const renditions = [{ url: 'https://cdn/540.mp4', width: 540, height: 960, bytes: 2_000_000 }]
+
+  it('a list row (snake): size, focal point, length and copies on the clip', () => {
+    const [clip] = feedPlaylist([
+      { type: 'video', url: 'https://x/c.mp4', thumbnail_url: 'https://x/p.jpg', order: 0, width: 1080, height: 1920, duration_ms: 15200, focal_x: 0.3, focal_y: 0.2, renditions },
+    ])
+    expect(clip).toEqual({
+      kind: 'video',
+      url: 'https://x/c.mp4',
+      posterUrl: 'https://x/p.jpg',
+      size: { width: 1080, height: 1920 },
+      focus: { x: 0.3, y: 0.2 },
+      durationMs: 15200,
+      renditions,
+    })
+  })
+
+  it('a detail row (camel) reads the same', () => {
+    const [clip] = feedPlaylist([{ type: 'video', url: 'https://x/c.mp4', order: 0, width: 1080, height: 1920, durationMs: 9000, focalX: 0.5, focalY: 0.9, renditions: null }])
+    expect(clip).toEqual({ kind: 'video', url: 'https://x/c.mp4', posterUrl: null, size: { width: 1080, height: 1920 }, focus: { x: 0.5, y: 0.9 }, durationMs: 9000 })
+  })
+
+  it('a still carries its size and point', () => {
+    const [still] = feedPlaylist([{ type: 'image', url: 'https://x/a.jpg', order: 0, width: 1200, height: 900, focal_x: 0.1, focal_y: 0.1 }])
+    expect(still).toEqual({ kind: 'image', url: 'https://x/a.jpg', size: { width: 1200, height: 900 }, focus: { x: 0.1, y: 0.1 } })
+  })
+
+  it('the cover takes the facts of its own row in media, when the organizer uploaded it there too', () => {
+    const [cover] = feedPlaylist([{ type: 'image', url: 'https://x/cover.jpg', order: 0, width: 800, height: 600, focal_x: 0.7, focal_y: 0.3 }], 'https://x/cover.jpg')
+    expect(cover).toEqual({ kind: 'image', url: 'https://x/cover.jpg', size: { width: 800, height: 600 }, focus: { x: 0.7, y: 0.3 } })
+  })
+
+  it('a row from before 2026-11-24 (all null) carries nothing extra: fit by the loaded size, as before', () => {
+    const [cover, clip] = feedPlaylist([{ type: 'video', url: 'https://x/c.mp4', order: 0, width: null, height: null, duration_ms: null, focal_x: null, focal_y: null, renditions: null }], 'https://x/cover.jpg')
+    expect(cover).toEqual({ kind: 'image', url: 'https://x/cover.jpg' })
+    expect(clip).toEqual({ kind: 'video', url: 'https://x/c.mp4', posterUrl: null })
   })
 })

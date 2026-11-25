@@ -33,11 +33,15 @@ describe('what the Me tab asks you to finish', () => {
   })
 
   it('ignores blank photo URLs and whitespace bios', () => {
-    expect(labels({ photos: [' '], bio: '  ', interests: ['Music'] })).toEqual(['Add a photo', 'Write a bio'])
+    expect(labels({ photos: [' '], bio: '  ', interests: ['Music', 'Film'] })).toEqual(['Add a photo', 'Write a bio'])
   })
 
-  it('asks for nothing once three photos, a bio and an interest are there', () => {
-    expect(profileGaps({ photos: ['a', 'b', 'c'], bio: 'Hi', interests: ['Music'] })).toEqual([])
+  it('asks for one more interest at one: under two, matching cannot rank you and the board refuses you (SCRUM-519)', () => {
+    expect(labels({ photos: ['a', 'b', 'c'], bio: 'Hi', interests: ['Music'] })).toEqual(['Pick one more interest'])
+  })
+
+  it('asks for nothing once three photos, a bio and two interests are there', () => {
+    expect(profileGaps({ photos: ['a', 'b', 'c'], bio: 'Hi', interests: ['Music', 'Film'] })).toEqual([])
   })
 })
 

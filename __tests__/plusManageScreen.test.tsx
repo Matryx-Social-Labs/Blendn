@@ -1,7 +1,9 @@
 /**
- * Manage as its own screen (`app/plus-manage.tsx`, Flow 12 · 12.3): the status card, the store
- * and Restore, and — only where a subscription ended — Start. Somebody with nothing to manage is
- * sent to the page. The server says what you have; the screen never asks RevenueCat.
+ * Manage as its own screen (`app/plus-manage.tsx`, Flow 12 · 12.3, remaining-screens 03 A): one
+ * card with what it includes, change or cancel in the store, Restore; a gift's plans to keep it,
+ * each opening the page with that plan picked; and — only where a subscription ended — Start.
+ * Somebody with nothing to manage is sent to the page. The server says what you have; the screen
+ * never asks RevenueCat.
  *
  * Negative controls (the client keeps no registry): selling on every status (dropping `sells`)
  * fails "an active subscription is not sold to"; opening Manage from `/plus` itself (replacing
@@ -9,7 +11,7 @@
  */
 import React from 'react'
 import { act, fireEvent, render, screen } from '@testing-library/react-native'
-import { Linking } from 'react-native'
+import { Linking, StyleSheet } from 'react-native'
 
 const mockToast = jest.fn()
 jest.mock('@react-native-async-storage/async-storage', () => require('@react-native-async-storage/async-storage/jest/async-storage-mock'))
@@ -49,11 +51,13 @@ import { router } from 'expo-router'
 import PlusManageScreen from '../app/plus-manage'
 import { apiClient } from '../lib/apiClient'
 import { waitForPlus } from '../lib/plus'
+import { SPACE } from '../lib/design/tokens'
 import { canBuyAs, loadPlusOffers, restore } from '../lib/purchases'
 /* eslint-enable import/first */
 
 const status = (patch: object) => ({ success: true, data: { active: true, gated: true, product: 'plus', source: 'apple', expiresAt: '2026-11-03T12:00:00', ...patch } })
 const monthly = { pkg: { identifier: '$rc_monthly', product: { price: 199 } }, price: '₹199' }
+const yearly = { pkg: { identifier: '$rc_annual', product: { price: 1499, pricePerMonth: 124.92, pricePerMonthString: '₹125' } }, price: '₹1,499' }
 const flush = async () => act(async () => { for (let i = 0; i < 6; i++) await Promise.resolve() })
 async function mount(res: unknown) {
   ;(apiClient.getMyPlus as jest.Mock).mockResolvedValue(res)
@@ -69,68 +73,94 @@ beforeEach(() => {
 })
 
 describe('an active subscription', () => {
-  it('the card, Manage in the store, Restore — and nothing to buy', async () => {
+  // remaining-screens 03 A. Negative controls: the old "Manage in the App Store" row and a card with no checklist fail it.
+  it('one card with what it includes, change or cancel in the store, Restore — and nothing to buy', async () => {
     await mount(status({}))
     expect(screen.getByRole('header', { name: 'Blend’n+' })).toBeTruthy()
     expect(screen.getByLabelText(/^Blend’n\+ · active\. Blend’n\+ until .* · App Store$/)).toBeTruthy()
-    expect(screen.getByRole('link', { name: /Manage in the App Store/ })).toBeTruthy()
+    expect(screen.getByLabelText('Includes: Stay live while you’re there, Your full night history')).toBeTruthy()
+    expect(screen.getByRole('link', { name: /^Change or cancel in the App Store, You keep Blend’n\+ until .*3.* if you cancel/ })).toBeTruthy()
     expect(screen.getByRole('button', { name: /Restore purchases/ })).toBeTruthy()
     expect(screen.queryByTestId('plus-manage-start')).toBeNull()
+    expect(screen.queryByTestId('plus-manage-plans')).toBeNull()
     expect(screen.getByText('Cancelling is one tap into the store. Nothing here asks you to stay.')).toBeTruthy()
     expect(loadPlusOffers).not.toHaveBeenCalled()
   })
 
-  // D4: the App Store has no pause. Negative control: the old "Change plan, pause or cancel" hint fails this.
-  it('the App Store row offers what the App Store can do: no pause; Google Play keeps it', async () => {
-    await mount(status({}))
-    expect(screen.getByText('Change plan or cancel · one tap')).toBeTruthy()
-    expect(screen.queryByText(/pause/)).toBeNull()
-    await screen.unmount()
-    await mount(status({ source: 'google' }))
-    expect(screen.getByText('Change plan, pause or cancel · one tap')).toBeTruthy()
+  it('names the plan the server sends ("Blend’n+ Yearly"), and keeps "· active" without one (SCRUM-1082)', async () => {
+    await mount(status({ state: 'active', plan: 'yearly' }))
+    expect(screen.getByLabelText(/^Blend’n\+ Yearly\. Renews .* · App Store$/)).toBeTruthy()
   })
 
-  it('Manage opens the store’s own page', async () => {
+  it('Google Play is named for Google Play', async () => {
+    await mount(status({ source: 'google' }))
+    expect(screen.getByRole('link', { name: /^Change or cancel in Google Play/ })).toBeTruthy()
+  })
+
+  it('the store row opens the store’s own page', async () => {
     const open = jest.spyOn(Linking, 'openURL').mockResolvedValue(true)
     await mount(status({}))
-    await act(async () => { fireEvent.press(screen.getByRole('link', { name: /Manage in the App Store/ })) })
+    await act(async () => { fireEvent.press(screen.getByRole('link', { name: /^Change or cancel in the App Store/ })) })
     expect(open).toHaveBeenCalledWith('https://apps.apple.com/account/subscriptions')
     open.mockRestore()
   })
 })
 
-// D4: a gift of ours is in no store. Negative control: drawing the store row for every card fails this.
-describe('a granted Blend’n+', () => {
-  it('has no store row and no word about cancelling: "Free until {date} · nothing to manage", and Restore stays', async () => {
-    await mount(status({ source: 'grant', expiresAt: '2027-10-23T12:00:00' }))
+// OD-5 (SYS-17): a Razorpay-sourced Plus has no store row and points nowhere.
+describe('a Blend’n+ bought outside the app', () => {
+  it('has no store row, no cancelling footer, and says it is managed outside the app', async () => {
+    await mount(status({ source: 'razorpay', expiresAt: '2027-10-23T12:00:00' }))
     expect(screen.queryByTestId('plus-manage-store')).toBeNull()
-    expect(screen.queryByRole('link', { name: /Manage in/ })).toBeNull()
-    expect(screen.getByTestId('plus-manage-grant').props.children).toBe('Free until 23 Oct 2027 · nothing to manage')
+    expect(screen.queryByRole('link')).toBeNull()
+    expect(screen.getByText(/Managed outside the app/)).toBeTruthy()
     expect(screen.queryByText(/Cancelling is one tap/)).toBeNull()
-    expect(screen.getByRole('button', { name: /Restore purchases/ })).toBeTruthy()
   })
 })
 
-describe('a payment that failed (when the server says so)', () => {
-  it('says so, with one button into the store', async () => {
-    const open = jest.spyOn(Linking, 'openURL').mockResolvedValue(true)
-    await mount(status({ state: 'grace' }))
-    expect(screen.getByLabelText(/Payment didn’t go through\. You still have Blend’n\+\. Fix it in the App Store/)).toBeTruthy()
-    await act(async () => { fireEvent.press(screen.getByRole('button', { name: 'Fix it in the App Store' })) })
-    expect(open).toHaveBeenCalled()
-    open.mockRestore()
+// D4: a gift of ours is in no store. remaining-screens 03 A: said once ("a gift from Blend’n"), and the plans to keep it
+// after its date open the page with that plan picked (decided 2026-11-19: the board draws no buy button here).
+// Negative controls: drawing the store row for every card, or the old duplicated "Free until … · nothing to manage" line.
+describe('a granted Blend’n+', () => {
+  it('a gift, once: no store row, no word about cancelling, Restore says what it is for', async () => {
+    await mount(status({ source: 'grant', expiresAt: '2027-10-23T12:00:00' }))
+    expect(screen.getByLabelText('Blend’n+ · a gift from Blend’n. Until 23 Oct 2027 · nothing renews, nothing to pay')).toBeTruthy()
+    expect(screen.queryByTestId('plus-manage-store')).toBeNull()
+    expect(screen.queryByText(/nothing to manage/)).toBeNull()
+    expect(screen.queryByText(/Cancelling is one tap/)).toBeNull()
+    expect(screen.getByRole('button', { name: 'Restore purchases, Bought it in a store before? Bring it back' })).toBeTruthy()
   })
-})
 
-describe('a payment on hold or a pause arrives as not active (H1)', () => {
-  it.each([
-    ['hold', /On hold\. Blend’n\+ is paused until the payment is fixed in the App Store/],
-    ['paused', /Paused\. You paused Blend’n\+ in the App Store/],
-  ])('%s is a card, not the page', async (state, label) => {
-    await mount(status({ active: false, state, product: null, expiresAt: null }))
-    expect(screen.getByLabelText(label)).toBeTruthy()
-    expect(router.replace).not.toHaveBeenCalled()
-    expect(screen.queryByTestId('plus-manage-start')).toBeNull()
+  it('the plans to keep it after its date; a tap opens the page with that plan picked', async () => {
+    ;(loadPlusOffers as jest.Mock).mockResolvedValue([monthly, yearly])
+    await mount(status({ source: 'grant', expiresAt: '2027-10-23T12:00:00' }))
+    expect(screen.getByRole('header', { name: 'Keep it after 23 Oct 2027' })).toBeTruthy()
+    expect(screen.getByTestId('manage-plan-$rc_annual').props.accessibilityState.checked).toBe(true)
+    await act(async () => { fireEvent.press(screen.getByTestId('manage-plan-$rc_monthly')) })
+    expect(router.push).toHaveBeenCalledWith({ pathname: '/plus', params: { trigger: 'profile', plan: '$rc_monthly' } })
+    // The picked one opens it too: a re-tap is passed on.
+    await act(async () => { fireEvent.press(screen.getByTestId('manage-plan-$rc_annual')) })
+    expect(router.push).toHaveBeenCalledWith({ pathname: '/plus', params: { trigger: 'profile', plan: '$rc_annual' } })
+  })
+
+  // remaining-screens 03 A, the ±1 pt overlay (2026-11-19): 12 from the card to Restore, 18 to "Keep it after" (12 + 4: no
+  // token is 18; 16 and 20 are both 2 off, and the card above already runs taller than the board's). Negative control: the
+  // old SPACE.xl gap with no margin fails both.
+  it('is spaced as the board: 12 between the card and Restore, 16 before the plans', async () => {
+    ;(loadPlusOffers as jest.Mock).mockResolvedValue([monthly, yearly])
+    await mount(status({ source: 'grant', expiresAt: '2027-10-23T12:00:00' }))
+    expect(StyleSheet.flatten(screen.getByTestId('plus-manage-body').props.style).gap).toBe(SPACE.md)
+    expect(StyleSheet.flatten(screen.getByTestId('plus-manage-keep').props.style).marginTop).toBe(SPACE.xs)
+  })
+
+  it('a Night Pass keeps the plans too; where Blend’n+ is not sold there are none', async () => {
+    await mount(status({ product: 'night_pass', source: 'apple' }))
+    expect(screen.getByTestId('manage-plan-$rc_monthly')).toBeTruthy()
+    expect(screen.queryByTestId('plus-manage-store')).toBeNull()
+    await screen.unmount()
+    ;(loadPlusOffers as jest.Mock).mockClear()
+    await mount(status({ source: 'grant', gated: false }))
+    expect(screen.queryByTestId('plus-manage-plans')).toBeNull()
+    expect(loadPlusOffers).not.toHaveBeenCalled()
   })
 })
 
@@ -139,7 +169,7 @@ describe('where a subscription ended, and only there, it sells', () => {
     await mount(status({ active: false, product: null, source: null, expiresAt: '2026-11-03T12:00:00', state: 'expired' }))
     expect(screen.getByLabelText(/Blend’n\+ ended\. It ended .*Everything you had is still yours to see/)).toBeTruthy()
     const start = screen.getByTestId('plus-manage-start')
-    expect(start.props.accessibilityLabel).toBe('Start Blend’n+, ₹199 a month')
+    expect(start.props.accessibilityLabel).toBe('Start Monthly · ₹199 / month')
     await act(async () => { fireEvent.press(start) })
     expect(router.push).toHaveBeenCalledWith({ pathname: '/plus', params: { trigger: 'profile' } })
   })
@@ -148,8 +178,6 @@ describe('where a subscription ended, and only there, it sells', () => {
     ;(loadPlusOffers as jest.Mock).mockResolvedValue(null)
     await mount(status({ active: false, product: null, source: null, state: 'refunded' }))
     expect(screen.getByTestId('plus-manage-start').props.accessibilityLabel).toBe('Start Blend’n+')
-    // A dash only leads into a price.
-    expect(screen.queryByText('Start Blend’n+ —')).toBeNull()
     expect(screen.getByText('Start Blend’n+')).toBeTruthy()
   })
 })

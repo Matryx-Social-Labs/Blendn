@@ -64,11 +64,13 @@ describe('spokenDuration', () => {
 })
 
 describe('<BroadcastNotice>', () => {
-  it('an announcement: surface, the organizer named in the label, read as one', async () => {
+  // Flow 5 F-A: the host's ember card, the organisation and HOST, read as one.
+  it('an announcement: the host card on surface, the organisation and HOST, read as one', async () => {
     await render(<BroadcastNotice kind="announcement" from="Toit" text="Last call for the terrace." time="10:02 PM" testID="b" />)
     expect(flat('b').backgroundColor).toBe(COLOR.surface)
-    expect(screen.getByText('ANNOUNCEMENT · TOIT', { includeHiddenElements: true })).toBeTruthy()
-    expect(screen.getByLabelText('Announcement from Toit: Last call for the terrace., 10:02 PM')).toBeTruthy()
+    expect(screen.getByText('Toit', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.getByText('HOST', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.getByLabelText('Host, Toit: Last call for the terrace., 10:02 PM')).toBeTruthy()
   })
 
   it('sponsored: sunken, labelled, the text quieter', async () => {

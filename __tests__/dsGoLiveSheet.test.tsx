@@ -14,6 +14,7 @@ import { HueProvider } from '../components/ds/shared'
 import { COLOR } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 import { AX_XXXL, uncapped } from './helpers/ax'
+import { isLitControl } from './helpers/lit'
 
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
 jest.mock('react-native-reanimated', () => {
@@ -53,6 +54,13 @@ describe('<GoLiveSheet>', () => {
     ])
     expect(radios[1].props.accessibilityState).toMatchObject({ checked: true })
     expect(screen.getByText('You can end it anytime.')).toBeTruthy()
+  })
+
+  // SCRUM-635: going live here while checked in somewhere else took you out of it without a word.
+  it('checked in somewhere else: says which room going live here leaves, before the hold', async () => {
+    await render(sheet({ leaving: 'Vinyl Night' }))
+    expect(screen.getByText('Leaves Vinyl Night. You can end it anytime.')).toBeTruthy()
+    expect(screen.getByTestId('g-hold').props.accessibilityHint).toBe('Leaves Vinyl Night.')
   })
 
   it('the dial: H.select on a change, nothing on the picked one', async () => {
@@ -194,11 +202,11 @@ describe('DS-13 (B-T1, B-T2, B-T3): the venue named once, the lit pick, the lit 
     expect(StyleSheet.flatten(screen.getByTestId('g-45-ring', hidden).props.style).borderColor).toBe(COLOR.brandRose)
   })
 
-  it('the hold is the lit kind: the hue’s fill and rim on the track, the hue’s flare as it fills, no gradient', async () => {
+  it('the hold is the positive one (board C): lit inside the gradient rim, filling to the full gradient; no hue', async () => {
     await render(sheet())
-    expect(StyleSheet.flatten(screen.getByTestId('g-hold').props.style).backgroundColor).toBe(COLOR.selectionEmberFill)
-    expect(StyleSheet.flatten(screen.getByTestId('g-hold-rim', hidden).props.style).borderColor).toBe(COLOR.brandOrange)
-    expect(StyleSheet.flatten(screen.getByTestId('g-hold-fill-ground', hidden).props.style).backgroundColor).toBe(COLOR.selectionEmberFlare)
+    expect(isLitControl(screen.getByTestId('g-hold'))).toBe(true)
+    expect(screen.queryByTestId('g-hold-fill-ground', hidden)).toBeNull()
+    expect(JSON.stringify(screen.getByTestId('g-hold').props.style)).not.toContain(COLOR.selectionEmberFill)
   })
 
   it('no “Blendn+” anywhere on the sheet, locked or not', async () => {

@@ -7,11 +7,11 @@ import {
   type PressEventWithFeatures,
   type VectorSourceRef,
 } from '@maplibre/maplibre-react-native'
-import { memo, useEffect, useMemo, useRef, useState } from 'react'
-import { Platform, StyleSheet, View, type NativeSyntheticEvent } from 'react-native'
+import { memo, useEffect, useMemo, useRef } from 'react'
+import { Platform, Text as RNText, StyleSheet, View, type NativeSyntheticEvent } from 'react-native'
 
 import { Logger } from '../../lib/logger'
-import { glowRadius, litFade, litStateTapped, type BandFeature, type GlowFeature } from '../../lib/mapLit'
+import { glowRadius, litStateTapped, type BandFeature, type GlowFeature } from '../../lib/mapLit'
 import {
   CITY_BUILDINGS,
   LABELS_FROM_LAYER_ID,
@@ -20,11 +20,14 @@ import {
   type OwnBuildingState,
 } from '../../lib/mapStyleEmber'
 import { MAP_THEME } from '../../lib/mapTheme'
-import { useReducedMotion } from '../../lib/motion'
-import { COLOR, ICON, RADIUS, SPACE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, ICON, MAX_FONT_SCALE, RADIUS, SPACE } from '../../lib/design/tokens'
+import { tint } from '../../lib/theme'
+import { Badge, monoCaption, MonoRun } from '../ds/MonoFamily'
+import { useBoldText } from '../ds/shared'
 import { Icon } from '../ui/Icon'
 import { Text } from '../ui/Text'
 import type { Chip, Collection, LitState } from './useMapLighting'
+import { useLitFade } from './useLitFade'
 
 /**
  * The home map's layers that are ours, not the basemap's (step 2c): the city's
@@ -33,8 +36,6 @@ import type { Chip, Collection, LitState } from './useMapLighting'
  * changed.
  */
 
-/** The ground glow's radius: metres from the theme at every zoom, nothing else. */
-const GLOW_RADIUS = glowRadius()
 
 /** The city's buildings, under the road names. The lit copies and glows are placed against this layer. */
 export const CityBuildings = memo(function CityBuildings() {
@@ -174,23 +175,6 @@ export const LitBuildings = memo(function LitBuildings({
 })
 
 /**
- * The lit layers' one fade-in (motion #42): 0 until there is something to light, then 1 for good, so the layer arrives
- * over `long` (200 ms under Reduce Motion) the first time and is never faded again. `opacity` is a constant a paint
- * transition can carry; a data-driven one is not transitioned by the map.
- */
-function useLitFade(hasData: boolean) {
-  const reduceMotion = useReducedMotion()
-  const [arrived, setArrived] = useState(false)
-  // A frame after the first data is drawn at 0, so the transition has a start to run from.
-  useEffect(() => {
-    if (!hasData) return
-    const frame = requestAnimationFrame(() => setArrived(true))
-    return () => cancelAnimationFrame(frame)
-  }, [hasData])
-  return { opacity: arrived ? 1 : 0, transition: litFade(reduceMotion) }
-}
-
-/**
  * The glow on the ground under every lit place, under the buildings. It does not pulse (motion #42: "No pulse"): each
  * glow arrives with the layers' one fade and holds still, so the map redraws nothing while it is looked at (WCAG 2.2.2).
  * Two layers, a building's and a beacon's, because a paint transition needs a constant opacity.
@@ -200,16 +184,20 @@ function useLitFade(hasData: boolean) {
 export const GroundGlow = memo(function GroundGlow({
   data,
   under,
+  latitude,
 }: {
   data: Collection<GlowFeature>
+  /** The browsed city's: the ground glow's radius is the theme's metres at every zoom, at this latitude, nothing else. */
+  latitude: number
   visible?: boolean
   /** The city's buildings layer showing: the glow goes under it. */
   under: string
 }) {
   const { opacity, transition } = useLitFade(data.features.length > 0)
+  const radius = useMemo(() => glowRadius(latitude), [latitude])
   const look: NonNullable<CircleLayerSpecification['paint']> = {
     'circle-color': ['get', 'color'],
-    'circle-radius': GLOW_RADIUS,
+    'circle-radius': radius,
     'circle-blur': 1,
     // Flat on the ground, shrinking into the distance like the ground does.
     'circle-pitch-alignment': 'map',
@@ -273,6 +261,7 @@ export const annotationTitle = (label: string): object => (Platform.OS === 'ios'
  */
 function MapChip({ chip, onOpen }: { chip: Chip; onOpen: (kind: Chip['kind'], id: string) => void }) {
   const look = MAP_THEME[chip.kind]
+  const bold = useBoldText()
   return (
     <View
       style={styles.chipWrap}
@@ -284,13 +273,23 @@ function MapChip({ chip, onOpen }: { chip: Chip; onOpen: (kind: Chip['kind'], id
       <View style={[styles.chip, { borderColor: look.crown }]}>
         {chip.kind === 'venue' ? <Icon name="map-pin" size={ICON.inline} color={look.crown} /> : null}
         <View style={styles.chipText}>
-          <Text variant="caption" color={COLOR.textPrimary} numberOfLines={1}>
-            {chip.title}
-          </Text>
-          {chip.line ? (
-            <Text variant="caption" color={chip.live && chip.kind === 'event' ? look.crown : COLOR.textSecondary} numberOfLines={1}>
-              {chip.line}
+          <View style={styles.chipTitle}>
+            <Text variant="caption" color={COLOR.textPrimary} numberOfLines={1} style={styles.chipName}>
+              {chip.title}
             </Text>
+            {/* Several events at one venue (pulse-map 12 A): the count beside its name, ink on the brand orange. */}
+            {chip.count > 1 ? <Badge text={chip.count} tone="orange" testID={`map-chip-count-${chip.id}`} /> : null}
+          </View>
+          {/* When and how far, in mono (pulse-map 05, 12 A: "3 tonight · 200 m"). */}
+          {chip.line ? (
+            <RNText
+              maxFontSizeMultiplier={MAX_FONT_SCALE.caption}
+              numberOfLines={1}
+              style={[monoCaption(bold), { color: chip.live && chip.kind === 'event' ? look.crown : COLOR.textSecondary }]}
+              testID={`map-chip-line-${chip.id}`}
+            >
+              <MonoRun text={chip.line} />
+            </RNText>
           ) : null}
         </View>
       </View>
@@ -299,7 +298,38 @@ function MapChip({ chip, onOpen }: { chip: Chip; onOpen: (kind: Chip['kind'], id
   )
 }
 
+/**
+ * Near me's two labels (Flow 3b · N1 board `.mlabel`): "20 min walk" off the walk's south-east edge, "Short ride" just
+ * inside the ring's west. Words on the map only: the chip and the rows already say it, so a screen reader skips them.
+ */
+export const ReachLabels = memo(function ReachLabels({ walk, ride }: { walk: [number, number]; ride: [number, number] }) {
+  return (
+    <>
+      <Marker id="reach-label-walk" lngLat={walk} anchor="top-left">
+        <ReachLabel text="20 min walk" />
+      </Marker>
+      <Marker id="reach-label-ride" lngLat={ride} anchor="left" offset={[SPACE.xs + SPACE.xxs, 0]}>
+        <ReachLabel text="Short ride" />
+      </Marker>
+    </>
+  )
+})
+
+function ReachLabel({ text }: { text: string }) {
+  return (
+    <View pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.reachLabel}>
+      <Text variant="caption" color={COLOR.textPrimary} style={styles.reachText} numberOfLines={1}>
+        {text}
+      </Text>
+    </View>
+  )
+}
+
 const styles = StyleSheet.create({
+  // Board `.mlabel`: 3 / 8 in, a 10 corner, ink at 72%, Satoshi 700 12/16.
+  // design-exception: the board's 3 pt pill padding (a 22 pt label), between SPACE.xxs and SPACE.xs.
+  reachLabel: { paddingVertical: 3, paddingHorizontal: SPACE.sm, borderRadius: SPACE.sm + SPACE.xxs, backgroundColor: tint(COLOR.ink, 0.72) },
+  reachText: { fontFamily: FONT_FAMILY.brand[700] },
   chipWrap: { alignItems: 'center', justifyContent: 'flex-end', minHeight: MAP_THEME.chip.minTouchPx },
   chip: {
     flexDirection: 'row',
@@ -314,5 +344,7 @@ const styles = StyleSheet.create({
   },
   // Lets a long name shrink to the chip's width and end in an ellipsis.
   chipText: { flexShrink: 1 },
+  chipTitle: { flexDirection: 'row', alignItems: 'center', gap: SPACE.xs + SPACE.xxs },
+  chipName: { flexShrink: 1 },
   stem: { width: SPACE.xxs, height: SPACE.md },
 })

@@ -66,7 +66,7 @@ it('a fix past the server ceiling, then "Try Again" with a good one, goes live (
 })
 
 it('iOS Precise Location off is said as such, not "move for a better signal" (H4)', async () => {
-  ;(Location.requestForegroundPermissionsAsync as jest.Mock).mockResolvedValueOnce({ status: 'granted', ios: { scope: 'whenInUse', accuracy: 'reduced' } })
+  ;(Location.requestForegroundPermissionsAsync as jest.Mock).mockResolvedValueOnce({ status: 'granted', granted: true, ios: { scope: 'whenInUse', accuracy: 'reduced' } })
   const showTray = jest.fn()
   await goLiveOnce(showTray)
   expect(showTray.mock.calls[0][0]).toBe('Precise location is off')

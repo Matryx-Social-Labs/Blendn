@@ -8,9 +8,9 @@ import { GradientFill } from '../ui/GradientFill'
 import { Icon, type IconName } from '../ui/Icon'
 import { COLOR, DURATION, ICON, RADIUS, SIZE, SPACE, SPRING } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
-import { OPACITY } from '../../lib/theme'
 import { Button } from './Button'
-import { CONTROL_FONT_CAP, font, IC_HAIRLINE, useBoldText, useIncreaseContrast, useScreenReader, useSelection } from './shared'
+import { LitFill } from './LitFill'
+import { CONTROL_FONT_CAP, font, IC_HAIRLINE, useBoldText, useIncreaseContrast, useScreenReader } from './shared'
 
 /** A finger may drift this far and still be holding. */
 const MAX_DRIFT = SPACE.xl
@@ -40,7 +40,7 @@ export type HoldToConfirmProps = {
   /** While the confirmed action runs: the fill stays full under `busyLabel`. When it drops, the fill drains. */
   busy?: boolean
   busyLabel?: string
-  /** Outside the fence: 45%, no hold. */
+  /** Outside the fence: the grey rim and a secondary label over the tint (board C `.hold.far`), no hold. */
   disabled?: boolean
   /** The server said no (#10): `H.error` as it turns on, and the fill drains on `M.settle`. */
   refused?: boolean
@@ -48,11 +48,12 @@ export type HoldToConfirmProps = {
   confirmedLabel?: string
   icon?: IconName
   /**
-   * `gradient` (the default): the check-in's hold, the gradient pouring over `surfaceSunken`. `lit`: a positive action
-   * inside a world (Go Live, PLAN-buttons L3), as `Button kind="lit"`: the hue's fill and 1 pt rim, the hue's flare
-   * pouring in as it fills, a white label. The hold is the same hold.
+   * `gradient` (the default): a positive hold (check-in, Go Live), lit as `Button kind="lit"` is (buttons board C): the tinted
+   * gradient inside the 1.5 pt gradient rim, filling to the full gradient as it is held. `neutral`: leaving is not a yes
+   * (check-out, owner 2026-11-17): `surface` inside a `hairlineStrong` rim, a white label, the same rim tone pouring in.
+   * The hold is the same hold.
    */
-  kind?: 'gradient' | 'lit'
+  kind?: 'gradient' | 'neutral'
   /** The design gallery only: the fill frozen this far in. */
   previewProgress?: number
   testID?: string
@@ -60,7 +61,7 @@ export type HoldToConfirmProps = {
 
 /**
  * The one irreversible gesture (guidelines/components/HoldToConfirm.html,
- * ROUND3 B10): hold for 900 ms (`DURATION.hold`). The surfaceSunken track fills
+ * ROUND3 B10): hold for 900 ms (`DURATION.hold`). The lit track fills
  * with the gradient from the left, linearly, and the label is drawn twice so it
  * turns white exactly at the fill edge (transforms only: no layout per frame).
  *
@@ -75,7 +76,7 @@ export type HoldToConfirmProps = {
  * plays `H.success`. One hold in the product: check-in and Go Live both use
  * this; no staff hold (ROUND3 G3).
  *
- * The hold is never required. A screen reader gets one strong button (a
+ * The hold is never required. A screen reader gets one button (`lit`; `secondary` for the neutral hold) (a
  * double-tap confirms); Switch Control and Voice Control activate the pill
  * directly. Both play `H.commit`. The label caps at 1.3× in the 56 pt pill;
  * Increase Contrast adds the 50% hairline to the track.
@@ -95,8 +96,7 @@ export function HoldToConfirm({
   previewProgress,
   testID,
 }: HoldToConfirmProps) {
-  const lit = kind === 'lit'
-  const sel = useSelection()
+  const neutral = kind === 'neutral'
   const screenReader = useScreenReader()
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
@@ -168,7 +168,8 @@ export function HoldToConfirm({
   if (screenReader) {
     return (
       <Button
-        kind="strong"
+        kind={neutral ? 'secondary' : 'lit'}
+        size="md"
         label={srLabel ?? spokenVerb(label)}
         accessibilityHint={consequence}
         onPress={commit}
@@ -180,9 +181,12 @@ export function HoldToConfirm({
   }
 
   const text = confirmedLabel ?? (busy && busyLabel ? busyLabel : label)
+  // Out of reach (board C `.hold.far`): the lit tint stays, the rim goes grey and the label secondary, so armed and out of
+  // reach differ in colour (SCRUM-1057 A), not only in opacity.
+  const far = !neutral && disabled
   const labelRow = (color: string) => (
     <>
-      <Icon name={icon} size={ICON.control} color={lit ? sel.glyph : color} />
+      <Icon name={icon} size={ICON.control} color={color} testID={testID && `${testID}-glyph`} />
       <Text
         numberOfLines={1}
         adjustsFontSizeToFit
@@ -196,11 +200,11 @@ export function HoldToConfirm({
   )
 
   return (
-    <View testID={testID && `${testID}-wrap`} style={disabled && styles.disabled}>
+    <View testID={testID && `${testID}-wrap`}>
       <GestureDetector gesture={hold}>
         <View
           testID={testID}
-          onLayout={(e) => setWidth(Math.round(e.nativeEvent.layout.width))}
+          onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
           accessible
           accessibilityRole="button"
           accessibilityLabel={text}
@@ -210,22 +214,27 @@ export function HoldToConfirm({
           onAccessibilityAction={(e) => {
             if (e.nativeEvent.actionName === 'activate' && !inactive) commit()
           }}
-          style={[styles.track, lit && { backgroundColor: sel.fill }]}
+          style={styles.track}
         >
+          <LitFill
+            radius={RADIUS.button}
+            rim={neutral || far ? COLOR.hairlineStrong : undefined}
+            ground={neutral ? COLOR.surface : undefined}
+            testID={testID && `${testID}-track`}
+          />
           <View style={styles.labelRow} pointerEvents="none">
-            {labelRow(lit ? COLOR.textPrimary : COLOR.textSecondary)}
+            {labelRow(far ? COLOR.textSecondary : COLOR.textPrimary)}
           </View>
           <Animated.View testID={testID && `${testID}-fill`} pointerEvents="none" style={[styles.fill, fillStyle]}>
-            {lit ? (
-              <View testID={testID && `${testID}-fill-ground`} style={[StyleSheet.absoluteFill, { backgroundColor: sel.flare }]} />
+            {neutral ? (
+              <View testID={testID && `${testID}-fill-ground`} style={[StyleSheet.absoluteFill, styles.neutralFill]} />
             ) : (
               <GradientFill style={StyleSheet.absoluteFill} />
             )}
             <Animated.View testID={testID && `${testID}-fill-label`} style={[styles.labelRow, { width }, fillLabelStyle]}>
-              {labelRow(lit ? COLOR.textPrimary : COLOR.textOnGradient)}
+              {labelRow(neutral ? COLOR.textPrimary : COLOR.textOnGradient)}
             </Animated.View>
           </Animated.View>
-          {lit ? <View testID={testID && `${testID}-rim`} pointerEvents="none" style={[styles.edge, styles.rim, { borderColor: sel.edge }]} /> : null}
           {contrast ? <View testID={testID && `${testID}-contrast`} pointerEvents="none" style={[styles.edge, IC_HAIRLINE]} /> : null}
         </View>
       </GestureDetector>
@@ -234,11 +243,9 @@ export function HoldToConfirm({
 }
 
 const styles = StyleSheet.create({
-  disabled: { opacity: OPACITY.disabled },
   track: {
     height: SIZE.primary,
     borderRadius: RADIUS.button,
-    backgroundColor: COLOR.surfaceSunken,
     overflow: 'hidden',
     justifyContent: 'center',
   },
@@ -253,6 +260,6 @@ const styles = StyleSheet.create({
   fill: { ...StyleSheet.absoluteFill, overflow: 'hidden' },
   shrink: { flexShrink: 1 },
   edge: { ...StyleSheet.absoluteFill, borderRadius: RADIUS.button },
-  /** The lit kind's rim, as the lit button's: 1 pt in the hue's edge. */
-  rim: { borderWidth: 1 },
+  /** The neutral hold's pour: its rim's tone (`hairlineStrong`) over the surface ground, white on it 9:1. */
+  neutralFill: { backgroundColor: COLOR.hairlineStrong },
 })

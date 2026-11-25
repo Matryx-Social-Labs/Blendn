@@ -21,8 +21,9 @@ const NAMES = [...source.matchAll(/^ {2}'?([a-z0-9-]+)'?: \w+,$/gm)].map((m) => 
 
 describe('<Icon>', () => {
   it('maps every name in the inventory to a Lucide glyph that renders', async () => {
-    // One map entry per imported glyph: a key the scrape misses is a key nobody tested.
-    expect(NAMES).toHaveLength([...source.matchAll(/^import \w+(?:, \{ __iconData as \w+ \})? from 'lucide-react-native\/icons\//gm)].length)
+    // One map entry per imported glyph, plus the frames' aliases for a glyph under two names: a key the scrape misses is a key nobody tested.
+    const ALIASES = ['trash-2']
+    expect(NAMES).toHaveLength([...source.matchAll(/^import \w+(?:, \{ __iconData as \w+ \})? from 'lucide-react-native\/icons\//gm)].length + ALIASES.length)
     for (const name of NAMES) {
       await render(<Icon name={name} />)
     }
@@ -42,6 +43,19 @@ describe('<Icon>', () => {
     // Which is what the tokens' per-size strokes say: 1.5 at 24 is 1.25 at 20 and 1 at 16.
     expect((ICON.stroke * ICON.control) / ICON.nav).toBe(ICON.strokeAt20)
     expect((ICON.stroke * ICON.inline) / ICON.nav).toBe(ICON.strokeAt16)
+  })
+
+  // SCRUM-1057 A: an armed hold's glyph is stroked in the brand gradient, through the one gradient helper (BrandGradient).
+  it('gradient: the stroke is a brand gradient across the 24-unit box, its own id; without it, the colour (control)', async () => {
+    await render(<Icon name="heart" gradient="fill" />)
+    const json = JSON.stringify(screen.toJSON())
+    const ref = /"stroke":"url\(#(\w+)\)"/.exec(json)?.[1]
+    expect(ref).toBeTruthy()
+    expect(json).toContain(`"name":"${ref}"`)
+    expect(json).toContain('"x2":24')
+    expect((json.match(/"gradient":\[[^\]]*\]/)?.[0].split(',') ?? []).length).toBe(GRADIENT.fill.colors.length * 2)
+    await render(<Icon name="heart" color="#B3AEAD" />)
+    expect(svg().stroke).toBe('#B3AEAD')
   })
 
   it('imports each glyph on its own, never the package root (Metro does not tree-shake)', () => {

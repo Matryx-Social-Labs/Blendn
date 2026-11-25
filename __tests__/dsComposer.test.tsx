@@ -97,13 +97,11 @@ describe('<Composer>', () => {
   })
 
   it.each([
-    ['muted', 'Muted. The organizer has muted you in this room.'],
+    ['muted', 'Muted. The host has muted you in this room.'],
     ['automuted', 'Muted. You are muted in this room. Your messages have been flagged for policy violations.'],
-    ['locked', 'Read only. The organizer locked posting in this room.'],
     ['closed', 'This chat has closed. Event chats stay open for 24 hours after the event ends.'],
-    ['ratelimited', 'Slow down a moment. Too many messages.'],
     // R2-D2: the two CHAT_CLOSED reasons the server words apart.
-    ['notopen', 'Not open yet. This chat opens 24 hours before the event starts.'],
+    ['notopen', 'Not open yet. The room opens when the doors open.'],
     ['hidden', 'This room is hidden. This event is no longer available.'],
   ] as const)('%s: no field, the reason in the server’s words as one element, nothing plays', async (state, said) => {
     await render(composer({ state }))
@@ -126,7 +124,7 @@ describe('<Composer>', () => {
     const announce = jest.spyOn(AccessibilityInfo, 'announceForAccessibility').mockImplementation(() => {})
     await render(composer())
     await screen.rerender(composer({ state: 'muted' }))
-    expect(announce).toHaveBeenCalledWith('Muted. The organizer has muted you in this room.')
+    expect(announce).toHaveBeenCalledWith('Muted. The host has muted you in this room.')
   })
 
   it('a mute carries no countdown; a rate limit carries the server’s, as the hint', async () => {
@@ -134,7 +132,9 @@ describe('<Composer>', () => {
     expect(screen.queryByText('43:00')).toBeNull()
     await screen.rerender(composer({ state: 'ratelimited', countdown: '0:12' }))
     expect(screen.getByText('0:12')).toBeTruthy()
-    expect(screen.getByLabelText('Slow down a moment. Too many messages.').props.accessibilityHint).toBe('You can post again in 0:12')
+    // F-A: the field stays (typeable), the line inside it; Send waits.
+    expect(screen.getByLabelText('Message')).toBeTruthy()
+    expect(screen.getByText(/^Slow down a moment\. Too many messages\. 0:12$/).props.accessibilityHint).toBe('You can post again in 0:12')
   })
 
   it('the server’s own sentence replaces the default', async () => {

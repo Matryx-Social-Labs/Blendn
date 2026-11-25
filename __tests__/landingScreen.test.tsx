@@ -1,7 +1,8 @@
 /*
  * `/` (Flow 1 landing 01 to 10): auth resolving (the mark alone), unreachable (Try again, answered once when it fails
  * again), the three ways in on the glass dock, Google and Apple busy (the others dim), a refusal inline with its one
- * H.error (a cancelled chooser has none), and the session-ended notice.
+ * H.error (a cancelled chooser has none), and the session-ended notice. Since 2026-11-02 (Flow 1b) the old layout again:
+ * the lockup at 27% and its line over two galaxies colliding, with an ink shelf behind the line.
  */
 import { act, fireEvent, render, screen } from '@testing-library/react-native'
 import React from 'react'
@@ -15,8 +16,11 @@ const mockAuth = jest.fn()
 const mockRetry = jest.fn()
 const mockGoogle = jest.fn()
 const mockSignInWithGoogle = jest.fn()
+const mockSignInWithApple = jest.fn()
 const mockNotice = jest.fn()
-jest.mock('expo-router', () => ({ router: { push: jest.fn() } }))
+let mockFocused = true
+let mockPath = '/'
+jest.mock('expo-router', () => ({ router: { push: jest.fn() }, useIsFocused: () => mockFocused, usePathname: () => mockPath }))
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
 jest.mock('../lib/perf', () => ({ ScreenProfiler: ({ children }: { children: React.ReactNode }) => children }))
 jest.mock('../lib/logger', () => ({ Logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() } }))
@@ -24,7 +28,7 @@ jest.mock('../lib/useAuth', () => ({
   useAuth: () => mockAuth(),
   retryAuth: () => mockRetry(),
   signInWithGoogle: (...args: unknown[]) => mockSignInWithGoogle(...args),
-  signInWithApple: jest.fn(),
+  signInWithApple: (...args: unknown[]) => mockSignInWithApple(...args),
 }))
 // What the last session's end was: null, or `{ reason, sentence? }` (Flow 15 #1 to #4).
 jest.mock('../lib/sessionEvents', () => ({ consumeSessionEnd: () => mockNotice() }))
@@ -43,6 +47,11 @@ jest.mock('expo-apple-authentication', () => {
     AppleAuthenticationScope: { FULL_NAME: 0, EMAIL: 1 },
   }
 })
+// Wrapped to read what the landing hands its sky (`paused`); it still draws.
+jest.mock('../components/onboarding/Backdrop', () => {
+  const actual = jest.requireActual('../components/onboarding/Backdrop')
+  return { ...actual, Backdrop: jest.fn(actual.Backdrop) }
+})
 jest.mock('../components/friends/PendingInvite', () => {
   const { Text } = jest.requireActual('react-native')
   return { PendingInvite: () => <Text>Priya invited you</Text> }
@@ -50,19 +59,24 @@ jest.mock('../components/friends/PendingInvite', () => {
 
 import { router } from 'expo-router'
 import Index from '../app/index'
+import { Backdrop } from '../components/onboarding/Backdrop'
 import { setAccountState } from '../lib/accountState'
 import { openWhenReady, resetPendingRoute } from '../lib/pendingRoute'
 
 const signedOut = { user: null, loading: false, unreachable: false }
 const on = (os: 'ios' | 'android') => Object.defineProperty(Platform, 'OS', { value: os, configurable: true })
 let error: jest.SpyInstance
+let success: jest.SpyInstance
 beforeEach(() => {
   jest.clearAllMocks()
   jest.useFakeTimers()
+  mockFocused = true
+  mockPath = '/'
   on('ios')
   mockAuth.mockReturnValue(signedOut)
   mockNotice.mockResolvedValue(null)
   error = jest.spyOn(H, 'error').mockImplementation(() => {})
+  success = jest.spyOn(H, 'success').mockImplementation(() => {})
   jest.spyOn(H, 'primary').mockImplementation(() => {})
 })
 afterEach(() => jest.useRealTimers())
@@ -155,6 +169,37 @@ describe('the ways in', () => {
     await draw()
     await fireEvent.press(screen.getByLabelText('Continue with email'))
     expect(router.push).toHaveBeenCalledWith('/sign-in')
+  })
+})
+
+describe('the success haptic on the server\'s yes (OUT-04)', () => {
+  const appleButton = () => screen.getByTestId('apple-button')
+  const AppleAuth = () => jest.requireMock('expo-apple-authentication') as { signInAsync: jest.Mock }
+
+  it('Google: once on success, none on a refusal', async () => {
+    mockGoogle.mockResolvedValue({ data: { idToken: 't' } })
+    mockSignInWithGoogle.mockResolvedValue({ success: true, isNewUser: false })
+    await draw()
+    await fireEvent.press(google())
+    expect(success).toHaveBeenCalledTimes(1)
+
+    jest.clearAllMocks()
+    mockSignInWithGoogle.mockResolvedValue({ success: false, error: 'no', errorCode: 'FORBIDDEN' })
+    await fireEvent.press(google())
+    expect(success).not.toHaveBeenCalled()
+  })
+
+  it('Apple: once on success, none on a refusal', async () => {
+    AppleAuth().signInAsync.mockResolvedValue({ identityToken: 'i', fullName: null })
+    mockSignInWithApple.mockResolvedValue({ success: true, isNewUser: false })
+    await draw()
+    await fireEvent(appleButton(), 'press')
+    expect(success).toHaveBeenCalledTimes(1)
+
+    jest.clearAllMocks()
+    mockSignInWithApple.mockResolvedValue({ success: false, error: 'no', errorCode: 'FORBIDDEN' })
+    await fireEvent(appleButton(), 'press')
+    expect(success).not.toHaveBeenCalled()
   })
 })
 
@@ -370,5 +415,69 @@ describe('the entry at large text and its parallel verbs (GO-12, A7/A27/A28)', (
   it('the "or" between the ways in reads at 4.5:1: textSecondary, not tertiary', async () => {
     await draw()
     expect(StyleSheet.flatten(screen.getByText('or', { includeHiddenElements: true }).props.style).color).toBe(COLOR.textSecondary)
+  })
+})
+
+describe('the old landing over the galaxies (Flow 1b, owner 2026-11-02)', () => {
+  const HIDDEN = { includeHiddenElements: true }
+  const TAGLINE = 'Same place. Same vibe. Instant connections.'
+
+  it('the lockup and its line, the collision playing behind them; no intro mark or wordmark', async () => {
+    await draw()
+    expect(screen.getByTestId('landing-lockup', HIDDEN).props.accessibilityElementsHidden).toBe(true)
+    expect(screen.getByText(TAGLINE)).toBeTruthy()
+    expect(screen.getByTestId('galaxy-live', HIDDEN)).toBeTruthy()
+    expect(screen.queryByTestId('landing-mark', HIDDEN)).toBeNull()
+    expect(screen.queryByTestId('landing-wordmark', HIDDEN)).toBeNull()
+  })
+
+  it('the sky draws its ink shelf behind the tagline once the line is laid out', async () => {
+    await draw()
+    const shelf = () => screen.getByTestId('galaxy-live', HIDDEN).queryAll((n) => n.type === 'sk-Group' && !!n.props.transform)[0]
+    expect(shelf()).toBeUndefined()
+    await act(async () => {
+      screen.getByText(TAGLINE).props.onLayout({ nativeEvent: { layout: { x: 24, y: 304, width: 342, height: 24 } } })
+    })
+    expect(shelf().props.transform).toEqual(expect.arrayContaining([{ translateX: 195 }, { translateY: 316 }]))
+  })
+
+  const paused = () => (Backdrop as jest.Mock).mock.calls.at(-1)?.[0].paused
+
+  it('the sky turns while the landing is the screen, and holds under any other screen', async () => {
+    await draw()
+    expect(paused()).toBe(false)
+    mockFocused = false
+    mockPath = '/about'
+    await draw()
+    expect(paused()).toBe(true)
+  })
+
+  it('keeps turning under the email sheet, sign-in and forgot-password, until they sign in (owner, 2026-11-04: C)', async () => {
+    mockFocused = false
+    for (const path of ['/sign-in', '/forgot-password']) {
+      mockPath = path
+      await draw()
+      expect(paused()).toBe(false)
+    }
+  })
+
+  it('hands the sheet its Dock’s height to grow from, and takes it back when it goes', async () => {
+    const { landingUnder } = require('../lib/emailSheet') as typeof import('../lib/emailSheet')
+    const { unmount } = await render(<Index />)
+    await act(async () => {
+      screen.getByTestId('landing-dock').props.onLayout?.({ nativeEvent: { layout: { x: 0, y: 530, width: 402, height: 314 } } })
+    })
+    expect(landingUnder()).toEqual({ dockHeight: 314 })
+    await unmount()
+    expect(landingUnder()).toBeNull()
+  })
+
+  it('under the sheet it is not read: a screen reader stays on the form', async () => {
+    mockFocused = false
+    mockPath = '/sign-in'
+    await draw()
+    const root = screen.getByTestId('landing-root', { includeHiddenElements: true })
+    expect(root.props.accessibilityElementsHidden).toBe(true)
+    expect(root.props.importantForAccessibility).toBe('no-hide-descendants')
   })
 })

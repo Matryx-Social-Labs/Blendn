@@ -37,8 +37,8 @@ beforeEach(() => {
 describe('<RevealSheet>', () => {
   it('names the outcome and who will see what', async () => {
     await render(<RevealSheet visible onClose={jest.fn()} crew="Nebula" audience={7} onReveal={jest.fn()} />)
-    expect(screen.getByRole('header', { name: 'Reveal Nebula to this Blend?' })).toBeTruthy()
-    expect(screen.getByText(/shown by first name and one photo to the 7 people in this Blend — and nobody else/)).toBeTruthy()
+    expect(screen.getByRole('header', { name: 'Reveal Nebula to this Mix?' })).toBeTruthy()
+    expect(screen.getByText(/shown by first name and one photo to the 7 people in this Mix — and nobody else/)).toBeTruthy()
     expect(screen.getByText('You can’t undo a reveal.')).toBeTruthy()
   })
 
@@ -57,8 +57,8 @@ describe('<RevealSheet>', () => {
 
   it('solo: the “yourself” form', async () => {
     await render(<RevealSheet visible onClose={jest.fn()} crew={null} audience={4} onReveal={jest.fn()} />)
-    expect(screen.getByRole('header', { name: 'Reveal yourself to this Blend?' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Reveal me' })).toBeTruthy()
+    expect(screen.getByRole('header', { name: 'Reveal yourself to this Mix?' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Show them' })).toBeTruthy()
   })
 })
 
@@ -162,6 +162,13 @@ describe('<RevealSide> at scale (Together hand-off 1: the strip was half the scr
     } finally {
       Dimensions.set({ window, screen: window })
     }
+  })
+
+  it('a Mix side of 25 (owner 2026-11-14: crews up to 25, a Mix of both, ≤50) is still four faces and "+21"', async () => {
+    const crewOf25 = Array.from({ length: 25 }, (_, i) => ({ pseudonym: `Person ${i}`, photo: null }))
+    await render(<RevealSide side={orbit} people={crewOf25} count={25} testID="r" />)
+    expect(screen.getAllByTestId(/^r-tile-/, hidden)).toHaveLength(4)
+    expect(screen.getByText('+21', hidden)).toBeTruthy()
   })
 
   it('the faces never wrap: past four, the rest fold into the "+N" tile in the same row', async () => {

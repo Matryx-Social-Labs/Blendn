@@ -1,5 +1,6 @@
+import { attendancePhase, type PhaseSource } from './attendanceState'
 import { liveWindow, sessionOver, type SessionSource } from './eventSession'
-import { HAPPENING_NOW } from './pulse'
+import { HAPPENING_NOW, TONIGHT_FROM } from './pulse'
 import { calendarDaysBetween, dateIn, hourIn, weekdayIn } from './time'
 import {
   goingItems,
@@ -19,11 +20,9 @@ import {
 /** The heading over RSVPs whose run has nothing left to go to. */
 export const ENDED = 'Ended'
 
-export function isLiveNow(e: SessionSource, now: number = Date.now()): boolean {
-  const w = liveWindow(e)
-  const start = Date.parse(w.start_time)
-  const end = w.end_time ? Date.parse(w.end_time) : NaN
-  return Number.isFinite(start) && Number.isFinite(end) && start <= now && !sessionOver(e, now)
+export function isLiveNow(e: PhaseSource, now: number = Date.now()): boolean {
+  // The attendance flow's one answer (a cancelled night is never live): `lib/attendanceState.ts`.
+  return attendancePhase(e, now) === 'live'
 }
 
 /**
@@ -118,8 +117,6 @@ export function goingSections(
   ]
 }
 
-/** From 5 PM a day's plans are tonight's, as `nextUpLabel` says. */
-const TONIGHT_FROM = 17
 
 /**
  * Plans in four kinds of heading: today, the rest of this week (to Sunday), next week, then each month ("November", with

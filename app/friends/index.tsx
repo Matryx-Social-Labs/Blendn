@@ -1,5 +1,6 @@
+import Animated from 'react-native-reanimated'
 import { router, useFocusEffect } from 'expo-router'
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { FlatList, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
@@ -8,63 +9,38 @@ import { StateScreen } from '../../components/ds/StateScreen'
 import { TopBar } from '../../components/ds/TopBar'
 import { OfflineStrip, useOffline } from '../../components/profile/OfflineStrip'
 import { PagedFooter } from '../../components/friends/PagedFooter'
-import { PersonRow, PersonRowSkeleton, PERSON_ROW_HEIGHT, usePersonRowsFixed } from '../../components/friends/PersonRow'
+import { LIST_FACE, PersonRow, PersonRowSkeleton, PERSON_ROW_HEIGHT, usePersonRowsFixed } from '../../components/friends/PersonRow'
+import { InviteLinkCard } from '../../components/friends/InviteLinkCard'
+import { LetterScrubber } from '../../components/friends/LetterScrubber'
+import { Button } from '../../components/ds/Button'
+import { IconButton } from '../../components/ds/IconButton'
+import { Title } from '../../components/ds/Title'
+import { useToast } from '../../components/Toast'
 import { MakeCrewRow } from '../../components/friends/MakeCrewRow'
 import { SettingsGroup } from '../../components/ds/SettingsRow'
 import { RequestsRow } from '../../components/friends/RequestsRow'
 import { friendsSinceParts, type Friend } from '../../lib/friends'
+import { CHAT_FAILED, openFriendChat } from '../../lib/friendChat'
+import { friendItems, headFor, headIndex, listMode, SCRUBBER_FROM, scrubberLetters, type FriendItem } from '../../lib/friendsIndex'
+import { useAuth } from '../../lib/useAuth'
+import { useFriendInvite } from '../../lib/useFriendInvite'
 import { groupedCount } from '../../lib/friendsHere'
 import { FRIEND_SEARCH_MAX, FRIENDS_PAGE } from '../../lib/friendsPaging'
-import { COLOR, SIZE, SPACE } from '../../lib/design/tokens'
+import { COLOR, MAX_FONT_SCALE, SIZE, SPACE } from '../../lib/design/tokens'
 import { useFriendRequests } from '../../lib/useFriendRequests'
 import { useFriendsList } from '../../lib/useFriendsList'
 import { usePullToRefresh } from '../../lib/usePullToRefresh'
 import { useTopBarState } from '../../lib/useTopBarState'
 import { CONTROL_FONT_CAP, font, HueProvider, useBoldText } from '../../components/ds/shared'
+import { useSkeletonCrossfade } from '../../components/motion/useSkeletonCrossfade'
 
-/** D7: "Recently added" holds this many (the server's newest first). */
-export const RECENTLY_ADDED = 5
-/** Below this many friends the list is a screenful and visibly all of itself: no sections. */
-export const SECTIONS_FROM = 12
 /** A section's head: one capped line on a fixed height, so the list keeps `getItemLayout`. */
 const SECTION_HEAD = SIZE.tag
 
-export type FriendItem = { kind: 'head'; key: string; title: string } | { kind: 'friend'; key: string; friend: Friend }
-
-/** "A" for Aarav and Ábhi; "#" for a name that starts with no Latin letter. */
-const letterOf = (name: string): string => {
-  const c = name.trim().normalize('NFD').charAt(0).toUpperCase()
-  return c >= 'A' && c <= 'Z' ? c : '#'
-}
-
-/**
- * D7 (D-LM1): the loaded friends as "Recently added" (the server's newest, up to `RECENTLY_ADDED`), then A–Z under a head
- * per letter, "#" last. Built from the pages read so far: a later page adds names into the letters it belongs to. A search,
- * or a list short enough to be visibly all of itself, is one plain run.
- */
-export function friendItems(friends: readonly Friend[], sectioned: boolean): FriendItem[] {
-  const row = (prefix: string) => (friend: Friend): FriendItem => ({ kind: 'friend', key: `${prefix}${friend.userId}`, friend })
-  if (!sectioned) return friends.map(row(''))
-  const sorted = [...friends].sort((a, b) => {
-    const [la, lb] = [letterOf(a.name), letterOf(b.name)]
-    if ((la === '#') !== (lb === '#')) return la === '#' ? 1 : -1
-    return a.name.localeCompare(b.name, 'en', { sensitivity: 'base' })
-  })
-  const items: FriendItem[] = [{ kind: 'head', key: 'h:recent', title: 'Recently added' }, ...friends.slice(0, RECENTLY_ADDED).map(row('r:'))]
-  let letter = ''
-  for (const friend of sorted) {
-    const next = letterOf(friend.name)
-    if (next !== letter) items.push({ kind: 'head', key: `h:${next}`, title: next })
-    letter = next
-    items.push(row('a:')(friend))
-  }
-  return items
-}
-
-/** Each item's length and offset, for `getItemLayout`: heads are `SECTION_HEAD`, rows `PERSON_ROW_HEIGHT`. */
-export function itemOffsets(items: readonly FriendItem[]): number[] {
+/** Each item's offset, for `getItemLayout`: heads are `SECTION_HEAD`, rows `PERSON_ROW_HEIGHT`, under whatever stands `above` them. */
+export function itemOffsets(items: readonly FriendItem[], above: number): number[] {
   const offsets: number[] = []
-  let at = 0
+  let at = above
   for (const item of items) {
     offsets.push(at)
     at += item.kind === 'head' ? SECTION_HEAD : PERSON_ROW_HEIGHT
@@ -73,7 +49,7 @@ export function itemOffsets(items: readonly FriendItem[]): number[] {
 }
 
 /**
- * Your friends — the list the count on the Me tab opens.
+ * Your friends — what the Friends row on the Me tab opens.
  *
  * Real names and photos: both people said yes. Tapping one opens their
  * profile; the top-right opens Add friends, which is where your link is.
@@ -81,40 +57,112 @@ export function itemOffsets(items: readonly FriendItem[]): number[] {
  * crew from the list once there is anybody to make one with.
  *
  * Read a page at a time by the server's cursor and windowed (fixed 64 pt rows and 32 pt sticky heads, `getItemLayout`), so a
- * thousand friends cost a screenful. Past a screenful the list is sectioned: Recently added, then A–Z (`friendItems`). The count under the title is the server's whole list, drawn once it is more than one page: a short
- * list is visibly all of itself.
+ * thousand friends cost a screenful. Past a screenful the list is Recently added (the newest page's first five), then the server's
+ * A–Z (`GET /friends?order=name`, admin #998) a page at a time, with an index down the edge from the whole list's `letters`
+ * (`lib/friendsIndex`). The count under the title is the server's whole list, drawn once it is more than one page: a short list
+ * is visibly all of itself.
  */
 function FriendsScreenContent() {
   const list = useFriendsList()
+  // The A–Z, read only once the list is long enough to have sections (`az`).
+  const byName = useFriendsList('name')
+  const arrive = useSkeletonCrossfade(list.status === 'loading')
   const [refreshing, setRefreshing] = useState(false)
   const requests = useFriendRequests()
   const bar = useTopBarState()
   const insets = useSafeAreaInsets()
   const offline = useOffline()
 
+  const searched = list.searched !== null
+  const mode = listMode(list.allTotal, searched)
+  const az = mode === 'az'
+  const azNow = useRef(az)
+  useEffect(() => {
+    azNow.current = az
+  }, [az])
+
   // On focus: coming back from a profile you just unfriended should not show them. The head is read again, the pages read further stay.
   useFocusEffect(
     useCallback(() => {
       void list.refresh('merge')
-    }, [list.refresh]) // eslint-disable-line react-hooks/exhaustive-deps -- `refresh` is stable; `list` is a new object each render
+      if (azNow.current) void byName.refresh('merge')
+    }, [list.refresh, byName.refresh]) // eslint-disable-line react-hooks/exhaustive-deps -- `refresh` is stable; `list` is a new object each render
   )
+  // The list just grew long enough for sections (or opened that long): its A–Z is read for the first time.
+  useEffect(() => {
+    if (az && byName.status === 'loading') void byName.refresh('merge')
+  }, [az]) // eslint-disable-line react-hooks/exhaustive-deps -- only when the mode turns to A–Z
 
   const onRefresh = async () => {
     setRefreshing(true)
-    await Promise.all([list.refresh('replace'), requests.load()])
+    await Promise.all([list.refresh('replace'), azNow.current ? byName.refresh('replace') : null, requests.load()])
     setRefreshing(false)
   }
   // The branded pull (motion #18); the bar's own scroll handler rides inside it.
   const pull = usePullToRefresh({ refreshing, onRefresh: () => void onRefresh(), onScroll: bar.scrollProps.onScroll })
 
   const openAdd = () => router.push('/friends/add')
-  const failed = list.status === 'failed'
+  // What scrolls: the A–Z's pages, or the plain list (a short one, or a search).
+  const shown = az ? byName : list
+  const naming = az && byName.status === 'loading'
+  const failed = list.status === 'failed' || (az && byName.status === 'failed')
 
-  const searched = list.searched !== null
-  const items = useMemo(() => friendItems(list.friends, !searched && list.allTotal >= SECTIONS_FROM), [list.friends, list.allTotal, searched])
-  const offsets = useMemo(() => itemOffsets(items), [items])
+  const hasHeader = !searched && (requests.incomingTotal > 0 || list.total > 0)
+  const items = useMemo(
+    () => (az ? (byName.status === 'ready' ? friendItems(byName.friends, 'az', list.friends) : []) : friendItems(list.friends, 'plain')),
+    [az, byName.status, byName.friends, list.friends]
+  )
+  // The group above the first row scrolls with the list, and `getItemLayout` counts from the top of everything that scrolls.
+  const [aboveHeight, setAboveHeight] = useState(0)
+  const above = SPACE.sm + (hasHeader ? aboveHeight : 0)
+  const offsets = useMemo(() => itemOffsets(items, above), [items, above])
   // Rows are exactly 64 only at the default size; past it they grow (DS-05) and indexing by 64 would misplace them.
   const fixedRows = usePersonRowsFixed()
+  // The index down the edge, past 12 letter heads, and only while rows have their fixed height (an exact jump needs `getItemLayout`;
+  // at the large sizes the heads are still headers, which a screen reader's heading navigation walks).
+  const heads = byName.letters
+  const letters = useMemo(() => (az && fixedRows && heads && heads.length > SCRUBBER_FROM ? scrubberLetters(heads) : null), [az, fixedRows, heads])
+  const listRef = useRef<FlatList<FriendItem>>(null)
+  // The head a scrubber letter asked for whose page has not been read yet.
+  const seeking = useRef<string | null>(null)
+  // A jump that read pages on its way: its first scroll runs before the platform has the new rows' height and is clamped short, and
+  // Android grows the list in more than one step. So it lands again each time the list grows (`onContentSizeChange`), until you
+  // drag the list yourself or pick another letter.
+  const readOnWay = useRef(false)
+  const landing = useRef<number | null>(null)
+  /** Jumps to the sought head, or reads the next page on the way to it. */
+  const seek = () => {
+    if (!seeking.current) return
+    const index = headIndex(items, seeking.current)
+    if (index >= 0) {
+      listRef.current?.scrollToIndex({ index, animated: false })
+      landing.current = readOnWay.current ? index : null
+      seeking.current = null
+    } else if (!byName.hasMore || byName.moreFailed) seeking.current = null
+    else if (!byName.loadingMore) {
+      readOnWay.current = true
+      void byName.loadMore()
+    }
+  }
+  const land = () => {
+    if (landing.current === null) return
+    listRef.current?.scrollToIndex({ index: landing.current, animated: false })
+  }
+  const jumpTo = (letter: string) => {
+    if (!letters || !heads) return
+    readOnWay.current = false
+    landing.current = null
+    seeking.current = letter === '★' ? null : headFor(letters, letter, heads)
+    // `ListHeaderComponent` sits above index 0, so ★ (the top) scrolls to the very top rather than to Recently added under it.
+    if (letter === '★') listRef.current?.scrollToOffset({ offset: 0, animated: false })
+    else seek()
+  }
+  /*
+   * A head on a page not read yet: the pages before it are read, one at a time, until it lands; then the list jumps there.
+   * ponytail: a jump to the far end of thousands of friends reads every page on the way (100 a page).
+   * Upgrade path: read from the letter (`from=`) and fill the pages above it as they scroll into view.
+   */
+  useEffect(seek, [items, byName.hasMore, byName.loadingMore, byName.moreFailed]) // eslint-disable-line react-hooks/exhaustive-deps -- runs as each page lands; `seek` reads the render it is made in
   const empty = failed ? (
     <StateScreen
       icon="cloud-off"
@@ -126,27 +174,17 @@ function FriendsScreenContent() {
     // Only a search can come up empty with friends behind it: the list is still there, under another word.
     <StateScreen icon="search" title="No friend by that name." gutter testID="friends-no-match" />
   ) : (
-    <StateScreen
-      icon="users"
-      title="No friends yet"
-      body="Nobody can find you by searching. Share your link with the people you want here."
-      actions={[{ label: 'Add friends', onPress: openAdd }]}
-    />
+    <FriendsEmpty />
   )
 
+  // Flow 7 1-A: Friend requests and Make a crew in one group above the list (they were two cards pushing the first friend down).
   const header =
-    !searched && (requests.incomingTotal > 0 || list.total > 0) ? (
-      <View style={styles.rows}>
-        {requests.incomingTotal > 0 ? (
-          <SettingsGroup>
-            <RequestsRow count={requests.incomingTotal} />
-          </SettingsGroup>
-        ) : null}
-        {list.total > 0 ? (
-          <SettingsGroup>
-            <MakeCrewRow />
-          </SettingsGroup>
-        ) : null}
+    hasHeader ? (
+      <View testID="friends-above" onLayout={(e) => setAboveHeight(e.nativeEvent.layout.height)} style={styles.rows}>
+        <SettingsGroup>
+          {requests.incomingTotal > 0 ? <RequestsRow count={requests.incomingTotal} faces={requests.incoming.slice(0, 3).map((r) => r.person)} /> : null}
+          {list.total > 0 ? <MakeCrewRow /> : null}
+        </SettingsGroup>
       </View>
     ) : null
 
@@ -155,7 +193,7 @@ function FriendsScreenContent() {
       <TopBar
         title="Friends"
         // The whole list's count, drawn once it is more than a page; a search narrows the list, never this number.
-        sub={list.allTotal > FRIENDS_PAGE ? groupedCount(list.allTotal) : undefined}
+        sub={list.allTotal > FRIENDS_PAGE ? `${groupedCount(list.allTotal)} friends` : undefined}
         state={bar.state}
         onBack={() => router.back()}
         actions={[{ icon: 'user-plus', label: 'Add friends', onPress: openAdd }]}
@@ -183,11 +221,15 @@ function FriendsScreenContent() {
       ) : null}
       {/* No friends to scroll: the rows that stand above them stand above the empty state too. */}
       {list.friends.length ? null : header}
-      {list.status === 'loading' ? (
-        <PersonRowSkeleton />
+      {list.status === 'loading' || naming ? (
+        <>
+          {naming ? header : null}
+          <PersonRowSkeleton />
+        </>
       ) : (
-        <View style={styles.flex}>
+        <Animated.View entering={arrive} style={styles.flex}>
           <FlatList
+            ref={listRef}
             testID="friends-list"
             data={items}
             keyExtractor={(item) => item.key}
@@ -195,22 +237,29 @@ function FriendsScreenContent() {
             getItemLayout={fixedRows ? (_data, index) => ({ length: items[index]?.kind === 'head' ? SECTION_HEAD : PERSON_ROW_HEIGHT, offset: offsets[index] ?? 0, index }) : undefined}
             // The heads stick under the bar; `ListHeaderComponent` (when drawn) is index 0 to the list, so they shift by one.
             stickyHeaderIndices={items.flatMap((item, i) => (item.kind === 'head' ? [i + (list.friends.length && header ? 1 : 0)] : []))}
+            onContentSizeChange={land}
+            onScrollBeginDrag={() => (landing.current = null)}
             onEndReachedThreshold={1.5}
-            onEndReached={() => void list.loadMore()}
+            onEndReached={() => void shown.loadMore()}
             initialNumToRender={12}
             windowSize={7}
             removeClippedSubviews
-            contentContainerStyle={[list.friends.length ? styles.list : styles.emptyList, { paddingBottom: insets.bottom + SPACE.xl }]}
+            contentContainerStyle={[list.friends.length ? styles.list : searched || failed ? styles.emptyList : styles.emptyTop, { paddingBottom: insets.bottom + SPACE.xl }]}
             ListHeaderComponent={list.friends.length ? header : null}
             ListEmptyComponent={empty}
-            ListFooterComponent={<PagedFooter loading={list.loadingMore} failed={list.moreFailed} onRetry={() => void list.loadMore()} testID="friends-more" />}
+            ListFooterComponent={<PagedFooter loading={shown.loadingMore} failed={shown.moreFailed} onRetry={() => void shown.loadMore()} testID="friends-more" />}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="on-drag"
             showsVerticalScrollIndicator={false}
             {...pull.listProps}
           />
           {pull.indicator}
-        </View>
+          {letters ? (
+            <View style={styles.scrubber}>
+              <LetterScrubber letters={letters} onLetter={jumpTo} testID="friends-scrubber" />
+            </View>
+          ) : null}
+        </Animated.View>
       )}
     </View>
   )
@@ -233,17 +282,54 @@ function SectionHead({ title, fixed }: { title: string; fixed: boolean }) {
   )
 }
 
-/** One friend: "Friends since Mar 2026", and nothing of any event or room. */
+/** One friend: "Friends since Mar 2026", and nothing of any event or room; Message on the row (Flow 7 1-A), the profile on a tap. */
 function FriendRow({ friend }: { friend: Friend }) {
   const since = friendsSinceParts(friend.since)
+  const { showToast } = useToast()
+  const [opening, setOpening] = useState(false)
+  const message = async () => {
+    if (opening) return
+    setOpening(true)
+    const opened = await openFriendChat(friend)
+    setOpening(false)
+    if (!opened) showToast(CHAT_FAILED, 'error', { haptic: 'error' })
+  }
   return (
     <PersonRow
       person={friend}
+      avatar={LIST_FACE}
       detail={since.words}
       detailMono={since.date ?? undefined}
       onPress={() => router.push({ pathname: '/friends/[userId]', params: { userId: friend.userId } })}
-      chevron
+      trailing={<IconButton size="sm" icon="message-circle" accessibilityLabel={`Message ${friend.name}`} onPress={() => void message()} disabled={opening} />}
     />
+  )
+}
+
+/**
+ * Flow 7 1b-A: with nobody yet, the way in is on the page — your invite card, Share my link, and your QR code one tap away — rather
+ * than a screen further on.
+ */
+function FriendsEmpty() {
+  const bold = useBoldText()
+  const { user } = useAuth()
+  const { invite, failed, share } = useFriendInvite()
+  return (
+    <View testID="friends-empty" style={styles.empty}>
+      <View style={styles.emptyWords}>
+        <Title variant="page" accessibilityRole="header" style={[styles.emptyTitle, styles.centre]}>
+          No friends yet
+        </Title>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.lede} style={[font('lede', bold), styles.muted, styles.centre]}>
+          Nobody can find you by searching. Send your link to the people you want here.
+        </Text>
+      </View>
+      <InviteLinkCard url={invite?.url} failed={failed} name={user?.name} photo={user?.image} />
+      <View style={styles.emptyActions}>
+        <Button label="Share my link" icon="share" onPress={() => void share()} disabled={!invite} />
+        <Button kind="tertiary" muted icon="qr-code" label="Show my QR code" onPress={() => router.push({ pathname: '/friends/add', params: { side: 'qr' } })} />
+      </View>
+    </View>
   )
 }
 
@@ -252,6 +338,7 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   list: { paddingHorizontal: SPACE.gutter, paddingVertical: SPACE.sm },
   emptyList: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: SPACE.gutter },
+  emptyTop: { flexGrow: 1, paddingHorizontal: SPACE.gutter },
   // The frame's column: the request card and Make a crew stand 8 apart, and the first friend 8 under them.
   rows: { gap: SPACE.sm, paddingBottom: SPACE.sm, paddingHorizontal: 0 },
   search: { paddingHorizontal: SPACE.gutter, paddingBottom: SPACE.sm },
@@ -260,6 +347,15 @@ const styles = StyleSheet.create({
   headGrows: { minHeight: SECTION_HEAD, paddingVertical: SPACE.sm },
   headText: { color: COLOR.textSecondary },
   offline: { paddingHorizontal: SPACE.gutter, paddingTop: SPACE.xs, paddingBottom: SPACE.sm },
+  // design-exception: the board's index sits 4 in from the right edge (fr.css `.frscrub`).
+  scrubber: { position: 'absolute', right: 4, top: SPACE.md },
+  // design-exception: Flow 7 1b-A (fr.js `emptyA`): 40 above the words, the card 24 under them, the buttons 16 under it.
+  empty: { paddingTop: 40, gap: SPACE.xl },
+  emptyWords: { gap: SPACE.sm },
+  emptyTitle: { color: COLOR.textPrimary },
+  emptyActions: { gap: SPACE.sm },
+  centre: { textAlign: 'center' },
+  muted: { color: COLOR.textSecondary },
 })
 
 /** Rose world: one hue on this screen (`HueProvider`). */

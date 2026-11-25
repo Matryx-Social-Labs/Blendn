@@ -10,7 +10,7 @@ import * as Haptics from 'expo-haptics'
 import * as Reanimated from 'react-native-reanimated'
 
 import ScalePress from '../components/motion/ScalePress'
-import { DURATION, MOTION_DURATION, MOTION_EASING, MOTION_STAGGER, motionTokens, SPRING } from '../lib/motion'
+import { DURATION, motionTokens, SPRING } from '../lib/motion'
 
 jest.mock('expo-haptics', () => ({
   impactAsync: jest.fn(async () => {}),
@@ -37,14 +37,6 @@ describe('motionTokens', () => {
   it('keeps what Reduce Motion must not touch: fades still fade, the hold keeps its speed', () => {
     const m = motionTokens(true)
     expect([m.duration.quick, m.duration.hold, m.shake.duration]).toEqual([160, DURATION.hold, 320])
-  })
-})
-
-describe('the names today’s screens use', () => {
-  it('keep their values', () => {
-    expect(MOTION_DURATION).toEqual({ fast: 160, normal: 220, slow: 320, relaxed: 520 })
-    expect(MOTION_EASING).toEqual({ entrance: [0.16, 1, 0.3, 1], gentle: [0.33, 1, 0.68, 1] })
-    expect(MOTION_STAGGER).toEqual({ fast: 28, normal: 40 })
   })
 })
 

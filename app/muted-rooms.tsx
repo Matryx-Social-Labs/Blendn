@@ -1,3 +1,4 @@
+import Animated from 'react-native-reanimated'
 import { router } from 'expo-router'
 import { useCallback } from 'react'
 import { FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native'
@@ -12,6 +13,7 @@ import { COLOR, SPACE, MAX_FONT_SCALE } from '../lib/design/tokens'
 import { muteEnds, mutedRoomRoute, useMutedRooms, MUTED_PAGE_SIZE, MUTED_SCAN_PAGES, type MutedRoom } from '../lib/mutedRooms'
 import { Button } from '../components/ds/Button'
 import { useTopBarOverlay } from '../lib/useTopBarState'
+import { useSkeletonCrossfade } from '../components/motion/useSkeletonCrossfade'
 
 const SKELETON_ROWS = [0, 1, 2]
 /** Said when the scan stopped at its cap with more behind it. */
@@ -29,6 +31,7 @@ function MutedRoomsContent() {
   const insets = useSafeAreaInsets()
   const bar = useTopBarOverlay()
   const muted = useMutedRooms()
+  const arrive = useSkeletonCrossfade(muted.loading)
 
   const renderRoom = useCallback(
     ({ item }: { item: MutedRoom }) => (
@@ -46,7 +49,7 @@ function MutedRoomsContent() {
   )
 
   const empty = muted.loading ? (
-    <View accessibilityLabel="Loading" style={styles.skeletons}>
+    <View accessible accessibilityLabel="Loading" style={styles.skeletons}>
       {SKELETON_ROWS.map((i) => (
         <View key={i} style={styles.skeletonRow}>
           <SkeletonCircle width={SPACE.xxl} />
@@ -77,12 +80,18 @@ function MutedRoomsContent() {
       testID="muted-rooms-partial-empty"
     />
   ) : (
-    <StateScreen
-      icon="bell"
-      title="No muted rooms"
-      body="A room you mute shows up here, and you can turn it back on from its info."
-      testID="muted-rooms-empty"
-    />
+    // Centred on the page (remaining-screens 05 A): both ways to mute, and one neutral way on to where they are.
+    <View style={styles.centred}>
+      <StateScreen
+        icon="bell-off"
+        litWell
+        title="No muted rooms"
+        body="Mute a room from its info, or swipe a chat left in the Banter. It lands here, so you can turn it back on."
+        actions={[{ label: 'Go to the Banter', kind: 'secondary', onPress: () => router.navigate('/(tabs)/chat') }]}
+        fitActions
+        testID="muted-rooms-empty"
+      />
+    </View>
   )
 
   // Never a quietly short list: a page that did not come says so, with a way to read again.
@@ -102,7 +111,8 @@ function MutedRoomsContent() {
         testID="muted-rooms-list"
         data={muted.rooms}
         keyExtractor={(room) => room.id}
-        renderItem={renderRoom}
+        // The rows cross from the skeleton (DS #17); a load faster than the skeleton's grace shows them at once.
+        renderItem={(info) => <Animated.View entering={arrive}>{renderRoom(info)}</Animated.View>}
         ListEmptyComponent={empty}
         ListFooterComponent={foot}
         contentContainerStyle={[styles.content, { paddingTop: bar.contentTop, paddingBottom: insets.bottom + SPACE.xl }, muted.rooms.length === 0 && styles.emptyContent]}
@@ -113,7 +123,7 @@ function MutedRoomsContent() {
         refreshControl={<RefreshControl refreshing={muted.loading && muted.rooms.length > 0} onRefresh={muted.refresh} tintColor={COLOR.textSecondary} progressViewOffset={bar.indicatorTop} />}
         {...bar.scrollProps}
       />
-      <View style={bar.barPin} pointerEvents="box-none">
+      <View style={bar.barPin} onLayout={bar.onBarLayout} pointerEvents="box-none">
         <TopBar title="Muted rooms" state={bar.state} onBack={() => router.back()} testID="muted-rooms-top" />
       </View>
     </View>
@@ -124,6 +134,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: 'transparent' },
   content: { paddingHorizontal: SPACE.gutter, gap: SPACE.md },
   emptyContent: { flexGrow: 1 },
+  centred: { flex: 1, justifyContent: 'center' },
   foot: { color: COLOR.textTertiary, textAlign: 'center', paddingVertical: SPACE.lg },
   partial: { alignItems: 'center' },
   skeletons: { gap: SPACE.lg },

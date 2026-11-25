@@ -7,24 +7,21 @@
  */
 import type { ChatReaction } from '../../lib/chatReactions'
 import { COLOR, FONT_FAMILY } from '../../lib/design/tokens'
+import { personFace } from '../../lib/personFace'
 import { font } from './shared'
 
 /**
  * Someone in a chat, as the room shows them: the name (the pseudonym, or the
  * real name once revealed), and a photo only where the room names them to you.
- * `pseudonym` seeds the creature when `name` is a placeholder ("Attendee").
+ * `pseudonym` seeds the creature when `name` is a placeholder ("Attendee"). `named`: the room names them (a crew's room,
+ * SV-6); a photo only arrives where it does, so a photo implies it.
  */
-export type ChatPerson = { name: string; pseudonym?: string; photoUri?: string }
+export type ChatPerson = { name: string; pseudonym?: string; photoUri?: string; named?: boolean }
 
-/**
- * Their `<Avatar>` props: the photo when the room shows it, otherwise their
- * creature. (Typed by inference, not by importing Avatar's props: an import
- * here would read as Avatar being wired to a screen.)
- */
+/** Their `<Avatar>` props, by `personFace`: the anonymous are their creature, the named their photo or their initial. */
 export function avatarOf<S extends number>(person: ChatPerson, size: S) {
-  return person.photoUri
-    ? { kind: 'photo' as const, uri: person.photoUri, size }
-    : { kind: 'creature' as const, pseudonym: person.pseudonym ?? person.name, size }
+  const named = person.named ?? Boolean(person.photoUri)
+  return { ...personFace({ named, name: named ? person.name : (person.pseudonym ?? person.name), photo: person.photoUri }), size }
 }
 
 /** A frame in the window (`measureInWindow`): where a menu anchors, where a photo opens from. */

@@ -12,14 +12,14 @@ jest.mock('../components/OptimizedImage', () => ({ OptimizedImage: () => null })
 /* eslint-disable import/first */
 import { ToastDockContext } from '../components/toastDock'
 import { Banner } from '../components/ds/Banner'
-import { NightsOut, nightsLine, FIRST_NIGHT, NIGHTS_FAILED, NIGHTS_HELD } from '../components/profile/NightsOut'
+import { NightsOut, FIRST_NIGHT, NIGHTS_FAILED, NIGHTS_HELD } from '../components/profile/NightsOut'
 import { BAR_GLASS_AT, BAR_TITLE_SWAP, barStateAt } from '../components/profile/ProfileBar'
 import { dockClearance, ProfileDock } from '../components/profile/ProfileDock'
 import { HERO_STRETCH_MAX, heroHeightFor, stretchScale } from '../components/profile/ProfileHeroStage'
 import { nextPage } from '../components/profile/ProfileHeroPager'
 import { counterOf, pageAt } from '../components/profile/PhotoViewer'
 import { nightLabel, nightsCounts, nightsView } from '../lib/meProfile'
-import { compactCount, STAT_MAX } from '../components/profile/MeSections'
+import { compactCount } from '../lib/format'
 import { COLOR, SIZE, SPACE } from '../lib/design/tokens'
 import { tint } from '../lib/theme'
 /* eslint-enable import/first */
@@ -123,9 +123,9 @@ describe('Nights out chooses its state (Me 04 · 05 · 06)', () => {
     expect(nightLabel(new Date(2025, 9, 3, 20).toISOString())).toBe('Fri 3 Oct')
     expect(nightLabel('nope')).toBe('')
   })
-  it('counts in one voice', () => {
-    expect(nightsLine(1)).toBe('1 ended night since you joined')
-    expect(nightsLine(1048)).toBe('1,048 ended nights since you joined')
+  it('the count is in the heading (Me + settings A 01: the stats card folded into Nights out)', async () => {
+    await render(<NightsOut status="ready" events={[night(1)]} total={1048} onOpenEvent={jest.fn()} onSeeAll={jest.fn()} onRetry={jest.fn()} onFirstNight={jest.fn()} />)
+    expect(screen.getByLabelText(/1,048/)).toBeTruthy()
   })
 
   const draw = (status: 'loading' | 'ready' | 'failed', events: ReturnType<typeof night>[]) =>
@@ -152,32 +152,26 @@ describe('Nights out chooses its state (Me 04 · 05 · 06)', () => {
     fireEvent.press(screen.getByText('Try again'))
     expect(onRetry).toHaveBeenCalledTimes(1)
   })
-  it('renders the locked count with a lit See Blend\'n+, never the first-night card', async () => {
-    const onUnlock = jest.fn()
-    await render(
-      <NightsOut status="ready" events={[]} lockedCount={1045} total={1048} onUnlock={onUnlock} onOpenEvent={jest.fn()} onSeeAll={jest.fn()} onRetry={jest.fn()} onFirstNight={jest.fn()} />
-    )
+  it('says the locked count, never the first-night card, and sells nothing: Plus is sold once on Me, by its row (A 01)', async () => {
+    await render(<NightsOut status="ready" events={[]} lockedCount={1045} total={1048} onOpenEvent={jest.fn()} onSeeAll={jest.fn()} onRetry={jest.fn()} onFirstNight={jest.fn()} />)
     expect(screen.queryByText(FIRST_NIGHT.title)).toBeNull()
     expect(screen.getByText(NIGHTS_HELD.locked(1048))).toBeTruthy()
     expect(NIGHTS_HELD.locked(1048)).toBe('1,048 nights · the older ones are with Blend’n+')
-    fireEvent.press(screen.getByText(NIGHTS_HELD.action))
-    expect(onUnlock).toHaveBeenCalledTimes(1)
+    expect(screen.queryByText('See Blend’n+')).toBeNull()
+    expect(screen.queryAllByRole('button')).toHaveLength(0)
   })
   it('renders nights still going without the first-night card or a Blend\'n+ button', async () => {
     await render(<NightsOut status="ready" events={[]} total={1} onOpenEvent={jest.fn()} onSeeAll={jest.fn()} onRetry={jest.fn()} onFirstNight={jest.fn()} />)
     expect(screen.queryByText(FIRST_NIGHT.title)).toBeNull()
     expect(screen.getByText('1 night · it lands here once it ends')).toBeTruthy()
-    expect(screen.queryByText(NIGHTS_HELD.action)).toBeNull()
+    expect(screen.queryByText('See Blend’n+')).toBeNull()
   })
-  it('says the locked nights under the tiles, with a lit See Blend\'n+', async () => {
-    const onUnlock = jest.fn()
-    await render(
-      <NightsOut status="ready" events={[night(1), night(2), night(3)]} lockedCount={43} total={48} onUnlock={onUnlock} onOpenEvent={jest.fn()} onSeeAll={jest.fn()} onRetry={jest.fn()} onFirstNight={jest.fn()} />
-    )
+  it('names Blend\'n+ nowhere under the tiles: Me sells it once, by its own row (A 01; drive 2026-11-18 found it twice)', async () => {
+    await render(<NightsOut status="ready" events={[night(1), night(2), night(3)]} lockedCount={43} total={48} onOpenEvent={jest.fn()} onSeeAll={jest.fn()} onRetry={jest.fn()} onFirstNight={jest.fn()} />)
     expect(screen.getByTestId('nights-grid')).toBeTruthy()
-    expect(screen.getByText('43 more nights with Blend’n+')).toBeTruthy()
-    fireEvent.press(screen.getByText(NIGHTS_HELD.action))
-    expect(onUnlock).toHaveBeenCalledTimes(1)
+    // The header counts all 48 and See all leads to Going, where the locked nights' row lives. Negative control: the old line fails.
+    expect(screen.queryByText(/Blend’n\+/)).toBeNull()
+    expect(screen.queryByTestId('nights-more')).toBeNull()
   })
   it('says the nights still running beside the ended tiles, so the section adds up to the stat (RC 7)', async () => {
     await render(
@@ -189,7 +183,7 @@ describe('Nights out chooses its state (Me 04 · 05 · 06)', () => {
   })
   it('Me hands Nights out the running count from the same response as the stat (pinned at its source)', () => {
     const source = require('fs').readFileSync(require('path').join(__dirname, '../app/(tabs)/profile.tsx'), 'utf8') as string
-    expect(source).toMatch(/attended=\{nightCounts\.total \?\? stats\.eventsAttended\}/)
+    expect(source).toMatch(/total=\{nightCounts\.total\}/)
     expect(source).toMatch(/runningCount=\{nightCounts\.running/)
   })
   it('says nothing more when every night has ended', async () => {
@@ -300,8 +294,6 @@ describe('the paged viewer', () => {
 
 describe('worst-case data (break-ui)', () => {
   it('never draws a stat past four digits: it goes compact', () => {
-    expect(STAT_MAX).toBe(9999)
-    expect(compactCount(9999)).toBe('9999')
     expect(compactCount(10_000)).toBe('10k')
     expect(compactCount(12_345)).toBe('12k')
     expect(compactCount(999_999)).toBe('999k')

@@ -15,6 +15,12 @@ export interface BlockedUser {
   blocked_user_photo: string | null
   reason: string | null
   blocked_at: string
+  /** The pseudonym you were shown for them when you blocked; never a real name. Null when none, or an older server. */
+  seen_as?: string | null
+  /** Where you blocked them from: an event, a venue, a room. */
+  seen_in?: string | null
+  /** Their account has since been deleted. */
+  account_deleted?: boolean
 }
 
 export type ReportType = 
@@ -284,7 +290,7 @@ export const showUserSafetyActions = (
     kind: 'actions',
     hue: 'rose',
     title: userName,
-    message: 'Blocking hides you from each other. A report goes to our team, and they are not told who sent it.',
+    message: 'Blocking hides you from each other. A report goes to our team; the person isn’t told who sent it.',
     actions: [
       { label: 'Block', variant: 'destructive', next: () => blockStep(userName, userId, onBlock) },
       { label: 'Report', next: () => userReportStep(userName, userId, onReport) },
@@ -294,11 +300,14 @@ export const showUserSafetyActions = (
 }
 
 /** Block one person, confirmed: from a profile's sheet, or a chat message's Block… (R3-D5 5.1, 5.2). */
-export const blockStep = (userName: string, userId: string, onComplete?: () => void): Sheet => ({
+/** A friend's block confirm says the friendship ends too (Flow 7 5-A): a block removes the friend on the server. */
+export const BLOCK_FRIEND_LINE = 'They won’t be told. You won’t see each other in rooms, and they’re no longer your friend. Your messages are hidden.'
+
+export const blockStep = (userName: string, userId: string, onComplete?: () => void, opts: { friend?: boolean } = {}): Sheet => ({
   kind: 'actions',
   hue: 'rose',
   title: `Block ${userName}?`,
-  message: "They won’t be able to see your profile or message you, and you won’t see each other in rooms.",
+  message: opts.friend ? BLOCK_FRIEND_LINE : "They won’t be able to see your profile or message you, and you won’t see each other in rooms.",
   actions: [
     {
       label: 'Block',
@@ -520,7 +529,7 @@ const boardReportFailed = (result: { error?: string; errorCode?: string }): Shee
 export const boardSafetySheet = (target: BoardTarget, name: string, onBlocked: () => void): Sheet => ({
   kind: 'actions',
   title: name,
-  message: 'Blocking hides you from each other here and everywhere else. A report goes to our team, and they are not told who sent it.',
+  message: 'Blocking hides you from each other here and everywhere else. A report goes to our team; the person isn’t told who sent it.',
   actions: [
     { label: 'Report', next: () => boardReportStep(target, name) },
     { label: 'Block', variant: 'destructive', next: () => boardBlockStep(target, name, onBlocked) },

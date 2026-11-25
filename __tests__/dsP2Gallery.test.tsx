@@ -43,9 +43,6 @@ const CELLS = [
   'ds-venuepass-outside',
   'ds-doorcode-live',
   'ds-doorcode-offline',
-  'ds-mapcard-address-you',
-  'ds-mappin-family',
-  'ds-mapcluster-all',
   'ds-person-here',
   'ds-person-gone',
   'ds-person-thin',
@@ -54,7 +51,10 @@ const CELLS = [
   'ds-person-live',
   'ds-rolling-q50',
   'ds-rolling-live',
-  'ds-reveal-asked',
+  'ds-reveal-none',
+  'ds-reveal-mine',
+  'ds-reveal-theirs',
+  'ds-reveal-both',
   'ds-timering-venue',
 ]
 

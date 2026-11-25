@@ -63,6 +63,12 @@ describe('PhotoManager', () => {
     await waitFor(() => expect(photoUtils.selectAndUploadPhoto).toHaveBeenCalledWith('u1', expect.objectContaining({ main: false })))
   })
 
+  it('marks only the first tile "Blurred for others" (YOU-09, Flow 6 edit 06)', async () => {
+    await mount(3)
+    expect(screen.getAllByTestId('tile-blur-note')).toHaveLength(1)
+    expect(screen.getByText('Blurred for others')).toBeTruthy()
+  })
+
   it('stays quiet when the picker is cancelled', async () => {
     photoUtils.selectAndUploadPhoto.mockResolvedValue({ success: false, cancelled: true, error: 'cancelled' })
     await mount(1)
@@ -103,6 +109,23 @@ describe('PhotoManager', () => {
     expect(mockShowToast).not.toHaveBeenCalled()
   })
 
+  /*
+   * Flow 4 audit D-1 drive (SCRUM-1045): event preferences' "Add a photo" goes here and comes back; the profile read on
+   * the way back was the 60 s cache from before the photo, so Named stayed blocked on Android. A photo write ends the cache.
+   */
+  it('a photo write ends the cached profile, so the next read (event preferences, coming back) sees the photo', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { ProfileCache } = require('../lib/apiClient')
+    photoUtils.reorderPhotos.mockResolvedValue({ ok: true })
+    await mount(2)
+    ProfileCache.set('u1', { id: 'u1', profile: { photos: [] } })
+    expect(ProfileCache.get('u1')).not.toBeNull()
+    await fireEvent.press(screen.getByLabelText('Remove photo 2'))
+    const remove = (mockShowSheet.mock.calls.at(-1)![0] as ActionSheet).actions[0] as unknown as { then: () => Promise<void> }
+    await act(() => remove.then())
+    expect(ProfileCache.get('u1')).toBeNull()
+  })
+
   it('a failed removal keeps the file and says so', async () => {
     photoUtils.reorderPhotos.mockResolvedValue({ ok: false, error: "Couldn’t save your photos. Try again." })
     await mount(2)
@@ -140,27 +163,3 @@ describe('no Alert.alert in the UI', () => {
   })
 })
 
-describe('the Photos header (D-M7: "PHOTOS1 of 6 · saved as you go" touched at 360 dp and 1.3)', () => {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { Dimensions, StyleSheet } = require('react-native') as typeof import('react-native')
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { SPACE } = require('../lib/design/tokens') as typeof import('../lib/design/tokens')
-  const window = Dimensions.get('window')
-  const at = (width: number, fontScale: number) => act(async () => Dimensions.set({ window: { ...window, width, fontScale }, screen: { ...window, width, fontScale } }))
-  afterEach(() => Dimensions.set({ window, screen: window }))
-  const header = () => StyleSheet.flatten(screen.getByTestId('photos-header', { includeHiddenElements: true }).props.style)
-
-  it('at 360 dp and 1.3: a gap, a row that wraps, a label that shrinks; the counter reads "n of max"', async () => {
-    await at(360, 1.3)
-    await mount(1, 6)
-    expect(header()).toMatchObject({ flexDirection: 'row', gap: SPACE.sm, flexWrap: 'wrap' })
-    expect(StyleSheet.flatten(screen.getByText('Photos').props.style).flexShrink).toBe(1)
-    expect(screen.getByText(/^1 of 6/)).toBeTruthy()
-  })
-
-  it('at AX XXXL the counter stacks under the label', async () => {
-    await at(402, 3.571)
-    await mount(1, 6)
-    expect(header().flexDirection).not.toBe('row')
-  })
-})

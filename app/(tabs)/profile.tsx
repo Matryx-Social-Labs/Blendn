@@ -9,33 +9,36 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { scheduleOnRN } from 'react-native-worklets'
 import { Button } from '../../components/ds/Button'
 import { Grain } from '../../components/ds/Grain'
-import { PresenceDot } from '../../components/ds/MonoFamily'
+import { Badge as CountBadge, PresenceDot } from '../../components/ds/MonoFamily'
 import { CONTROL_FONT_CAP, font, HueProvider, useBoldText } from '../../components/ds/shared'
 import { StateScreen } from '../../components/ds/StateScreen'
 import FadeInUp from '../../components/motion/FadeInUp'
 import { Banner } from '../../components/ds/Banner'
 import { MeBadges } from '../../components/profile/MeBadges'
 import { MePlusRow } from '../../components/profile/MePlusRow'
-import { aboutYouFrom } from '../../lib/aboutYou'
-import { MeIdentity, MeSkeleton, StatsCard } from '../../components/profile/MeSections'
+import { MeIdentity, MeSkeleton } from '../../components/profile/MeSections'
+import { SeeAsOthersSheet } from '../../components/profile/SeeAsOthersSheet'
 import { NightsOut } from '../../components/profile/NightsOut'
 import { OfflineStrip, useOffline } from '../../components/profile/OfflineStrip'
 import { PhotoViewer } from '../../components/profile/PhotoViewer'
 import { ProfileBar } from '../../components/profile/ProfileBar'
-import { RequestsRow } from '../../components/friends/RequestsRow'
+import { FacesLead } from '../../components/friends/RequestsRow'
+import { compactCount } from '../../lib/format'
+import { groupedCount } from '../../lib/friendsHere'
+import { friendsPageFrom } from '../../lib/friendsPaging'
+import type { Friend } from '../../lib/friends'
 import { SettingsGroup, SettingsRow } from '../../components/ds/SettingsRow'
 import { ProfileBio, ProfileDetail, ProfileInterests, ProfileSection, SECTION_GAP } from '../../components/profile/ProfileSections'
 import { CrewEmblem } from '../../components/ds/CrewEmblem'
 import type { Rect } from '../../components/ds/chatShared'
 import { apiClient } from '../../lib/apiClient'
-import { requestsPageFrom } from '../../lib/friendsPaging'
-import { crewsApi } from '../../lib/crewsApi'
+import { loadFriendRequests, useFriendRequestsState } from '../../lib/friendRequests'
+import { readMyCrews, useCrewInvites } from '../../lib/crewInvites'
 import type { Crew } from '../../lib/crews'
 import { COLOR, SPACE, STAGGER } from '../../lib/design/tokens'
 import type { Badge } from '../../lib/aboutYou'
 import { Logger } from '../../lib/logger'
 import { interestNames, nightsCounts, profileGaps, type NightsCounts, type NightsStatus } from '../../lib/meProfile'
-import { openTonight } from '../../lib/paywall'
 import { mainWasPulled, pulledPhotos, type PulledPhoto } from '../../lib/photoStates'
 import { parseBadges } from '../../lib/profileBadges'
 import { unseenPulled } from '../../lib/pulledNotices'
@@ -44,6 +47,7 @@ import { pastEventRows, type PastEventRow } from '../../lib/savedEvents'
 import { useAuth } from '../../lib/useAuth'
 import { usePullToRefresh } from '../../lib/usePullToRefresh'
 import { TAB_BAR_CLEARANCE } from './_layout'
+import { trackTabBarScroll, useTabBarRun } from '../../lib/tabBarSettle'
 
 /**
  * Enough attended events to cover Nights out's twelve weeks for anyone short
@@ -60,6 +64,15 @@ const PROFILE_CACHE_TTL = 2 * 60 * 1000
 const CREW_EMBLEM = 24
 const CREW_OVERLAP = 6
 /** The Crews row says its count in words for a screen reader. */
+/** The Friends row's faces: the newest three (Flow 7 6-A). */
+const ME_FACES = 3
+
+/** What a screen reader hears for the Friends row: the whole count (the eye gets "12k"), then the requests. */
+export const friendsLabel = (total: number, requests: number) =>
+  [`Friends${total > 0 ? `, ${groupedCount(total)}` : ''}`, requests > 0 ? `${groupedCount(requests)} friend request${requests === 1 ? '' : 's'}` : null]
+    .filter(Boolean)
+    .join(', ')
+
 const crewsLabel = (count: number, invites: number) => {
   const parts = [count ? `Crews, ${count}` : 'Crews', invites ? `${invites} invite${invites === 1 ? '' : 's'} waiting` : null]
   return parts.filter(Boolean).join(', ')
@@ -84,6 +97,8 @@ interface UserProfileViewModel {
   stats?: {
     eventsAttended: number
     eventsFavorited: number
+    /** SV-7: the Saved list's own count (upcoming, not deleted); absent from an older server, which only sends the lifetime `eventsFavorited`. */
+    savedCount?: number
     eventsOrganized: number
   }
   memberSince?: string
@@ -105,18 +120,22 @@ function ProfileInner() {
   const [nightsRetrying, setNightsRetrying] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   // Null until it loads, and on failure: the stat is left out rather than showing a wrong 0.
-  const [friendsCount, setFriendsCount] = useState<number | null>(null)
-  // Requests waiting on you. Zero until it loads, and on failure: the row is simply not drawn.
-  const [requestCount, setRequestCount] = useState(0)
-  // Your crews and the invites waiting, for the Crews row; empty until they load, and on failure.
+  // How many friends and the newest three (Flow 7 6-A, the Friends row): from the first page, no request of its own.
+  const [friends, setFriends] = useState<{ total: number; faces: Friend[] } | null>(null)
+  /*
+   * Friend requests and crew invites waiting on you: the one shared list of each (requests placement A), so an answer in
+   * Notifications, Friends or Crews is gone from here too. Zero until it loads, and on failure: the row is simply not drawn.
+   */
+  const requestCount = useFriendRequestsState().incoming.total
+  const crewInvites = useCrewInvites().total
+  // Your crews, for the Crews row; empty until they load, and on failure.
   const [crews, setCrews] = useState<Crew[]>([])
-  const [crewInvites, setCrewInvites] = useState(0)
   const [viewer, setViewer] = useState<{ index: number; from: Rect | null } | null>(null)
   // What `GET /profiles/:you` adds (blendn-admin #716): your badges (null: none sent) and the photos moderation took down. Empty until it loads.
   const [badges, setBadges] = useState<Badge[] | null>(null)
   const [pulled, setPulled] = useState<PulledPhoto[]>([])
-  // The "Shows up" opt-in on the badges card; null until the profile says (then the card draws no switch).
-  const [showsUp, setShowsUp] = useState<boolean | null>(null)
+  // "Show my badges" off: the card says they are shown to nobody (its switch is in Edit about you).
+  const [badgesHidden, setBadgesHidden] = useState(false)
   const lastBackgroundRefreshRef = React.useRef(0)
   // Tapping Me while already on it goes back to the top (the bar emits `tabPress`).
   const scrollRef = React.useRef<Animated.ScrollView>(null)
@@ -237,9 +256,6 @@ function ProfileInner() {
     setNightsStatus('failed')
   }, [user])
 
-  // The nights kept behind Blend'n+: the same Tonight sheet Going's locked row opens (trigger `recap`); bought, they're read again.
-  const unlockNights = () => void openTonight({ trigger: 'night', venue: '', onUnlocked: () => void loadRecent() }, { userInitiated: true })
-
   const retryNights = () => {
     setNightsRetrying(true)
     void loadRecent().finally(() => setNightsRetrying(false))
@@ -252,19 +268,14 @@ function ProfileInner() {
    */
   const loadFriendsCount = useCallback(() => {
     void apiClient.getFriends().then((result) => {
-      if (result.success && result.data) setFriendsCount(result.data.count)
+      const read = result.success ? friendsPageFrom(result.data) : null
+      if (read) setFriends({ total: read.total, faces: read.items.slice(0, ME_FACES) })
     })
-    // Its own request, so a slow one never holds up the friend count.
-    void apiClient.getFriendRequests().then((result) => {
-      // The server's count of everyone waiting, not the length of the first page of them.
-      if (result.success && result.data) setRequestCount(requestsPageFrom(result.data, 'incoming')?.total ?? 0)
-    })
-    // Your crews, and the invites waiting: the Crews row's count and dot.
-    void crewsApi.myCrews().then((result) => {
-      if (!result.success || !result.data) return
-      setCrews(result.data.crews)
-      // The server's count of the invites listed, not the length of the first page of them.
-      setCrewInvites(result.data.invitesPagination?.totalCount ?? result.data.invites.length)
+    // Its own request, so a slow one never holds up the friend count; the server's count of everyone waiting.
+    void loadFriendRequests()
+    // Your crews, and the invites waiting (the shared list): the Crews row's count and dot.
+    void readMyCrews().then((result) => {
+      if (result.success && result.data) setCrews(result.data.crews)
     })
   }, [])
 
@@ -277,29 +288,16 @@ function ProfileInner() {
     try {
       const result = await apiClient.getProfile(user.id)
       const own = result.success ? result.data?.profile : undefined
-      setBadges(parseBadges(own?.badges))
-      // Only a server that sends the field has the switch to show: an older one sends none, and the row is not drawn.
-      const sent = (own as Record<string, unknown> | undefined)?.shows_up_badge
-      setShowsUp(typeof sent === 'boolean' ? aboutYouFrom(own as Record<string, unknown>).showsUpBadge : null)
+      // `badges` is absent when they are off; SV-8's `earned_badges` is what you hold either way, so Me keeps the card and its switch.
+      const ownRecord = own as Record<string, unknown> | undefined
+      // An older server with badges off sends neither key: `show_badges: false` alone keeps the card (an empty list) and its switch.
+      setBadges(parseBadges(own?.badges) ?? parseBadges(ownRecord?.earned_badges) ?? (ownRecord?.show_badges === false ? [] : null))
+      setBadgesHidden(ownRecord?.show_badges === false)
       setPulled(await unseenPulled(user.id, pulledPhotos(own?.photo_states)))
     } catch (error) {
       Logger.debug('profile', 'Failed to load badges and photo states', { error })
     }
   }, [user])
-
-  /** The "Shows up" switch on the badges card: written at once; true when the server kept it. */
-  const saveShowsUp = useCallback(
-    async (next: boolean) => {
-      if (!user) return false
-      const result = await apiClient.updateProfile(user.id, { shows_up_badge: next })
-      if (!result.success) return false
-      setShowsUp(next)
-      // The profile read for this screen is cached: a changed switch must not read back as the old one.
-      queryCache.invalidate(`profile_${user.id}`)
-      return true
-    },
-    [user]
-  )
 
   /*
    * On FOCUS, not on mount. A tab stays mounted, so a mount-only effect ran
@@ -325,6 +323,7 @@ function ProfileInner() {
   const interests = profile?.interests ?? []
   const openEvent = (id: string) => router.push({ pathname: '/event/[id]', params: { id } })
   const openEdit = () => router.push('/edit-profile')
+  const [previewing, setPreviewing] = useState(false)
 
   /*
    * Pull to refresh: skips the cache. The spinner waits on the profile only;
@@ -359,8 +358,11 @@ function ProfileInner() {
   // The branded pull (motion #18), its monogram under the floating bar; Android keeps the platform's control, offset the same.
   const pull = usePullToRefresh({ refreshing, onRefresh: () => void onRefresh(), indicatorTop: barBottom })
   const { onOffset: pullAt, wantsOffset: pullWants } = pull
+  const tabRun = useTabBarRun()
   const onScroll = useAnimatedScrollHandler((e) => {
     scrollY.set(e.contentOffset.y)
+    // The tab bar settles into its pill as you read (SCRUM-1023).
+    trackTabBarScroll(tabRun, e)
     // Only above the top, or while the monogram is still up: the rest of the scroll never crosses to JS.
     if (pullWants(e.contentOffset.y)) scheduleOnRN(pullAt, e.contentOffset.y)
   })
@@ -412,10 +414,10 @@ function ProfileInner() {
             age={profile?.age}
             location={profile?.location}
             memberSince={profile?.memberSince}
-            occupation={profile?.occupation}
-            photos={photoList}
+            photo={photoList[0]}
             onEdit={openEdit}
-            onPhotos={openPhoto}
+            onPhoto={(from) => openPhoto(0, from)}
+            onPreview={() => setPreviewing(true)}
           />
         </FadeInUp>
 
@@ -425,7 +427,31 @@ function ProfileInner() {
         */}
         <FadeInUp {...next()}>
           <SettingsGroup>
-            {requestCount > 0 ? <RequestsRow count={requestCount} /> : null}
+            {/*
+              Flow 7 6-A: Friends is a row in the group, three faces and a compact count, the requests waiting as its line and
+              badge. It was a stat ("0 FRIENDS" for a new account) with Friend requests a row of its own.
+            */}
+            <SettingsRow
+              testID="friends-row"
+              icon={friends?.faces.length ? undefined : 'users'}
+              leading={friends?.faces.length ? <FacesLead people={friends.faces} /> : undefined}
+              title="Friends"
+              // 02 A: what to do instead of a "0" when there is nobody yet.
+              hint={requestCount > 0 ? `${groupedCount(requestCount)} friend request${requestCount === 1 ? '' : 's'}` : friends && friends.total === 0 ? FRIENDS_EMPTY : undefined}
+              label={friendsLabel(friends?.total ?? 0, requestCount)}
+              accessory={
+                <>
+                  {friends && friends.total > 0 ? (
+                    <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold, 'GeistMono_500Medium'), styles.count]}>
+                      {compactCount(friends.total)}
+                    </Text>
+                  ) : null}
+                  {requestCount > 0 ? <CountBadge text={requestCount > 99 ? '99+' : requestCount} size={22} testID="requests-badge" /> : null}
+                </>
+              }
+              trail="chevron"
+              onPress={openFriends}
+            />
             <SettingsRow
               testID="crews-row"
               icon={crewStack.length ? undefined : 'users'}
@@ -441,6 +467,7 @@ function ProfileInner() {
                 ) : undefined
               }
               title="Crews"
+              hint={crews.length === 0 && crewInvites === 0 ? CREWS_EMPTY : undefined}
               label={crewsLabel(crews.length, crewInvites)}
               accessory={
                 <>
@@ -478,28 +505,6 @@ function ProfileInner() {
           </FadeInUp>
         ) : null}
 
-        {/*
-          `eventsOrganized` is hidden at zero because almost nobody organises, and a permanent "0 Hosted" reads as a thing you
-          failed to do rather than a role you do not have.
-        */}
-        {stats ? (
-          <FadeInUp {...next()}>
-            <StatsCard
-              attended={nightCounts.total ?? stats.eventsAttended}
-              saved={stats.eventsFavorited}
-              friends={friendsCount}
-              hosted={stats.eventsOrganized}
-              onGoing={openGoing}
-              onFriends={openFriends}
-            />
-          </FadeInUp>
-        ) : null}
-
-        {/* Where you stand with Blend'n+ above Nights out, and your badges under it (Flow 14 R4.1 · Me 01 to 03). No badges card at all when the server sent none. */}
-        <FadeInUp {...next()}>
-          <MePlusRow />
-        </FadeInUp>
-
         <FadeInUp {...next()}>
           <NightsOut
             status={nightsStatus}
@@ -512,27 +517,36 @@ function ProfileInner() {
             lockedCount={nightCounts.locked}
             total={nightCounts.total}
             runningCount={nightCounts.running ?? 0}
-            onUnlock={unlockNights}
+            saved={stats ? (stats.savedCount ?? stats.eventsFavorited) : 0}
+            hosted={stats?.eventsOrganized ?? 0}
           />
         </FadeInUp>
 
         {badges !== null ? (
           <FadeInUp {...next()}>
-            <MeBadges badges={badges} showsUp={showsUp === null ? undefined : { value: showsUp, onChange: saveShowsUp }} />
+            <MeBadges badges={badges} hidden={badgesHidden} />
           </FadeInUp>
         ) : null}
 
-        {profile?.bio || interests.length > 0 || profile?.education ? (
+        {/* Your own bio, the thing others read first, above Blend'n+ (A 01): four lines, then More; Edit goes to change it. */}
+        {profile?.bio || interests.length > 0 || profile?.education || profile?.occupation ? (
           <FadeInUp {...next()}>
-            <ProfileSection title="About" testID="about">
-              {profile?.bio ? <ProfileBio text={profile.bio} /> : null}
+            <ProfileSection title="About" action={{ label: 'Edit', onPress: openEdit }} testID="about">
+              {profile?.bio ? <ProfileBio text={profile.bio} clamp={BIO_LINES} /> : null}
               {/* Your own chips, so nothing is "shared" -- plain chips only. */}
               {interests.length > 0 ? <ProfileInterests interests={interests} /> : null}
               {/* Not in the frame, but entered by you and shown to others: it stays visible on your own page, under About (owner decides). */}
+              {/* Your job title moved here from under your name (A 01): entered by you, shown to others once you reveal. */}
+              {profile?.occupation ? <ProfileDetail label="WORK" value={profile.occupation} variant="ruled" /> : null}
               {profile?.education ? <ProfileDetail label="EDUCATION" value={profile.education} variant="ruled" /> : null}
             </ProfileSection>
           </FadeInUp>
         ) : null}
+
+        {/* Where you stand with Blend'n+, last (A 01): the one place Me sells it (Nights out says what is held, never sells it again). */}
+        <FadeInUp {...next()}>
+          <MePlusRow />
+        </FadeInUp>
       </>
     )
   }
@@ -581,9 +595,20 @@ function ProfileInner() {
         onClose={() => setViewer(null)}
         testID="me-viewer"
       />
+      <SeeAsOthersSheet
+        visible={previewing}
+        onClose={() => setPreviewing(false)}
+        onEdit={openEdit}
+      />
     </View>
   )
 }
+
+/** Your bio on Me: four lines, then More (A 01). */
+const BIO_LINES = 4
+/** Friends and Crews with nobody yet say what to do (A 02), never a "0". */
+const FRIENDS_EMPTY = 'Add people you go out with'
+const CREWS_EMPTY = 'Make one from your friends'
 
 const GAP_ICON = {
   photo: 'camera',

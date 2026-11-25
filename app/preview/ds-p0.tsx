@@ -3,6 +3,7 @@ import { ScrollView, StyleSheet, Text, View, type StyleProp, type ViewStyle } fr
 import { SafeAreaInsetsContext, useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { Avatar, type AvatarSize } from '../../components/ds/Avatar'
+import { CrewEmblem } from '../../components/ds/CrewEmblem'
 import { Banner, VisibilityBanner, type Visibility } from '../../components/ds/Banner'
 import { Button, type ButtonKind, type ButtonSize } from '../../components/ds/Button'
 import { IconButton } from '../../components/ds/IconButton'
@@ -11,7 +12,7 @@ import { SettingsGroup, SettingsRow } from '../../components/ds/SettingsRow'
 import { Sheet, type SheetProps } from '../../components/ds/Sheet'
 import { StateScreen } from '../../components/ds/StateScreen'
 import { Toast, type ToastKind } from '../../components/ds/Toast'
-import { COLOR, CREATURE_PALETTES, RADIUS, SIZE, SPACE, TYPE, VENUE_PLATES } from '../../lib/design/tokens'
+import { COLOR, RADIUS, SIZE, SPACE, TYPE, VENUE_PLATES } from '../../lib/design/tokens'
 
 /**
  * Every P0 system component in every state it draws, on demand
@@ -93,17 +94,17 @@ function Cell({ label, testID, children, style }: { label: string; testID: strin
   )
 }
 
-const KINDS: ButtonKind[] = ['primary', 'lit', 'strong', 'secondary', 'tertiary', 'destructive']
+const KINDS: ButtonKind[] = ['primary', 'lit', 'secondary', 'tertiary', 'destructive', 'danger']
 const SIZES: ButtonSize[] = ['lg', 'md', 'sm']
 /** A lit action is never 56 pt: that is the primary's. */
 const sizesOf = (kind: ButtonKind) => (kind === 'lit' ? SIZES.filter((size) => size !== 'lg') : SIZES)
 const LABEL: Record<ButtonKind, string> = {
   primary: 'I’m going',
   lit: 'Accept',
-  strong: 'Open Settings',
   secondary: 'Not now',
   tertiary: 'Skip',
-  destructive: 'Delete account',
+  destructive: 'Delete my account',
+  danger: 'Delete account',
 }
 const STATES = [
   ['default', {}],
@@ -126,7 +127,7 @@ function Buttons() {
           </Cell>
         ))}
       </Section>
-      {(['primary', 'lit', 'strong', 'secondary'] as const).map((kind) => (
+      {(['primary', 'lit', 'secondary', 'destructive'] as const).map((kind) => (
         <Section key={kind} title={`Button · states · ${kind}`} note="refused plays H.error and shakes as it mounts">
           {STATES.map(([state, props]) => (
             <Cell key={state} label={state} testID={`ds-button-${kind}-state-${state}`}>
@@ -137,9 +138,9 @@ function Buttons() {
       ))}
       <Section title="Button · row actions">
         <Cell label="36 pt, wrapping at 360" testID="ds-button-row-actions" style={styles.row}>
-          <Button kind="strong" size="sm" label="Accept" onPress={() => {}} />
+          <Button kind="lit" size="sm" icon="check" label="Accept" onPress={() => {}} />
           <Button kind="secondary" size="sm" label="Decline" onPress={() => {}} />
-          <Button kind="strong" size="sm" label="Accept" loading onPress={() => {}} />
+          <Button kind="lit" size="sm" icon="check" label="Accept" loading onPress={() => {}} />
           <Button kind="secondary" size="sm" icon="user-plus" label="Add" onPress={() => {}} />
         </Cell>
       </Section>
@@ -211,14 +212,14 @@ function States() {
         <StateScreen icon="calendar" title="Nothing saved yet" body="Events you save show up here." actions={[{ label: 'Find something tonight', onPress: () => {} }]} />
       </Cell>
       <Cell label="load error" testID="ds-state-error">
-        <StateScreen icon="cloud-off" title="Couldn’t load the board" body="Check your connection and try again." actions={[{ label: 'Try again', kind: 'secondary', onPress: () => {} }]} />
+        <StateScreen icon="cloud-off" title="Couldn’t load the Lobby" body="Check your connection and try again." actions={[{ label: 'Try again', kind: 'secondary', onPress: () => {} }]} />
       </Cell>
       <Cell label="busy" testID="ds-state-busy">
-        <StateScreen icon="cloud-off" title="Couldn’t load the board" body="Check your connection and try again." busy actions={[{ label: 'Try again', onPress: () => {} }]} />
+        <StateScreen icon="cloud-off" title="Couldn’t load the Lobby" body="Check your connection and try again." busy actions={[{ label: 'Try again', onPress: () => {} }]} />
       </Cell>
       <Cell label="full screen · refusal" testID="ds-state-screen" style={styles.tall}>
         <SafeAreaInsetsContext.Provider value={NO_INSETS}>
-          <StateScreen variant="screen" icon="circle-slash" title="Not open to you" body="This event is 21+." actions={[{ label: 'OK', kind: 'strong', onPress: () => {} }]} />
+          <StateScreen variant="screen" icon="circle-slash" title="Not open to you" body="This event is 21+." actions={[{ label: 'OK', kind: 'primary', onPress: () => {} }]} />
         </SafeAreaInsetsContext.Provider>
       </Cell>
     </Section>
@@ -289,7 +290,6 @@ function Settings() {
 }
 
 const SIZES_AVATAR: AvatarSize[] = [24, 32, 40, 56, 72, 112]
-const CREW_PLATE = [CREATURE_PALETTES[0][0], CREATURE_PALETTES[2][1]] as const
 const PSEUDONYMS = ['Night Cat', 'Velvet Heron', 'Cosmic Panda', 'Quiet Fox', 'Neon Owl', 'Lucky Otter', 'Cosmic Comet', 'Velvet Lion']
 const PHOTO = 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=256'
 
@@ -297,18 +297,18 @@ function Avatars() {
   return (
     <Section title="Avatar" note="photo (earned) · creature · crew square; the ring is a cut-out in the colour behind">
       <Cell label="photo" testID="ds-avatar-photo" style={styles.rowEnd}>
-        {SIZES_AVATAR.map((s) => <Avatar key={s} kind="photo" uri={PHOTO} size={s} />)}
+        {SIZES_AVATAR.map((s) => <Avatar key={s} kind="photo" uri={PHOTO} name="Asha" size={s} />)}
       </Cell>
       <Cell label="creature" testID="ds-avatar-creature" style={styles.rowEnd}>
         {SIZES_AVATAR.map((s) => <Avatar key={s} kind="creature" pseudonym="Night Cat" size={s} />)}
       </Cell>
-      <Cell label="crew square" testID="ds-avatar-crew" style={styles.rowEnd}>
-        {SIZES_AVATAR.map((s) => <Avatar key={s} kind="crew" plate={CREW_PLATE} size={s} />)}
+      <Cell label="crew emblem" testID="ds-avatar-crew" style={styles.rowEnd}>
+        {SIZES_AVATAR.map((s) => <CrewEmblem key={s} seed="nebula" size={s} />)}
       </Cell>
       <Cell label="ring on ink · white ring" testID="ds-avatar-ring" style={styles.row}>
-        <Avatar kind="photo" uri={PHOTO} size={32} ring={COLOR.ink} />
+        <Avatar kind="photo" uri={PHOTO} name="Asha" size={32} ring={COLOR.ink} />
         <Avatar kind="creature" pseudonym="Night Cat" size={32} ring={COLOR.ink} />
-        <Avatar kind="photo" uri={PHOTO} size={24} ring={COLOR.textPrimary} />
+        <Avatar kind="photo" uri={PHOTO} name="Asha" size={24} ring={COLOR.textPrimary} />
       </Cell>
       <Cell label="a stack of six at 32, −8" testID="ds-avatar-stack" style={styles.stack}>
         {PSEUDONYMS.slice(0, 6).map((name, i) => (
@@ -381,7 +381,7 @@ const SHEETS: Record<string, (close: () => void) => Omit<SheetProps, 'visible' |
     title: 'Share Vinyl Night',
     detents: ['short'],
     actions: [
-      { label: 'WhatsApp', kind: 'strong', onPress: close },
+      { label: 'WhatsApp', kind: 'lit', onPress: close },
       { label: 'Copy link', kind: 'secondary', onPress: close },
       { label: 'More…', kind: 'tertiary', onPress: close },
     ],
@@ -399,13 +399,13 @@ const SHEETS: Record<string, (close: () => void) => Omit<SheetProps, 'visible' |
   tall: (close) => ({
     icon: 'flag',
     title: 'Report this message',
-    body: 'Tell us what’s wrong. A report goes to our team, and they are not told who sent it.',
+    body: 'Tell us what’s wrong. A report goes to our team; the person isn’t told who sent it.',
     detents: ['tall', 'medium'],
     actions: [
       { label: 'Harassment', kind: 'secondary', onPress: noop },
       { label: 'Spam', kind: 'secondary', onPress: noop },
       { label: 'Something else', kind: 'secondary', onPress: noop },
-      { label: 'Send report', kind: 'strong', onPress: close },
+      { label: 'Send report', kind: 'lit', onPress: close },
       { label: 'Cancel', kind: 'tertiary', onPress: close },
     ],
   }),
@@ -413,7 +413,7 @@ const SHEETS: Record<string, (close: () => void) => Omit<SheetProps, 'visible' |
     icon: 'circle-slash',
     title: 'Not open to you',
     body: 'This event is 21+.',
-    actions: [{ label: 'OK', kind: 'strong', onPress: close }],
+    actions: [{ label: 'OK', kind: 'lit', onPress: close }],
   }),
   confirm: (close) => ({
     icon: 'trash',
@@ -438,7 +438,7 @@ const SHEETS: Record<string, (close: () => void) => Omit<SheetProps, 'visible' |
     title: 'Notifications are off',
     body: 'Turn them on in your phone’s Settings to get them from Blend’n.',
     actions: [
-      { label: 'Open Settings', kind: 'strong', onPress: close },
+      { label: 'Open Settings', kind: 'lit', onPress: close },
       { label: 'Not now', kind: 'tertiary', onPress: close },
     ],
   }),

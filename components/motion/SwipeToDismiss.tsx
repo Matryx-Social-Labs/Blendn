@@ -12,7 +12,7 @@ import Animated, {
 } from 'react-native-reanimated'
 import { scheduleOnRN } from 'react-native-worklets'
 
-import { COLOR } from '../../lib/design/tokens'
+import { COLOR, DURATION, SPRING } from '../../lib/design/tokens'
 import { useReducedMotion } from '../../lib/motion'
 
 /** Past this, a slow drag dismisses. */
@@ -33,7 +33,7 @@ const EASE_OUT = Easing.bezier(0.23, 1, 0.32, 1)
  */
 const openIn = () => {
   'worklet'
-  const t = { duration: 220, easing: EASE_OUT }
+  const t = { duration: DURATION.base, easing: EASE_OUT }
   return {
     initialValues: { opacity: 0, transform: [{ scale: 0.92 }] },
     animations: { opacity: withTiming(1, t), transform: [{ scale: withTiming(1, t) }] },
@@ -44,7 +44,7 @@ const fadeOpenIn = () => {
   'worklet'
   return {
     initialValues: { opacity: 0 },
-    animations: { opacity: withTiming(1, { duration: 220, easing: EASE_OUT }) },
+    animations: { opacity: withTiming(1, { duration: DURATION.base, easing: EASE_OUT }) },
   }
 }
 
@@ -100,7 +100,7 @@ export function SwipeToDismiss({
       const fast =
         Math.abs(e.velocityY) > DISMISS_VELOCITY && Math.sign(e.velocityY) === Math.sign(e.translationY)
       if (!far && !fast) {
-        y.set(withSpring(0, { duration: 400, dampingRatio: 0.8, velocity: e.velocityY }))
+        y.set(withSpring(0, { ...SPRING.fling, velocity: e.velocityY }))
         return
       }
       if (reduceMotion) {
@@ -111,7 +111,7 @@ export function SwipeToDismiss({
       y.set(
         withSpring(
           direction * height,
-          { duration: 300, dampingRatio: 1, velocity: e.velocityY, overshootClamping: true },
+          { ...SPRING.fling, velocity: e.velocityY, overshootClamping: true },
           (finished) => {
             if (finished) scheduleOnRN(onDismiss)
           }

@@ -5,6 +5,7 @@ import { COLOR, FONT_FAMILY, MAX_FONT_SCALE, RADIUS, SPACE, TYPE } from '../../l
 import { OPACITY } from '../../lib/theme'
 import { PresenceDot } from './MonoFamily'
 import { CONTROL_FONT_CAP, focusRing, font, minTarget, useBoldText, useLargeText, useSelection } from './shared'
+import { compactCount } from '../../lib/format'
 
 /** The lit count's capsule, as `Badge` at size 22. */
 const CAPSULE = 22
@@ -12,8 +13,9 @@ const CAPSULE = 22
 /** `accessibilityLabel` only when the words on screen are not enough alone ("See all" says how many); it starts with the label. */
 export type SectionAction = { label: string; onPress: () => void; busy?: boolean; accessibilityLabel?: string }
 
-/** A count in thousands is grouped ("1,204"): it reads at a glance and never wraps the header. */
-const grouped = (n: number) => n.toLocaleString('en-US')
+/** On screen a count in thousands is compact ("1.2k"), so it never wraps the header; heard, it is whole ("1,204"). */
+const grouped = (n: number, floor = false) => `${n.toLocaleString('en-US')}${floor ? '+' : ''}`
+const shown = (n: number, floor = false) => `${compactCount(n)}${floor ? '+' : ''}`
 
 /**
  * How every section inside a screen starts (guidelines/components/SectionHeader.html):
@@ -35,6 +37,7 @@ const grouped = (n: number) => n.toLocaleString('en-US')
 export function SectionHeader({
   title,
   count,
+  more = false,
   countStyle = 'plain',
   action,
   live = false,
@@ -44,6 +47,8 @@ export function SectionHeader({
 }: {
   title: string
   count?: number
+  /** The count is a floor (a full page was counted): it prints "N+" and is spoken the same (BAR-10). */
+  more?: boolean
   /** `plain`: "· N" in textSecondary. `lit`: a capsule in the screen's hue (`HueProvider`). */
   countStyle?: 'plain' | 'lit'
   action?: SectionAction
@@ -58,7 +63,7 @@ export function SectionHeader({
   const sel = useSelection()
   const [focused, setFocused] = useState(false)
   const slop = (minTarget() - TYPE.meta.lineHeight) / 2
-  const heading = count == null ? title : `${title}, ${grouped(count)}`
+  const heading = count == null ? title : `${title}, ${grouped(count, more)}`
 
   return (
     <View style={styles.block}>
@@ -76,13 +81,13 @@ export function SectionHeader({
           {count != null && countStyle === 'lit' ? (
             <View testID={testID && `${testID}-count`} style={[styles.capsule, { backgroundColor: sel.fill, borderColor: sel.edge }]}>
               <Text style={[font('caption', bold, FONT_FAMILY.mono[700]), styles.capsuleText, styles.tabular]} maxFontSizeMultiplier={CONTROL_FONT_CAP}>
-                {grouped(count)}
+                {shown(count, more)}
               </Text>
             </View>
           ) : count != null ? (
             <>
               <Text maxFontSizeMultiplier={MAX_FONT_SCALE.heading} style={[font('heading', bold), styles.muted]}>·</Text>
-              <Text maxFontSizeMultiplier={MAX_FONT_SCALE.heading} style={[font('heading', bold, FONT_FAMILY.mono[700]), styles.muted, styles.tabular]}>{grouped(count)}</Text>
+              <Text maxFontSizeMultiplier={MAX_FONT_SCALE.heading} style={[font('heading', bold, FONT_FAMILY.mono[700]), styles.muted, styles.tabular]}>{shown(count, more)}</Text>
             </>
           ) : null}
         </View>

@@ -17,6 +17,7 @@ import {
   type OnboardingStep,
 } from './onboarding'
 import { clearOnboarding, readOnboarding, writeOnboarding } from './onboardingStorage'
+import { markPushDeferred } from './pushDecline'
 import { clearNewAccountFlag, refreshAuthUser, useAuth } from './useAuth'
 
 /**
@@ -202,17 +203,6 @@ export function useOnboarding(step: OnboardingStep) {
   }, [step])
 
   /**
-   * Jump to an arbitrary step, with no history.
-   *
-   * Resume on launch, and "edit my details" from the review screen. `replace`
-   * is right here precisely because it leaves no back stack — a back gesture
-   * should not walk into screens this person never visited.
-   */
-  const jumpTo = useCallback((target: OnboardingStep) => {
-    router.replace(ONBOARDING_ROUTES[target] as never)
-  }, [])
-
-  /**
    * Save this step and move on.
    *
    * `patch` is the screen's current field values, applied before saving so a
@@ -380,6 +370,10 @@ export function useOnboarding(step: OnboardingStep) {
         }
       }
 
+      // Push is asked at the first "I'm going", not by the tabs' start-up the moment this flow is left (lib/pushDecline.ts).
+      // Before the server write: a kill between `onboarded: true` and the flag would leave a new account looking like one
+      // from before this build, prompted at start-up. Set early it is harmless if the write fails: it only defers.
+      await markPushDeferred(userId)
       const result = await apiClient.updateProfile(userId, { ...draft, onboarded: true })
 
       if (!result.success) {
@@ -409,5 +403,5 @@ export function useOnboarding(step: OnboardingStep) {
     }
   }, [draft, showToast, userId])
 
-  return { draft, progress, loaded, saving, update, commit, skip, finish, goBack, jumpTo }
+  return { draft, progress, loaded, saving, update, commit, skip, finish, goBack }
 }

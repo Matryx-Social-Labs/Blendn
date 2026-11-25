@@ -40,14 +40,14 @@ jest.mock('../lib/notifications', () => ({
   removePushTokenFromProfile: jest.fn(async () => {}),
   setupNotificationResponseListener: () => ({ remove: () => {} }),
 }))
-jest.mock('../lib/socketClient', () => ({ initSocketWithAppState: jest.fn(), cleanup: jest.fn(), disconnect: jest.fn() }))
+jest.mock('../lib/socketClient', () => ({ initSocketWithAppState: jest.fn(), cleanup: jest.fn(), disconnect: jest.fn(), subscribeToBell: () => () => {}, subscribeToUserNotifications: () => () => {} }))
 jest.mock('../lib/sentry', () => ({
   ...jest.requireActual('../lib/sentry'),
   initSentry: jest.fn(),
   Sentry: { wrap: (c: unknown) => c, captureException: jest.fn(), captureMessage: jest.fn(), addBreadcrumb: jest.fn() },
 }))
 jest.mock('../lib/onboardingStorage', () => ({ readOnboarding: jest.fn(async () => null) }))
-jest.mock('../lib/pushDecline', () => ({ hasDeclinedPush: jest.fn(async () => false) }))
+jest.mock('../lib/pushDecline', () => ({ mayPromptAtStartUp: jest.fn(async () => true) }))
 jest.mock('../lib/onboardingAssets', () => ({ ONBOARDING_IMAGES: [], prefetchOnboardingImages: jest.fn() }))
 jest.mock('../lib/coachMarks', () => ({ useCoachMark: () => ({ visible: false, dismiss: () => {} }), markCoachUsed: () => {} }))
 jest.mock('../components/PresenceMonitor', () => ({ PresenceMonitor: () => null }))
@@ -268,3 +268,19 @@ it("the crew's ⋯ menu open, then a link: the menu closes, nothing on it runs, 
   expect(r.pathname()).toBe('/settings')
 })
 
+it('the tabs host stays unflattenable (collapsable false) while the Room opens and closes (SCRUM-991)', async () => {
+  await mountApp()
+  const tabsHost = () => screen.getByTestId('tabs-host', { includeHiddenElements: true })
+  /*
+   * Fabric flattens a plain `{ flex: 1 }` view away and keeps one that hides its descendants, so toggling the hiding
+   * re-parented every tab: the map's SurfaceView came off the window and MapLibre reset its renderer on the main
+   * thread (the Android ANR on check-out). Unflattenable in both states, the children never move. Jest sees only the
+   * prop; the proof that the map keeps its GL thread is the emulator measurement on SCRUM-991.
+   */
+  for (const open of [true, false, true, false]) {
+    await act(async () => (open ? openBlendn() : blendnClosed()))
+    const host = tabsHost()
+    expect(host.props.importantForAccessibility).toBe(open ? 'no-hide-descendants' : 'auto')
+    expect(host.props.collapsable).toBe(false)
+  }
+})

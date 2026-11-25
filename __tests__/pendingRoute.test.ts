@@ -12,7 +12,8 @@ jest.mock('../lib/logger', () => ({ Logger: { debug: jest.fn(), warn: jest.fn(),
 import { readFileSync } from 'fs'
 import { join } from 'path'
 import { navigateFromNotificationData, notificationTarget } from '../lib/notifications'
-import { openWhenReady, pendingInviteToken, resetPendingRoute, setRouteReady, takePendingRoute } from '../lib/pendingRoute'
+import { queryCache } from '../lib/queryCache'
+import { isInvitePath, openWhenReady, pendingCrewToken, pendingEventId, pendingInviteToken, resetPendingRoute, setRouteReady, takePendingRoute } from '../lib/pendingRoute'
 
 beforeEach(() => {
   resetPendingRoute()
@@ -44,6 +45,24 @@ describe('openWhenReady', () => {
   })
 })
 
+describe('a crew link waiting for sign-in (S7)', () => {
+  it('reads the token without taking it; a friend’s link is not a crew’s', () => {
+    openWhenReady('/c/tok_1-2' as never)
+    expect(pendingCrewToken()).toBe('tok_1-2')
+    expect(pendingInviteToken()).toBeNull()
+    expect(takePendingRoute()).toBe('/c/tok_1-2')
+    openWhenReady('/f/abc123' as never)
+    expect(pendingCrewToken()).toBeNull()
+  })
+  it('a token that could climb out of its segment is not one', () => {
+    openWhenReady('/c/..%2Fusers' as never)
+    expect(pendingCrewToken()).toBeNull()
+  })
+  it('both kinds of invite are held; control: a chat is not an invite', () => {
+    expect(['/c/t', '/f/t', '/chat/1', '/crews/1'].map(isInvitePath)).toEqual([true, true, false, false])
+  })
+})
+
 describe('pendingInviteToken', () => {
   it('reads the token of an invite link waiting for sign-in, without taking it', () => {
     openWhenReady('/f/abc123' as never)
@@ -64,6 +83,28 @@ describe('pendingInviteToken', () => {
     expect(pendingInviteToken()).toBeNull()
     openWhenReady('/friends/add' as never)
     expect(pendingInviteToken()).toBeNull()
+  })
+})
+
+describe('pendingEventId', () => {
+  it('reads the id of an event link waiting for sign-in, without taking it', () => {
+    openWhenReady('/event/e%2D1?ref=x' as never)
+    expect(pendingEventId()).toBe('e-1')
+    expect(takePendingRoute()).toBe('/event/e%2D1?ref=x')
+    expect(pendingEventId()).toBeNull()
+  })
+
+  it('reads the object form too, and a malformed escape is no id (L1)', () => {
+    openWhenReady({ pathname: '/event/[id]', params: { id: 'e9' } } as never)
+    expect(pendingEventId()).toBe('e9')
+    openWhenReady('/event/%E0%A4%A' as never)
+    expect(pendingEventId()).toBeNull()
+  })
+
+  it('is null for anything that is not an event link', () => {
+    expect(pendingEventId()).toBeNull()
+    openWhenReady('/f/abc123' as never)
+    expect(pendingEventId()).toBeNull()
   })
 })
 
@@ -116,5 +157,38 @@ describe('the root guard', () => {
     const src = layout()
     const afterRead = src.slice(src.indexOf('await readOnboarding(user.id)'))
     expect(afterRead.slice(0, 120)).toContain('if (superseded) return;')
+  })
+})
+
+describe('View on a request notification (SCRUM-907)', () => {
+  const KEY = 'message_requests_u1'
+  beforeEach(() => queryCache.set(KEY, { incoming: [], outgoing: [] }, 60_000))
+
+  it('lands on Banter’s Message requests and drops its cached requests, so the request is read when it arrives', () => {
+    navigateFromNotificationData({ type: 'message_request', requestId: 'r1' })
+    // Where it is answered (requests placement A, 2026-11-15).
+    expect(takePendingRoute()).toBe('/message-requests')
+    expect(queryCache.get(KEY)).toBeNull()
+  })
+
+  it('a notification that goes elsewhere leaves them', () => {
+    navigateFromNotificationData({ type: 'rating_request', eventId: 'e1' })
+    expect(queryCache.get(KEY)).not.toBeNull()
+  })
+})
+
+describe('View on a "request accepted" notification (SCRUM-918)', () => {
+  const KEY = 'personal_chats_u1'
+  beforeEach(() => queryCache.set(KEY, [], 60_000))
+
+  it('lands on the Banter and drops its cached people, so the new conversation is read when it arrives', () => {
+    navigateFromNotificationData({ type: 'message_request_response', requestId: 'r1', conversationId: 'c1' })
+    expect(takePendingRoute()).toBe('/(tabs)/chat')
+    expect(queryCache.get(KEY)).toBeNull()
+  })
+
+  it('a notification that goes elsewhere leaves them', () => {
+    navigateFromNotificationData({ type: 'rating_request', eventId: 'e1' })
+    expect(queryCache.get(KEY)).not.toBeNull()
   })
 })

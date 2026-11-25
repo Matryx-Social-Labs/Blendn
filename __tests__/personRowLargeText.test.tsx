@@ -3,7 +3,7 @@
  * the name grows to its role's cap and takes two lines at the accessibility sizes; the line under it grows to the meta cap
  * and takes four; the row's height is a minimum. Never a name held to one line at the control cap over a meta that grows.
  */
-import { act, render, screen } from '@testing-library/react-native'
+import { act, render, screen, within } from '@testing-library/react-native'
 import React from 'react'
 import { Dimensions, StyleSheet, Text } from 'react-native'
 
@@ -11,12 +11,14 @@ jest.mock('react-native-safe-area-context', () => jest.requireActual('react-nati
 jest.mock('../lib/apiClient', () => ({ apiClient: {} }))
 
 /* eslint-disable import/first */
-import { IncomingRequestRow, REQUEST_LINE } from '../components/friends/IncomingRequestRow'
+import { IncomingRequestRow } from '../components/friends/IncomingRequestRow'
 import { InviteLinkCard } from '../components/friends/InviteLinkCard'
 import { PersonRow, PERSON_ROW_HEIGHT, usePersonRowsFixed } from '../components/friends/PersonRow'
+import { ROW_ACTION_HEIGHT } from '../components/ds/Button'
+import { IconButton } from '../components/ds/IconButton'
 import { RevealBar } from '../components/ds/RevealBar'
-import { CONTROL_FONT_CAP } from '../components/ds/shared'
-import { FONT_FAMILY, MAX_FONT_SCALE } from '../lib/design/tokens'
+import { AX_FONT_SCALE, CONTROL_FONT_CAP } from '../components/ds/shared'
+import { FONT_FAMILY, MAX_FONT_SCALE, SIZE } from '../lib/design/tokens'
 import { AX_XXXL, clipped, uncapped } from './helpers/ax'
 /* eslint-enable import/first */
 
@@ -48,6 +50,71 @@ describe('PersonRow', () => {
     expect(screen.getByTestId('person-name', hidden).props.numberOfLines).toBe(1)
   })
 
+  /*
+   * Owner pick a, 2026-11-20 (backend round 1, Blocked at AX): beside its action the text column was a third of the row, so
+   * "Thiruvananthapuram" broke mid-word and names wrapped a word a line. From the AX sizes (`useLargeText`, AX_FONT_SCALE) the
+   * action goes under the text, at the text's leading edge, and the text takes the row; below them it stays beside the text.
+   * Negative controls (2026-11-20): the action always beside the text (the old row) fails the three AX cases only; the action
+   * always under it fails the three below-AX cases only.
+   */
+  const unblock = <Text testID="trail">Unblock</Text>
+  const blocked = (
+    <PersonRow person={{ userId: 'u2', name: 'Marc-André Lefebvre-Desrosiers', photo: null }} named={false} detail="Blocked " detailMono="20 Nov" detailTail=" · Thiruvananthapuram Tech Week" trailing={unblock} />
+  )
+  const underText = () => within(screen.getByTestId('person-text', hidden)).queryByTestId('trail', hidden)
+
+  it.each([AX_FONT_SCALE, 2, AX_XXXL])('at %s the action goes under the text, at its leading edge, and the text takes the row', async (scale) => {
+    await at(402, scale)
+    await render(blocked)
+    expect(underText()).not.toBeNull()
+    expect(screen.getAllByTestId('trail', hidden)).toHaveLength(1)
+    const under = StyleSheet.flatten(screen.getByTestId('person-trailing', hidden).props.style)
+    expect(under.alignSelf).toBe('flex-start')
+    // A small button's slop to the larger target (Android's 48) stays inside the row, not over the next row's name.
+    const slop = (Math.max(SIZE.targetIos, SIZE.targetAndroid) - ROW_ACTION_HEIGHT) / 2
+    expect(under.marginVertical).toBeGreaterThanOrEqual(slop)
+    expect(clipped(screen.toJSON())).toEqual([])
+  })
+
+  it.each([1, 1.3, AX_FONT_SCALE - 0.01])('at %s the action stays beside the text, centred on the row', async (scale) => {
+    await at(402, scale)
+    await render(blocked)
+    expect(underText()).toBeNull()
+    expect(screen.getAllByTestId('trail', hidden)).toHaveLength(1)
+    expect(StyleSheet.flatten(screen.getByTestId('person-trailing', hidden).props.style).alignSelf).toBe('center')
+  })
+
+  /*
+   * Friends list at AX (decided per advisor, 2026-11-20, option A): a lone icon-only action (an IconButton with no label,
+   * the friends list's Message disc) stacked under "Friends since …" read detached from its row. At every size it stays at
+   * the trailing edge, centred on the row as the avatar is; only labelled actions stack. Negative controls (2026-11-20):
+   * stacking every action (#595's row) fails the first; keeping every action beside the text fails the second.
+   */
+  const message = <IconButton size="sm" icon="message-circle" accessibilityLabel="Message Marc-André" onPress={jest.fn()} testID="trail" />
+  const friend = (trailing: React.ReactNode) => (
+    <PersonRow person={{ userId: 'u3', name: 'Marc-André Lefebvre-Desrosiers', photo: null }} detail="Friends since " detailMono="Nov 2026" trailing={trailing} />
+  )
+
+  it.each([AX_FONT_SCALE, AX_XXXL])('at %s an icon-only action stays beside the text, centred on the row', async (scale) => {
+    await at(402, scale)
+    await render(friend(message))
+    expect(underText()).toBeNull()
+    expect(StyleSheet.flatten(screen.getByTestId('person-trailing', hidden).props.style).alignSelf).toBe('center')
+    expect(clipped(screen.toJSON())).toEqual([])
+  })
+
+  it('at AX an IconButton with a label is a labelled action, so it goes under the text', async () => {
+    await at(402, AX_XXXL)
+    await render(friend(<IconButton size="sm" icon="message-circle" label="Message" accessibilityLabel="Message Marc-André" onPress={jest.fn()} testID="trail" />))
+    expect(underText()).not.toBeNull()
+  })
+
+  it('a row with no action draws no action slot at any size', async () => {
+    await at(402, AX_XXXL)
+    await render(<PersonRow person={person} detail="Friends since " detailMono="Oct 2026" />)
+    expect(screen.queryByTestId('person-trailing', hidden)).toBeNull()
+  })
+
   it('a list may window the rows at PERSON_ROW_HEIGHT only at the default text size: past it a row can grow', async () => {
     const Probe = () => <Text testID="fixed">{String(usePersonRowsFixed())}</Text>
     await at(402, 1)
@@ -62,15 +129,51 @@ describe('PersonRow', () => {
 describe('IncomingRequestRow (D-M5, D-LM2)', () => {
   const request = { id: 'r1', person, createdAt: new Date(Date.now() - 3 * 3600_000).toISOString() }
 
-  it('at AX XXXL the name is not held to one line at the control cap while the line under it grows', async () => {
+  it('at AX XXXL the name and the line under it each take two lines at their caps, and the answers go under them', async () => {
     await at(402, AX_XXXL)
-    await render(<IncomingRequestRow request={request} busy={false} onRespond={jest.fn()} />)
+    await render(<IncomingRequestRow request={{ ...request, via: 'link' }} busy={false} onRespond={jest.fn()} />)
     expect(screen.getByText(person.name).props).toMatchObject({ maxFontSizeMultiplier: MAX_FONT_SCALE.bodyStrong, numberOfLines: 2 })
-    expect(screen.getByText(REQUEST_LINE).props).toMatchObject({ maxFontSizeMultiplier: MAX_FONT_SCALE.meta, numberOfLines: 4 })
+    expect(screen.getByTestId('request-line').props).toMatchObject({ maxFontSizeMultiplier: MAX_FONT_SCALE.meta, numberOfLines: 2 })
     expect(uncapped(screen.toJSON())).toEqual([])
   })
 
-  it('shows how long ago they asked, as a tag in Geist Mono at the control cap ("3h")', async () => {
+  /*
+   * Flow 7 4-A: the source only when the server says it (`via`, admin #998). Requests from before it read `null`, and the old
+   * line ("Opened your link") was wrong for every request from a match. Negative control: the old constant line fails the first.
+   */
+  it('says no source when the server sends none: the line is the age alone', async () => {
+    await at(402, 1)
+    await render(<IncomingRequestRow request={request} busy={false} onRespond={jest.fn()} />)
+    expect(screen.queryByText(/From your link|From a match|Opened your link/)).toBeNull()
+    expect(screen.getByTestId('request-line')).toHaveTextContent(/^\S+$/)
+  })
+
+  it('says no source for a request older than the source (`via: null`) or a source this build does not know', async () => {
+    await at(402, 1)
+    // Admin #998: `null` = asked before the source was recorded. Never a guess.
+    await render(<IncomingRequestRow request={{ ...request, via: null }} busy={false} onRespond={jest.fn()} />)
+    expect(screen.getByTestId('request-line')).toHaveTextContent(/^\S+$/)
+    await render(<IncomingRequestRow request={{ ...request, via: 'qr' as unknown as 'link' }} busy={false} onRespond={jest.fn()} />)
+    expect(screen.getByTestId('request-line')).toHaveTextContent(/^\S+$/)
+  })
+
+  it('says From your link or From a match when the server does, before the age', async () => {
+    await at(402, 1)
+    await render(<IncomingRequestRow request={{ ...request, via: 'match' }} busy={false} onRespond={jest.fn()} />)
+    expect(screen.getByTestId('request-line')).toHaveTextContent(/^From a match · \S+$/)
+    await render(<IncomingRequestRow request={{ ...request, via: 'link' }} busy={false} onRespond={jest.fn()} />)
+    expect(screen.getByTestId('request-line')).toHaveTextContent(/^From your link · \S+$/)
+  })
+
+  it('is a 68 pt row with Not now and Accept named for the person', async () => {
+    await at(402, 1)
+    await render(<IncomingRequestRow request={request} busy={false} onRespond={jest.fn()} />)
+    expect(StyleSheet.flatten(screen.getByTestId('request-row').props.style).minHeight).toBe(68)
+    expect(screen.getByLabelText(`Not now, ${person.name}`)).toBeTruthy()
+    expect(screen.getByLabelText(`Accept ${person.name}`)).toBeTruthy()
+  })
+
+  it('shows how long ago they asked, in Geist Mono ("3h")', async () => {
     // Midday, so three hours ago is still today: run between 00:00 and 03:00 it read "Yesterday".
     const noon = new Date()
     noon.setHours(12, 0, 0, 0)
@@ -81,7 +184,6 @@ describe('IncomingRequestRow (D-M5, D-LM2)', () => {
       await render(<IncomingRequestRow request={{ ...request, createdAt }} busy={false} onRespond={jest.fn()} />)
       const time = screen.getByTestId('request-age', hidden)
       expect(time.props.children).toBe('3h')
-      expect(time.props.maxFontSizeMultiplier).toBe(CONTROL_FONT_CAP)
       expect(StyleSheet.flatten(time.props.style).fontFamily).toBe(FONT_FAMILY.mono[500])
       expect(screen.getByText(person.name).props.numberOfLines).toBe(1)
     } finally {
@@ -96,7 +198,7 @@ describe('IncomingRequestRow (D-M5, D-LM2)', () => {
     await render(<IncomingRequestRow request={{ ...request, createdAt: yesterday.toISOString() }} busy={false} onRespond={jest.fn()} />)
     const time = screen.getByTestId('request-age', hidden)
     expect(time.props.children).toBe('Yesterday')
-    expect(StyleSheet.flatten(time.props.style).fontFamily).not.toBe(FONT_FAMILY.mono[500])
+    expect(StyleSheet.flatten(time.props.style)?.fontFamily).not.toBe(FONT_FAMILY.mono[500])
   })
 })
 
@@ -118,10 +220,10 @@ describe('RevealBar (C26, C27)', () => {
   const face = { kind: 'creature', pseudonym: 'Tumbling Moose' } as never
   const bar = () => render(<RevealBar state="none" you={{ name: 'Aarav Venkataraman', face }} them={{ name: 'Tumbling Moose of the North', face }} />)
 
-  it('at 360 dp and 1.3 each name may take two lines, and "You" stacks over yours', async () => {
+  it('at 360 dp and 1.3 each name wraps as far as it needs, never cut, and "You" stacks over yours', async () => {
     await at(360, 1.3)
     await bar()
-    for (const name of ['Aarav Venkataraman', 'Tumbling Moose of the North']) expect(screen.getByText(name, hidden).props.numberOfLines).toBe(2)
+    for (const name of ['Aarav Venkataraman', 'Tumbling Moose of the North']) expect(screen.getByText(name, hidden).props.numberOfLines).toBeUndefined()
     expect(screen.getByText('You', hidden).props.numberOfLines).toBe(1)
     expect(screen.queryByText('You · Aarav Venkataraman', hidden)).toBeNull()
   })
@@ -129,7 +231,7 @@ describe('RevealBar (C26, C27)', () => {
   it('on a roomy phone at the default size it reads as before: "You · name" on one run', async () => {
     await at(402, 1)
     await bar()
-    expect(screen.getByText('You · Aarav Venkataraman', hidden).props.numberOfLines).toBe(2)
+    expect(screen.getByText('You · Aarav Venkataraman', hidden).props.numberOfLines).toBeUndefined()
   })
 })
 
@@ -157,5 +259,30 @@ describe('the invite link’s short form (DS-16, A9: the raw URL broke mid-token
   it('a link that is not the expected shape is shown whole, still one line', async () => {
     await render(<InviteLinkCard url="https://example.com/x" />)
     expect(screen.getByTestId('invite-link-url', hidden).props.children).toBe('example.com/x')
+  })
+})
+
+/*
+ * SCRUM-1088: on Android a friend request's face was blank until its photo arrived, because PersonAvatar drew the photo as a
+ * bare OptimizedImage (nothing under it, and nothing at all until its URL effect ran). Every friend-surface photo now goes
+ * through the DS Avatar, which draws the person's initial under the photo while it loads.
+ * Negative control (2026-11-21): the old OptimizedImage branch fails both cases (no person-photo-initial-disc, no letter).
+ */
+describe('a friend-surface photo loads over the person’s initial (SCRUM-1088)', () => {
+  const withPhoto = { userId: 'u2', name: 'Meera Nair', photo: 'https://t3.storage.dev/p/meera.jpg' }
+
+  it('a request row draws Meera’s initial under her photo from the first frame', async () => {
+    await at(402, 1)
+    await render(<IncomingRequestRow request={{ id: 'r2', person: withPhoto, createdAt: new Date().toISOString(), via: 'link' as const }} busy={false} onRespond={jest.fn()} />)
+    expect(screen.getByTestId('person-photo-initial-disc', hidden)).toBeTruthy()
+    expect(screen.getByText('M', hidden)).toBeTruthy()
+    expect(screen.getByTestId('person-photo-photo', hidden).props.source).toEqual([{ uri: withPhoto.photo }])
+  })
+
+  it('a friends-list row does the same', async () => {
+    await at(402, 1)
+    await render(<PersonRow person={withPhoto} detail="Friends since " detailMono="Oct 2026" />)
+    expect(screen.getByTestId('person-photo-initial-disc', hidden)).toBeTruthy()
+    expect(screen.getByText('M', hidden)).toBeTruthy()
   })
 })

@@ -14,6 +14,7 @@ import { NotificationRow, NotificationVisual } from '../components/ds/Notificati
 import { HueProvider, SELECTION, type Hue } from '../components/ds/shared'
 import { COLOR, FONT_FAMILY } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
+import { isLitControl } from './helpers/lit'
 
 jest.mock('react-native-reanimated', () => ({ ...jest.requireActual('react-native-reanimated'), __esModule: true, useReducedMotion: jest.fn(() => false) }))
 const reduceMotion = Reanimated.useReducedMotion as jest.Mock
@@ -226,10 +227,9 @@ describe('foundations C, part 2: the row in its world', () => {
 
   it('Accept and Join are lit buttons with their glyph; Decline is secondary', async () => {
     await render(inWorld('rose', request()))
-    expect(flat('n-pill-0')).toMatchObject({ backgroundColor: COLOR.selectionRoseFill })
-    expect(flat('n-pill-0-rim')).toMatchObject({ borderColor: COLOR.brandRose, borderWidth: 1 })
+    expect(isLitControl(screen.getByTestId('n-pill-0'))).toBe(true)
     expect(flat('n-pill-1').backgroundColor).toBe(COLOR.surfaceRaised)
-    expect(screen.queryByTestId('n-pill-1-rim', { includeHiddenElements: true })).toBeNull()
+    expect(isLitControl(screen.getByTestId('n-pill-1'))).toBe(false)
   })
 
   describe('a request’s face takes the hue’s ring, outside the cut-out, only while it has actions', () => {
@@ -333,5 +333,33 @@ describe('an event with no cover (rc7 ruling 5)', () => {
     )
     const plate = screen.getByTestId('notification-event-plate', { includeHiddenElements: true })
     expect(StyleSheet.flatten(plate.props.style).backgroundColor).toBe(COLOR.selectionRoseFill)
+  })
+})
+
+describe('Flow 9 A: the title keeps its verb at the largest sizes; the context is one line', () => {
+  const dims = (fontScale: number) => jest.spyOn(require('react-native'), 'useWindowDimensions').mockReturnValue({ width: 402, height: 874, scale: 3, fontScale })
+  const title = 'Marc-André Lefebvre-Desrosiers wants to be friends'
+  afterEach(() => jest.restoreAllMocks())
+
+  it('two lines at the default size, eight at the accessibility sizes (a cap, never unclamped)', async () => {
+    dims(1)
+    const view = await render(<NotificationRow visual={{ type: 'glyph', icon: 'user-plus' }} title={title} context="23 h ago" />)
+    expect(screen.getByText(title).props.numberOfLines).toBe(2)
+    dims(2)
+    await view.rerender(<NotificationRow visual={{ type: 'glyph', icon: 'user-plus' }} title={title} context="23 h ago" />)
+    // Unclamped, iOS lays the text out with NSLineBreakByClipping: a word wider than the column ("Thiruvananthapuram" at AX)
+    // broke mid-word and the next line ran out of the row ("…Night Owls are her"), seen on the sim. A cap wraps it inside.
+    expect(screen.getByText(title).props.numberOfLines).toBe(8)
+  })
+
+  it('the context is clamped to one line, at every size', async () => {
+    dims(2)
+    await render(<NotificationRow visual={{ type: 'glyph', icon: 'clock' }} title="Time changed" context="Kerala Design Festival 2026: Late Night Print Fair, Riso Workshop & Closing Party Edition · 45 min ago" />)
+    expect(screen.getByText(/^Kerala Design Festival/).props.numberOfLines).toBe(1)
+  })
+
+  it('a named person with no photo is their initial', async () => {
+    await render(<NotificationVisual visual={{ type: 'initial', name: 'Marc-André' }} size={40} testID="v" />)
+    expect(screen.getByText('M', { includeHiddenElements: true })).toBeTruthy()
   })
 })

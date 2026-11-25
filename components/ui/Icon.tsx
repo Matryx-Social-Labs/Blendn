@@ -20,6 +20,8 @@
  */
 
 import type { LucideIcon } from 'lucide-react-native'
+import { useId } from 'react'
+import { Defs } from 'react-native-svg'
 import Accessibility from 'lucide-react-native/icons/accessibility'
 import Apple from 'lucide-react-native/icons/apple'
 import Archive from 'lucide-react-native/icons/archive'
@@ -37,13 +39,13 @@ import BellOff from 'lucide-react-native/icons/bell-off'
 import Bookmark from 'lucide-react-native/icons/bookmark'
 import Briefcase from 'lucide-react-native/icons/briefcase'
 import Calendar from 'lucide-react-native/icons/calendar'
+import CalendarPlus from 'lucide-react-native/icons/calendar-plus'
 import CalendarCheck from 'lucide-react-native/icons/calendar-check'
 import CalendarOff from 'lucide-react-native/icons/calendar-off'
 import CalendarX from 'lucide-react-native/icons/calendar-x'
 import Camera from 'lucide-react-native/icons/camera'
 import CameraOff from 'lucide-react-native/icons/camera-off'
 import Car from 'lucide-react-native/icons/car'
-import Cat from 'lucide-react-native/icons/cat'
 import ChartColumn from 'lucide-react-native/icons/chart-column'
 import Check, { __iconData as checkData } from 'lucide-react-native/icons/check'
 import CheckCheck from 'lucide-react-native/icons/check-check'
@@ -76,6 +78,7 @@ import FileText from 'lucide-react-native/icons/file-text'
 import FileX from 'lucide-react-native/icons/file-x'
 import FingerprintPattern from 'lucide-react-native/icons/fingerprint-pattern'
 import Flag from 'lucide-react-native/icons/flag'
+import Footprints from 'lucide-react-native/icons/footprints'
 import Ghost from 'lucide-react-native/icons/ghost'
 import Gift from 'lucide-react-native/icons/gift'
 import GraduationCap from 'lucide-react-native/icons/graduation-cap'
@@ -86,11 +89,13 @@ import HeartOff from 'lucide-react-native/icons/heart-off'
 import Hourglass from 'lucide-react-native/icons/hourglass'
 import IdCard from 'lucide-react-native/icons/id-card'
 import Image from 'lucide-react-native/icons/image'
+import ImageOff from 'lucide-react-native/icons/image-off'
 import Images from 'lucide-react-native/icons/images'
 import Info from 'lucide-react-native/icons/info'
 import KeyRound from 'lucide-react-native/icons/key-round'
 import Link from 'lucide-react-native/icons/link'
 import Link2Off from 'lucide-react-native/icons/link-2-off'
+import Locate from 'lucide-react-native/icons/locate'
 import LocateOff from 'lucide-react-native/icons/locate-off'
 import Lock from 'lucide-react-native/icons/lock'
 import LogOut from 'lucide-react-native/icons/log-out'
@@ -102,6 +107,7 @@ import Martini from 'lucide-react-native/icons/martini'
 import Megaphone from 'lucide-react-native/icons/megaphone'
 import MessageCircle from 'lucide-react-native/icons/message-circle'
 import MessageCircleOff from 'lucide-react-native/icons/message-circle-off'
+import MessageSquare from 'lucide-react-native/icons/message-square'
 import MessageSquareDashed from 'lucide-react-native/icons/message-square-dashed'
 import MessageSquareOff from 'lucide-react-native/icons/message-square-off'
 import MicOff from 'lucide-react-native/icons/mic-off'
@@ -110,11 +116,15 @@ import Moon from 'lucide-react-native/icons/moon'
 import Music from 'lucide-react-native/icons/music'
 import Music2, { __iconData as music2Data } from 'lucide-react-native/icons/music-2'
 import Navigation from 'lucide-react-native/icons/navigation'
+import Plane from 'lucide-react-native/icons/plane'
 import Pause from 'lucide-react-native/icons/pause'
+import Pen from 'lucide-react-native/icons/pen'
 import PenLine from 'lucide-react-native/icons/pen-line'
 import Pencil from 'lucide-react-native/icons/pencil'
+import Pin from 'lucide-react-native/icons/pin'
 import Play from 'lucide-react-native/icons/play'
 import Plus from 'lucide-react-native/icons/plus'
+import QrCode from 'lucide-react-native/icons/qr-code'
 import Radar from 'lucide-react-native/icons/radar'
 import Radio from 'lucide-react-native/icons/radio'
 import Rainbow from 'lucide-react-native/icons/rainbow'
@@ -138,12 +148,14 @@ import Shirt from 'lucide-react-native/icons/shirt'
 import Shuffle from 'lucide-react-native/icons/shuffle'
 import SlidersHorizontal from 'lucide-react-native/icons/sliders-horizontal'
 import Smartphone from 'lucide-react-native/icons/smartphone'
+import Store from 'lucide-react-native/icons/store'
 import Sparkles from 'lucide-react-native/icons/sparkles'
 import Ticket from 'lucide-react-native/icons/ticket'
 import Timer from 'lucide-react-native/icons/timer'
 import Toilet from 'lucide-react-native/icons/toilet'
 import Trash from 'lucide-react-native/icons/trash'
 import Trees from 'lucide-react-native/icons/trees'
+import Type from 'lucide-react-native/icons/type'
 import TreePalm from 'lucide-react-native/icons/tree-palm'
 import TriangleAlert from 'lucide-react-native/icons/triangle-alert'
 import Unlink from 'lucide-react-native/icons/unlink'
@@ -176,7 +188,8 @@ import Trophy from 'lucide-react-native/icons/trophy'
 import AtSign from 'lucide-react-native/icons/at-sign'
 import Star from 'lucide-react-native/icons/star'
 import StarOff from 'lucide-react-native/icons/star-off'
-import { COLOR, ICON } from '../../lib/design/tokens'
+import { COLOR, GRADIENT, ICON } from '../../lib/design/tokens'
+import { BrandGradient } from '../ds/DiscMark'
 
 const ICONS = {
   accessibility: Accessibility,
@@ -196,13 +209,13 @@ const ICONS = {
   bookmark: Bookmark,
   briefcase: Briefcase,
   calendar: Calendar,
+  'calendar-plus': CalendarPlus,
   'calendar-check': CalendarCheck,
   'calendar-off': CalendarOff,
   'calendar-x': CalendarX,
   camera: Camera,
   'camera-off': CameraOff,
   car: Car,
-  cat: Cat,
   'chart-column': ChartColumn,
   check: Check,
   'check-check': CheckCheck,
@@ -235,6 +248,7 @@ const ICONS = {
   'file-x': FileX,
   'fingerprint-pattern': FingerprintPattern,
   flag: Flag,
+  footprints: Footprints,
   ghost: Ghost,
   gift: Gift,
   'graduation-cap': GraduationCap,
@@ -246,11 +260,13 @@ const ICONS = {
   hourglass: Hourglass,
   'id-card': IdCard,
   image: Image,
+  'image-off': ImageOff,
   images: Images,
   info: Info,
   'key-round': KeyRound,
   link: Link,
   'link-2-off': Link2Off,
+  locate: Locate,
   'locate-off': LocateOff,
   lock: Lock,
   'log-out': LogOut,
@@ -262,6 +278,7 @@ const ICONS = {
   megaphone: Megaphone,
   'message-circle': MessageCircle,
   'message-circle-off': MessageCircleOff,
+  'message-square': MessageSquare,
   'message-square-dashed': MessageSquareDashed,
   'message-square-off': MessageSquareOff,
   'mic-off': MicOff,
@@ -270,11 +287,15 @@ const ICONS = {
   music: Music,
   'music-2': Music2,
   navigation: Navigation,
+  plane: Plane,
   pause: Pause,
+  pen: Pen,
   'pen-line': PenLine,
   pencil: Pencil,
+  pin: Pin,
   play: Play,
   plus: Plus,
+  'qr-code': QrCode,
   radar: Radar,
   radio: Radio,
   rainbow: Rainbow,
@@ -297,14 +318,19 @@ const ICONS = {
   shuffle: Shuffle,
   'sliders-horizontal': SlidersHorizontal,
   smartphone: Smartphone,
+  store: Store,
   sparkles: Sparkles,
   ticket: Ticket,
   timer: Timer,
   toilet: Toilet,
   trash: Trash,
+  // The frames' name for it: Lucide 1.x calls `trash-2` `trash`, so both names draw the one glyph (SYS-13).
+  'trash-2': Trash,
   trees: Trees,
   'tree-palm': TreePalm,
   'triangle-alert': TriangleAlert,
+  // The Lobby compose sheet's Add alt text (C-A `ic('type',16)`).
+  type: Type,
   unlink: Unlink,
   user: User,
   'user-check': UserCheck,
@@ -350,14 +376,34 @@ export function Icon({
   size = ICON.nav,
   color = COLOR.textPrimary,
   active = false,
+  filled = false,
+  gradient,
+  testID,
 }: {
   name: IconName
   size?: number
   color?: string
   active?: boolean
+  /** The glyph filled in its colour as well as stroked: a chosen bookmark ("Saved", going-lifecycle S1). */
+  filled?: boolean
+  /** The stroke in a brand gradient (`GRADIENT`), 135° across the glyph's box, instead of `color`: an armed hold's glyph (SCRUM-1057 A). */
+  gradient?: keyof typeof GRADIENT
+  testID?: string
 }) {
   const Glyph = ICONS[name]
-  return <Glyph size={size} color={color} strokeWidth={active ? ICON.strokeActive : ICON.stroke} />
+  // An SVG id is document-wide on the web and per Svg here; a stable unique one either way (no ':' in a url()).
+  const id = `icon${useId().replace(/[^a-zA-Z0-9]/g, '')}`
+  const strokeWidth = active ? ICON.strokeActive : ICON.stroke
+  // Lucide draws `fill="none"` unless told otherwise; an undefined fill would draw black.
+  const fill = filled ? { fill: color } : null
+  if (!gradient) return <Glyph size={size} color={color} strokeWidth={strokeWidth} testID={testID} {...fill} />
+  return (
+    <Glyph size={size} color={`url(#${id})`} strokeWidth={strokeWidth} testID={testID}>
+      <Defs>
+        <BrandGradient id={id} gradient={gradient} x1={0} y1={0} x2={ICON.nav} y2={ICON.nav} gradientUnits="userSpaceOnUse" />
+      </Defs>
+    </Glyph>
+  )
 }
 
 /**

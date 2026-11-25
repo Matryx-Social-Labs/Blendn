@@ -53,7 +53,9 @@ export async function lookUpArrival(target: LinkTarget): Promise<ArrivalLookup> 
       if (!result.success || !result.data) return { status: 'retry' }
       const e = result.data
       if (e.status === 'draft' || e.visibility === 'private') return { status: 'gone' }
-      const place = e.visibility === 'unlisted' ? e.city : [e.venueName, e.city].filter(Boolean).join(', ')
+      // An unlisted event names its area, never the venue.
+      const area = e.area || e.city
+      const place = e.visibility === 'unlisted' ? area : [e.venueName, area].filter(Boolean).join(', ')
       const when = dateParts(e.startTime, e.timezone).dateText
       return {
         status: 'ready',

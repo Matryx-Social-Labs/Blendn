@@ -78,6 +78,7 @@ const listCalls = () => getVenues.mock.calls.filter(([q]) => q.limit === 30)
 const browse = (over: Partial<HomeBrowse> = {}): HomeBrowse => ({
   city: 'Bengaluru',
   location: { latitude: 12.97, longitude: 77.59 },
+  withDistance: 'exact',
   ready: true,
   cityCentre: null,
   cityPick: { n: 0, here: false },

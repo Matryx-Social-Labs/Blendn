@@ -3,7 +3,7 @@
  * for what may be linked at all.
  */
 import { redirectSystemPath } from '../app/+native-intent'
-import { eventLink, inviteLink, nativeIntentPath, parseLink, routeFor, SHARE_ORIGIN, shareability, venueLink, WEB_PAGES_LIVE } from '../lib/shareLinks'
+import { eventLink, inviteLink, nativeIntentPath, parseLink, routeFor, SHARE_ORIGIN, shareability, venueLink, venueTextOnly, WEB_PAGES_LIVE } from '../lib/shareLinks'
 
 const ID = '7f3a2c4e-91d0-4b8a-a1c2-0d5e6f7a8b9c'
 const TOKEN = 'abcdefghijklmnopqrstuv'
@@ -21,6 +21,7 @@ describe('building a link', () => {
     expect(routeFor({ kind: 'event', id: ID })).toBe(`/event/${ID}`)
     expect(routeFor({ kind: 'venue', id: ID })).toBe(`/venue/${ID}`)
     expect(routeFor({ kind: 'invite', id: TOKEN })).toBe(`/f/${TOKEN}`)
+    expect(routeFor({ kind: 'crew', id: TOKEN })).toBe(`/c/${TOKEN}`)
   })
 })
 
@@ -30,6 +31,13 @@ describe('reading a link', () => {
     expect(parseLink(`${SHARE_ORIGIN}/v/${ID}`)).toEqual({ kind: 'venue', id: ID })
     expect(parseLink(`${SHARE_ORIGIN}/e/${ID}`)).toEqual({ kind: 'event', id: ID })
     expect(parseLink(inviteLink(TOKEN))).toEqual({ kind: 'invite', id: TOKEN })
+  })
+
+  it('a crew link (S7): the universal link and the app scheme open /c/; control: /c/ deeper or with a bad token is nothing of ours', () => {
+    expect(parseLink(`${SHARE_ORIGIN}/c/${TOKEN}`)).toEqual({ kind: 'crew', id: TOKEN })
+    expect(nativeIntentPath(`blendn://c/${TOKEN}?x=1`)).toBe(`/c/${TOKEN}`)
+    expect(parseLink(`${SHARE_ORIGIN}/c/${TOKEN}/x`)).toBeNull()
+    expect(parseLink('/c/..')).toBeNull()
   })
 
   it('takes the bare domain, the app scheme, a bare path, the organizer QR path and a query string', () => {
@@ -201,5 +209,61 @@ describe('a room link keeps its countdown (R6-5)', () => {
     expect(nativeIntentPath(`blendn://chat/abc/more?eventId=${ID}`)).toBe('/chat/abc/more')
     expect(nativeIntentPath(`blendn://private-chat/abc?eventId=${ID}&opensAt=${OPENS}`)).toBe('/private-chat/abc')
     expect(nativeIntentPath(`https://evil.example/chat/abc?eventId=${ID}`)).toBe('/')
+  })
+})
+
+describe('a venue shared before its page exists (SYS-04)', () => {
+  it('is words only: no link that opens the homepage', () => {
+    expect(WEB_PAGES_LIVE).toBe(false)
+    expect(venueTextOnly('The Daily Grind')).toBe('The Daily Grind on Blend’n')
+    expect(venueTextOnly('The Daily Grind')).not.toContain('http')
+  })
+})
+
+describe('a link to a Lobby post (SCRUM-1026, 6/6)', () => {
+  const POST_ID = '0d5e6f7a-91d0-4b8a-a1c2-7f3a2c4e8b9c'
+  it('opens the Lobby with the post to scroll to, from the scheme, the dev client and a bare path', () => {
+    expect(nativeIntentPath(`blendn://board/${ID}/${POST_ID}`)).toBe(`/board/${ID}?post=${POST_ID}`)
+    expect(nativeIntentPath(`/board/${ID}/${POST_ID}`)).toBe(`/board/${ID}?post=${POST_ID}`)
+    expect(nativeIntentPath(`exp+blendn://board/${ID}/${POST_ID}`)).toBe(`/board/${ID}?post=${POST_ID}`)
+    // Control: the Lobby alone stays the Lobby.
+    expect(nativeIntentPath(`blendn://board/${ID}`)).toBe(`/board/${ID}`)
+  })
+
+  it('carries nothing else a link says, and refuses an id that is not one', () => {
+    expect(nativeIntentPath(`blendn://board/${ID}/${POST_ID}?compose=1&post=evil`)).toBe(`/board/${ID}?post=${POST_ID}`)
+    expect(nativeIntentPath(`blendn://board/${ID}?compose=1`)).toBe(`/board/${ID}`)
+    expect(nativeIntentPath(`blendn://board/${ID}/%2E%2E%2Fsettings`)).toBe(`/board/${ID}`)
+    expect(nativeIntentPath(`blendn://board/${ID}/${POST_ID}/more`)).not.toContain('post=')
+    expect(nativeIntentPath(`https://evil.example/board/${ID}/${POST_ID}`)).toBe('/')
+  })
+})
+
+/*
+ * SCRUM-1034: a link to the event preferences lost its `pseudonym` and `askIntent`, so the anonymous card read "A made-up
+ * name" and the first-door intent question could not be asked by link. The same allow-list the room link uses keeps them,
+ * each checked: a pseudonym only in the server's "Adjective Noun" shape, `askIntent` only as `1`, nothing else.
+ */
+describe('a link to the event preferences keeps its pseudonym and intent question (SCRUM-1034)', () => {
+  it('keeps a pseudonym in the server’s shape and askIntent=1, from the scheme, the dev client and a bare path', () => {
+    expect(nativeIntentPath(`blendn://event-preferences/${ID}?pseudonym=Lunar%20Fox&askIntent=1`)).toBe(
+      `/event-preferences/${ID}?pseudonym=Lunar%20Fox&askIntent=1`
+    )
+    expect(nativeIntentPath(`exp+blendn://event-preferences/${ID}?pseudonym=Lunar+Fox+12`)).toBe(`/event-preferences/${ID}?pseudonym=Lunar%20Fox%2012`)
+    expect(nativeIntentPath(`/event-preferences/${ID}?askIntent=1`)).toBe(`/event-preferences/${ID}?askIntent=1`)
+  })
+
+  it('drops a pseudonym that is any other words, askIntent other than 1, revealed, and every other param', () => {
+    expect(nativeIntentPath(`blendn://event-preferences/${ID}?pseudonym=Pay%20me%20at%20evil.example&askIntent=yes`)).toBe(`/event-preferences/${ID}`)
+    // `revealed` is not a link's to set: it would open the cards on Named.
+    expect(nativeIntentPath(`blendn://event-preferences/${ID}?revealed=1&draft=x&pseudonym=Lunar%20Fox`)).toBe(`/event-preferences/${ID}?pseudonym=Lunar%20Fox`)
+    expect(nativeIntentPath(`blendn://event-preferences/a%2Fb?askIntent=1`)).toBe('/event-preferences/a%2Fb')
+    expect(nativeIntentPath(`blendn://event-preferences/${ID}/more?askIntent=1`)).toBe(`/event-preferences/${ID}/more`)
+    // Control: a chat's params are the chat's only.
+    expect(nativeIntentPath(`blendn://chat/abc?askIntent=1&pseudonym=Lunar%20Fox`)).toBe('/chat/abc')
+    expect(nativeIntentPath(`blendn://event-preferences/${ID}?eventId=${ID}&kind=crew`)).toBe(`/event-preferences/${ID}`)
+    // A key on every object's prototype is not on the list (`constructor` passed the old lookup).
+    expect(nativeIntentPath('blendn://chat/abc?constructor=x&toString=y')).toBe('/chat/abc')
+    expect(nativeIntentPath(`blendn://event-preferences/${ID}?constructor=x`)).toBe(`/event-preferences/${ID}`)
   })
 })

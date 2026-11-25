@@ -1,8 +1,8 @@
 /**
  * Flow 15 system states: the reason classifier, the account screens, not found, update required, and the outage lines.
  */
-import { act, fireEvent, render, screen } from '@testing-library/react-native'
-import { Linking } from 'react-native'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native'
+import { AccessibilityInfo, Linking } from 'react-native'
 
 jest.mock('@react-native-async-storage/async-storage', () => require('@react-native-async-storage/async-storage/jest/async-storage-mock'))
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
@@ -11,6 +11,8 @@ const mockReplace = jest.fn()
 let mockPath = '/e/7f3a/tickets'
 jest.mock('expo-router', () => ({ router: { replace: (...a: unknown[]) => mockReplace(...a) }, usePathname: () => mockPath }))
 jest.mock('../lib/haptics', () => ({ H: { primary: jest.fn(), error: jest.fn(), destructive: jest.fn() } }))
+const mockShowToast = jest.fn()
+jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: mockShowToast }) }))
 
 /* eslint-disable import/first */
 import NotFoundScreen from '../app/+not-found'
@@ -125,6 +127,35 @@ describe('AccountStateScreen', () => {
     open.mockRestore()
   })
 
+  describe('the one action never fails silently (motion audit M23)', () => {
+    const refuse = () => jest.spyOn(Linking, 'openURL').mockRejectedValue(new Error('no handler'))
+    const toastSays = async (text: RegExp) => waitFor(() => expect(mockShowToast).toHaveBeenCalledWith(expect.stringMatching(text), 'info'))
+
+    it('no mail app: says where to write', async () => {
+      const open = refuse()
+      await render(<AccountStateScreen state={{ kind: 'suspended', sentence: SUSPENDED }} />)
+      await act(async () => fireEvent.press(screen.getByRole('button', { name: 'Email support' })))
+      await toastSays(new RegExp(`Write to ${SUPPORT_EMAIL}`))
+      open.mockRestore()
+    })
+
+    it('the dashboard did not open: says its address', async () => {
+      const open = refuse()
+      await render(<AccountStateScreen state={{ kind: 'staff', sentence: STAFF }} />)
+      await act(async () => fireEvent.press(screen.getByRole('button', { name: 'Open the dashboard' })))
+      await toastSays(/dashboard\.blendn\.app/)
+      open.mockRestore()
+    })
+
+    it('the store did not open: says to update from it', async () => {
+      const open = refuse()
+      await render(<UpdateRequiredScreen />)
+      await act(async () => fireEvent.press(screen.getByRole('button', { name: /^Open (the App Store|Google Play)$/ })))
+      await toastSays(/update/i)
+      open.mockRestore()
+    })
+  })
+
   it('deleted: Contact support and Use a different account', async () => {
     await render(<AccountStateScreen state={{ kind: 'deleted' }} />)
     expect(screen.getByRole('button', { name: 'Contact support' })).toBeTruthy()
@@ -225,6 +256,15 @@ describe('"This isn’t here any more" (#11)', () => {
     expect(back).toHaveBeenCalledTimes(1)
     expect(H.primary).not.toHaveBeenCalled()
     expect(H.error).not.toHaveBeenCalled()
+  })
+
+  it('is said on arrival, queued behind what is being read (motion audit M29: it replaces the content and said nothing)', async () => {
+    const announce = jest.spyOn(AccessibilityInfo, 'announceForAccessibilityWithOptions').mockImplementation(() => {})
+    const r = await render(<GoneCard kind="crew" onBack={jest.fn()} />)
+    expect(announce).toHaveBeenCalledWith(`${GONE.crew.title}. ${GONE.crew.body}`, { queue: true })
+    await r.rerender(<GoneCard kind="crew" onBack={jest.fn()} />)
+    expect(announce).toHaveBeenCalledTimes(1)
+    announce.mockRestore()
   })
 
   it('names no raw error in any of them', () => {

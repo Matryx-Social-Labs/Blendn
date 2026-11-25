@@ -17,7 +17,7 @@ const read = (p: string) => readFileSync(join(__dirname, '..', p), 'utf8')
  */
 const stripComments = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
 
-/** The request card moved to one row both the strip and the See all screen draw. */
+/** The request card, as the Requests page draws it. */
 const REQUEST_ROW = () => stripComments(read('components/banter/RequestRow.tsx'))
 const SCREEN = () => stripComments(read('app/(tabs)/chat.tsx'))
 const PARTS = () => stripComments(read('components/banter/BanterParts.tsx'))
@@ -85,7 +85,9 @@ describe('message requests', () => {
     expect(INBOX()).toContain('loadMessageRequests')
     expect(REQUEST_ROW()).toContain("inbox.respondToRequest(r, 'accept')")
     expect(REQUEST_ROW()).toContain("inbox.respondToRequest(r, 'decline')")
-    expect(SCREEN()).toContain('<RequestRow')
+    expect(stripComments(read('app/message-requests.tsx'))).toContain('<RequestRow')
+    // Message requests only (requests placement A): crew invites are answered in Notifications and on Crews.
+    expect(stripComments(read('app/message-requests.tsx'))).not.toMatch(/useCrewInbox|invites/)
   })
 
   it('show the note verbatim, in two lines (four at the accessibility sizes: RC drive 5) (ROUND3 C11)', () => {
@@ -96,7 +98,7 @@ describe('message requests', () => {
   it('put Decline before Accept, at 48, and hold both while one is in flight', () => {
     const parts = PARTS()
     const actions = parts.slice(parts.indexOf('styles.requestActions'))
-    expect(actions.indexOf('label="Decline"')).toBeLessThan(actions.indexOf('label={accept}'))
+    expect(actions.indexOf('label="Decline"')).toBeLessThan(actions.indexOf('label="Accept"'))
     expect(actions).toContain('disabled={pending}')
     expect(actions).toContain('loading={pending}')
     expect(actions.match(/size="md"/g)).toHaveLength(2)
@@ -108,16 +110,14 @@ describe('message requests', () => {
   })
 
   it('leave with a fade while the rest close the gap', () => {
-    const src = SCREEN()
-    expect(src).toContain('exiting={reduceMotion ? undefined : FadeOut.duration(DURATION.quick)}')
-    expect(src).toContain('layout={reduceMotion ? undefined : REQUEST_REFLOW}')
+    // The Banter's one row fades when the last request is answered; the page's cards close the gap themselves.
+    expect(SCREEN()).toContain('exiting={reduceMotion ? undefined : FadeOut.duration(DURATION.quick)}')
+    expect(stripComments(read('app/message-requests.tsx'))).toContain('itemLayoutAnimation={reduceMotion ? undefined : REQUEST_REFLOW}')
   })
 
-  it('show crew invites as requests, with Join opening the invite, which holds the consent (R2-D2 #02)', () => {
-    const src = SCREEN()
-    expect(src).toContain('accept="Join"')
-    expect(src).toContain("pathname: '/crews/invite/[crewId]'")
-    expect(src).toContain('crews.decline(invite)')
+  it('hold no crew invites: those left Banter for Notifications and Crews (requests placement A, 2026-11-15)', () => {
+    expect(stripComments(read('components/banter/RequestRow.tsx'))).not.toContain('InviteRow')
+    expect(SCREEN()).not.toMatch(/invitesTotal|crews\.invites/)
   })
 })
 
@@ -162,10 +162,10 @@ describe('the room you are standing in', () => {
     expect(PARTS()).toContain('<RollingNumber value={count}')
   })
 
-  it('says a locked room as a status, not as speech (Flow 5 #08)', () => {
-    expect(SCREEN()).toContain("'Locked by the organizer · read only'")
+  it('says a muted room as a status, not as speech (Flow 5 #08); there is no organizer lock (SCRUM-893)', () => {
+    expect(SCREEN()).not.toMatch(/Locked by the organi/)
     expect(SCREEN()).toContain("const stateLine = roomStateLine(c.room_state)")
-    expect(SCREEN()).toContain("{ kind: 'chip', icon: c.room_state === 'locked' ? 'lock' : 'mic-off', text: stateLine, warn: c.room_state === 'locked' }")
+    expect(SCREEN()).toContain("{ kind: 'chip', icon: 'mic-off', text: stateLine }")
   })
 })
 
@@ -191,8 +191,8 @@ describe('a match is anonymous until they reveal', () => {
     expect(INBOX()).not.toContain('theyRevealed === true')
   })
 
-  it('draws their creature, seeded on the pseudonym, until they reveal', () => {
-    expect(SCREEN()).toContain("face: { kind: 'person', photo: c.they_revealed ? c.other_user_avatar : null, pseudonym: c.other_user_name }")
+  it('draws their creature, seeded on the pseudonym, until they reveal (personFace decides: personFace.test.ts)', () => {
+    expect(SCREEN()).toContain("face: { kind: 'person', named: c.they_revealed, name: c.other_user_name, photo: c.other_user_avatar }")
   })
 
   it('names an unknown person the way the server does', () => {
@@ -200,10 +200,12 @@ describe('a match is anonymous until they reveal', () => {
     expect(INBOX() + SCREEN()).not.toContain("|| 'Unknown'")
   })
 
-  it('tells you someone asked to reveal, as a chip, until you open the thread', () => {
+  it('tells you they tapped Swap names, as a chip in the strip\'s words, until you open the thread', () => {
     const src = SCREEN()
     expect(src).toContain('c.reveal_requested && !revealSeen.has(c.conversation_id)')
-    expect(src).toContain("{ kind: 'chip', icon: 'eye', text: 'Asked to reveal names' }")
+    expect(src).toContain("{ kind: 'chip', icon: 'arrow-left-right', text: 'Wants to swap names' }")
+    // The one-sided reveal is gone (task 17 a): nothing says "reveal" to a person any more.
+    expect(src).not.toContain('Asked to reveal names')
   })
 })
 
@@ -255,9 +257,10 @@ describe('R3-D5 on the Banter', () => {
     expect(SCREEN()).toContain('const held = outboxLine(outbox, thread)')
   })
 
-  it('5.11: a room row swipes to Mute and Leave, a DM to Mark read only, a muted DM never exists', () => {
+  it('5.11: a room row swipes to Mute only (I-A; flow5Banter drives it), a DM to Mark read only, a muted DM never exists', () => {
     const src = SCREEN()
-    expect(src).toContain("{ icon: 'log-out', label: 'Leave', destructive: true, onPress: () => setLeaveFor(c.chat_room_id) }")
+    expect(src).toContain("swipe: [{ icon: 'bell-off', label: 'Mute', onPress: () => setMuteFor(c.chat_room_id) }],")
+    expect(src).not.toContain("label: 'Leave'")
     expect(src).toContain("[{ icon: 'check-check', label: 'Mark read', onPress: () => void markRead(c) }]")
     expect(src).toContain('muted: false,')
   })

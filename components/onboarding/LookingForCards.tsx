@@ -1,66 +1,61 @@
-import { Fragment } from 'react'
 import { StyleSheet, View } from 'react-native'
 
 import { LookingForCard } from '../ds/LookingForCard'
+import { RadioCard } from '../ds/RadioCard'
+import { INTENTS, type Intent } from '../profile/MatchingFields'
 import { SPACE } from '../../lib/design/tokens'
 
 /**
- * "What brings you to Blend'n today?" as the design system's picture tiles, two across (Flow 2 preferences 01).
- *
- * The frame draws these as image tiles rather than chips, and the difference is doing work: five words in a row of pills is
- * a form, five pictures is a question about how you want to spend an evening.
+ * "What brings you out?" (direction A): Edit profile's intents, in its words (`INTENTS`), so onboarding and the editor write
+ * the same `intent_default` values (owner, 2026-11-01: Dating is asked here again). Friendship, Networking and Dating are
+ * photo tiles in one row, any of them at once; "Just here" (no matching) is the plain answer under them, and it is exclusive
+ * (`toggleIntent`: the server refuses the mix). Under 18 the Dating tile is not drawn at all.
  *
  * Images are committed rather than linked: Figma's URLs expire in about a week, so a build referencing one loses its artwork
  * seven days later.
  */
-export const LOOKING_FOR_OPTIONS = [
-  { value: 'Dating', art: require('../../assets/onboarding/looking-dating.jpg') },
-  { value: 'Friendship', art: require('../../assets/onboarding/looking-friendship.jpg') },
-  { value: 'Networking', art: require('../../assets/onboarding/looking-networking.jpg') },
-  { value: 'Travel', art: require('../../assets/onboarding/looking-travel.jpg') },
-  { value: 'Open', art: require('../../assets/onboarding/looking-open.jpg') },
-]
 
-/** Two to a row. */
-const PER_ROW = 2
+export type { Intent }
 
-export function LookingForCards({
-  selected,
-  onToggle,
-  withoutDating = false,
-}: {
-  selected: readonly string[]
-  onToggle: (value: string) => void
-  /** Under 18: dating is refused, so it is not offered (SCRUM-294). Not disabled: a minor never sees it. */
-  withoutDating?: boolean
-}) {
-  const options = withoutDating ? LOOKING_FOR_OPTIONS.filter((option) => option.value !== 'Dating') : LOOKING_FOR_OPTIONS
-  const rows = Array.from({ length: Math.ceil(options.length / PER_ROW) }, (_, i) => options.slice(i * PER_ROW, (i + 1) * PER_ROW))
+const ART: Record<Exclude<Intent, 'just_here'>, number> = {
+  friendship: require('../../assets/onboarding/looking-friendship.jpg'),
+  networking: require('../../assets/onboarding/looking-networking.jpg'),
+  dating: require('../../assets/onboarding/looking-dating.jpg'),
+}
+/** The tiles, in the step's order: the two that need nothing else first, Dating last. */
+const TILES: readonly Exclude<Intent, 'just_here'>[] = ['friendship', 'networking', 'dating']
+const labelOf = (value: Intent) => INTENTS.find((i) => i.value === value)
+const JUST_HERE = labelOf('just_here')
+
+export function LookingForCards({ selected, onToggle, offerDating }: { selected: readonly Intent[]; onToggle: (value: Intent) => void; offerDating: boolean }) {
   return (
-    <View style={styles.grid}>
-      {rows.map((row) => (
-        <View key={row[0].value} style={styles.row}>
-          {row.map((option) => (
-            <Fragment key={option.value}>
-              <LookingForCard
-                label={option.value}
-                image={option.art}
-                selected={selected.includes(option.value)}
-                onPress={() => onToggle(option.value)}
-                testID={`looking-for-${option.value}`}
-              />
-            </Fragment>
-          ))}
-          {/* An odd tile keeps its half of the row. */}
-          {row.length < PER_ROW ? <View style={styles.filler} /> : null}
-        </View>
-      ))}
+    <View style={styles.list}>
+      <View style={styles.row}>
+        {TILES.filter((value) => offerDating || value !== 'dating').map((value) => (
+          <LookingForCard
+            key={value}
+            label={labelOf(value)?.label ?? value}
+            image={ART[value]}
+            selected={selected.includes(value)}
+            onPress={() => onToggle(value)}
+            testID={`looking-for-${value}`}
+          />
+        ))}
+      </View>
+      <RadioCard
+        title={JUST_HERE?.label ?? 'Just here'}
+        hint={JUST_HERE?.hint}
+        deselectable
+        selected={selected.includes('just_here')}
+        onPress={() => onToggle('just_here')}
+        testID="looking-for-just_here"
+      />
     </View>
   )
 }
 
 const styles = StyleSheet.create({
-  grid: { gap: SPACE.md },
-  row: { flexDirection: 'row', gap: SPACE.md },
-  filler: { flex: 1 },
+  list: { gap: SPACE.md },
+  // A row, so each tile's own `flex: 1` takes a third of the width.
+  row: { flexDirection: 'row', gap: SPACE.sm },
 })

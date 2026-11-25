@@ -1,9 +1,9 @@
 import { useRef } from 'react'
-import { FlatList, Platform, Pressable, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native'
+import { FlatList, Pressable, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native'
 import Animated from 'react-native-reanimated'
 
-import { COLOR, FONT_FAMILY, ICON, MATERIAL, MAX_FONT_SCALE, RADIUS, SPACE } from '../../lib/design/tokens'
-import { CONSENT_LINE, CREW_BIO_MAX, CREW_MAX_MEMBERS, CREW_MAX_TAGS, CREW_NAME_MAX, CREW_TAGS, KEEP_ANONYMOUS_LABEL } from '../../lib/crews'
+import { COLOR, FONT_FAMILY, ICON, MAX_FONT_SCALE, RADIUS, SPACE, TYPE } from '../../lib/design/tokens'
+import { CONSENT_LINE, CREW_BIO_MAX, CREW_MAX_MEMBERS, CREW_NAME_MAX, KEEP_ANONYMOUS_LABEL } from '../../lib/crews'
 import { INTENT_CHOICES, type IntentChoice } from '../../lib/crewsScreens'
 import type { Friend } from '../../lib/friends'
 import { OPACITY, tint } from '../../lib/theme'
@@ -11,14 +11,17 @@ import { PagedFooter } from '../friends/PagedFooter'
 import { SearchField } from '../ds/SearchField'
 import { FRIEND_SEARCH_MAX } from '../../lib/friendsPaging'
 import { Avatar } from '../ds/Avatar'
+import { Button } from '../ds/Button'
 import { ChipSet } from '../ds/ChipSet'
 import { CrewCard } from '../ds/CrewCard'
-import { CrewEmblem, EMBLEM_PALETTES, emblemFor } from '../ds/CrewEmblem'
+import { CrewEmblem } from '../ds/CrewEmblem'
 import { CONTROL_FONT_CAP, font, minTarget, quickTransition, useBoldText, useIncreaseContrast, useSelection } from '../ds/shared'
 import { FieldLabel, TextArea, TextField } from '../ds/TextField'
 import { Toggle } from '../ds/Toggle'
 import { Glyph } from '../ui/Glyph'
-import { Icon } from '../ui/Icon'
+import { SHEET_FILL } from './RowsCard'
+import { TagsInput } from './TagsInput'
+import { personFace } from '../../lib/personFace'
 
 /** flow10.js `make`: the line about the crew is a one-liner's height. */
 const BIO_MIN_HEIGHT = 72
@@ -26,16 +29,14 @@ const BIO_MIN_HEIGHT = 72
 const FRIEND_ROW = 64
 /** The list's own height, as a share of the window, inside the tall sheet: it scrolls there and windows its rows. */
 const LIST_SHARE = 0.5
-/** Rows drawn before the first scroll: more than the list shows, so the pick of a short list never waits on a batch. */
-const FIRST_ROWS = 20
+/** Rows drawn before the first scroll: a whole crew's worth (25), so filling a crew never waits on a batch. */
+const FIRST_ROWS = CREW_MAX_MEMBERS
 const NO_FRIENDS = 'Add friends first — a crew is made from your friends.'
 const FRIEND_FACE = 48
 /** The pick circle: 28, ringed at 35% white when off. */
 const PICK = 28
 const PICK_FILL = quickTransition('background-color', 'border-color')
 const PICK_RING = 0.35
-/** flow10.js `make`: a block inside the sheet is 8% white on iOS glass, sunken on Android's solid sheet. */
-const SHEET_FILL = Platform.OS === 'android' ? COLOR.surfaceSunken : MATERIAL.fillOnGlass
 
 export type NameStepProps = {
   name: string
@@ -49,32 +50,22 @@ export type NameStepProps = {
   /** null: an intent the picker has no chip for, left as it is (Edit crew). */
   choice: IntentChoice | null
   onChoice: (next: IntentChoice) => void
+  /** The crew's own hashtags, as typed, without the #. */
   tags: readonly string[]
-  onTag: (slug: string) => void
+  onTags: (next: string[]) => void
+  /** `GET /crews` → `tagIdeas`. */
+  tagIdeas: readonly string[]
+  /** The server's refusal of the tags, under the field. */
+  tagsError?: string
   openToSolo: boolean
   onOpenToSolo: (next: boolean) => void
-  /** The stand-in emblem: the server draws the real one, from its own seed, when the crew is made. */
-  previewSeed: string
+  /** The emblem's seed: Make's own until the crew is made (Shuffle), then the crew's, fixed. */
+  emblemSeed: string
+  /** Make a crew only: a new look. Absent once the crew exists (Edit crew), as the look is fixed. */
+  onShuffle?: () => void
+  /** The crew's size for the preview (Edit crew); a crew being made is you alone. */
+  size?: number
   intentText: string
-}
-
-/** The rose palette (hue 350), the people world's: a new crew's stand-in emblem is drawn in it (D-L17). */
-const ROSE_PALETTE = EMBLEM_PALETTES.length - 1
-/** How far `previewEmblemSeed` looks: one in twelve lands on a palette, so this is never reached in practice. */
-const SEED_TRIES = 240
-
-/**
- * The emblem the preview draws. A new crew's seed (`preview-…`, from Make a crew) is a stand-in until the server draws the
- * real one, and was any of twelve palettes, an off-hue blue on a rose screen; it is walked to the first variant on the rose
- * palette, so it is stable for the seed and in the screen's hue. A made crew's own seed (Edit crew) is drawn as it is.
- */
-export function previewEmblemSeed(seed: string): string {
-  if (!seed.startsWith('preview-')) return seed
-  for (let i = 0; i < SEED_TRIES; i++) {
-    const next = `${seed}:${i}`
-    if (emblemFor(next).palette === ROSE_PALETTE) return next
-  }
-  return seed
 }
 
 /** Step 1 · Name and vibe, with the live preview of the card as strangers see it. */
@@ -83,7 +74,6 @@ export function NameStep(p: NameStepProps) {
   const contrast = useIncreaseContrast()
   const secondary = contrast ? COLOR.textPrimary : COLOR.textSecondary
   const bioInput = useRef<TextInput>(null)
-  const labels = CREW_TAGS.filter((t) => p.tags.includes(t.slug)).map((t) => t.label)
   return (
     <>
       <TextField
@@ -127,38 +117,32 @@ export function NameStep(p: NameStepProps) {
           testID="make-intent"
         />
       </View>
-      <ChipSet
-        label="Tags"
-        items={CREW_TAGS.map((t) => ({ key: t.slug, label: t.label }))}
-        selection="multi"
-        selected={p.tags}
-        max={CREW_MAX_TAGS}
-        capHint={`Up to ${CREW_MAX_TAGS}`}
-        onToggle={p.onTag}
-        testID="make-tags"
-      />
+      <TagsInput tags={p.tags} onTags={p.onTags} ideas={p.tagIdeas} error={p.tagsError} testID="make-tag" />
       <View style={styles.toggleRow}>
         <View style={styles.fill}>
           <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink]}>Room for one more</Text>
-          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: secondary }]}>Solo people who opt in can be liked for the crew. Crews of 6 or fewer.</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: secondary }]}>Solo people who opt in can be waved at for the crew. Crews of 6 or fewer.</Text>
         </View>
         <Toggle value={p.openToSolo} onValueChange={p.onOpenToSolo} accessibilityLabel="Room for one more" />
       </View>
       <View style={styles.group}>
-        <View style={styles.labelRow}>
+        <View style={[styles.labelRow, styles.previewLabelRow]}>
           <FieldLabel text="As strangers will see it" bold={bold} contrast={contrast} />
+          {p.onShuffle ? <Button label="Shuffle" icon="shuffle" kind="tertiary" size="sm" onPress={p.onShuffle} accessibilityLabel="Shuffle the crew’s look" /> : null}
         </View>
         <CrewCard
           compact
           onSheet
+          // Make's preview dances on every Shuffle (each new seed plays it once); Edit crew's stays still.
+          emblemScene={p.onShuffle ? 'dance' : undefined}
           crew={{
             name: p.name.trim() || 'Crew name',
-            emblemSeed: previewEmblemSeed(p.previewSeed),
-            size: 1,
+            emblemSeed: p.emblemSeed,
+            size: p.size ?? 1,
             here: 0,
             bio: p.bio.trim() || 'A line about the crew',
             // No placeholder chip: an outlined "Tags" read as something to tap (D-L17).
-            tags: labels,
+            tags: [...p.tags],
             intent: p.intentText,
           }}
         />
@@ -179,11 +163,7 @@ function FriendPick({ friend, picked, capped, onToggle }: { friend: Friend; pick
       accessibilityLabel={`Ask ${friend.name}`}
       style={[styles.friend, capped && styles.capped]}
     >
-      {friend.photo ? (
-        <Avatar kind="photo" uri={friend.photo} size={FRIEND_FACE} />
-      ) : (
-        <Avatar kind="creature" pseudonym={friend.name} size={FRIEND_FACE} />
-      )}
+      <Avatar {...personFace({ named: true, name: friend.name, photo: friend.photo })} size={FRIEND_FACE} />
       <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('bodyStrong', bold), styles.ink, styles.fill]}>
         {friend.name}
       </Text>
@@ -209,7 +189,7 @@ export type FriendsStepProps = {
   onRetry: () => void
   /** What an empty list says; Make a crew and Invite differ ("Every friend of yours is in this crew…"). */
   none?: string
-  /** How many can be asked at most (11 for a new crew: twelve with you). At it, the rest dim and the footer says why. */
+  /** How many can be asked at most (24 for a new crew: 25 with you). At it, the rest dim and the footer says why. */
   limit?: number
   /** The friends are read a page at a time: asking for the next, and what the foot says while it comes or when it did not. */
   paging?: { hasMore: boolean; loadingMore: boolean; moreFailed: boolean; onMore: () => void }
@@ -219,6 +199,11 @@ export type FriendsStepProps = {
    * Whoever is picked stays picked through a search: the picks are ids, not rows.
    */
   search?: { query: string; onChange: (text: string) => void; searching: boolean; active: boolean; offered: boolean }
+  /**
+   * Make a crew (board 02 A): a field label over the list ("Friends to ask · 3 picked") in place of the note, and a foot only at the
+   * cap. Absent: Invite's note and its "n invited" foot, as before.
+   */
+  label?: string
 }
 
 /**
@@ -228,7 +213,7 @@ export type FriendsStepProps = {
  * here" is), asking for the next page of friends as the end comes into view: a person with a thousand friends scrolls a
  * windowed list, not a thousand views. A failed page keeps the rows and says so with Try again.
  */
-export function FriendsStep({ friends, picked, onToggle, onRetry, none = NO_FRIENDS, limit = CREW_MAX_MEMBERS - 1, paging, search }: FriendsStepProps) {
+export function FriendsStep({ friends, picked, onToggle, onRetry, none = NO_FRIENDS, limit = CREW_MAX_MEMBERS - 1, paging, search, label }: FriendsStepProps) {
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const secondary = contrast ? COLOR.textPrimary : COLOR.textSecondary
@@ -239,10 +224,16 @@ export function FriendsStep({ friends, picked, onToggle, onRetry, none = NO_FRIE
   const listHeight = Array.isArray(friends) ? Math.min(friends.length * FRIEND_ROW + (paging && (paging.loadingMore || paging.moreFailed) ? FRIEND_ROW : 0), Math.round(windowHeight * LIST_SHARE)) : 0
   return (
     <>
-      {/* The meta role and its cap: uncapped body text filled 55% of the screen at AX XXXL and left one row (RC drive 5 D-3). */}
-      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: secondary }]} testID="make-friends-note">
-        Friends only. The count says how many, never who was skipped.
-      </Text>
+      {label ? (
+        <View style={styles.labelRow}>
+          <FieldLabel text={label} bold={bold} contrast={contrast} />
+        </View>
+      ) : (
+        // The meta role and its cap: uncapped body text filled 55% of the screen at AX XXXL and left one row (RC drive 5 D-3).
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: secondary }]} testID="make-friends-note">
+          Friends only. The count says how many, never who was skipped.
+        </Text>
+      )}
       {search && (search.offered || search.query) ? (
         <SearchField
           value={search.query}
@@ -298,52 +289,122 @@ export function FriendsStep({ friends, picked, onToggle, onRetry, none = NO_FRIE
           />
         )}
       </View>
-      <View style={styles.footer} accessibilityLiveRegion="polite">
-        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.ink]}>
-          <Text style={[font('body', bold, FONT_FAMILY.mono[500]), styles.ink]}>{picked.length}</Text>
-          {' invited'}
-        </Text>
-        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), full ? styles.ink : { color: secondary }, styles.note]}>
-          {full ? 'A crew has at most 12 people.' : 'Invites last 14 days'}
-        </Text>
-      </View>
+      {label ? (
+        // The label counts the picks; the foot speaks only at the cap, saying why the rest dim.
+        full ? <View accessibilityLiveRegion="polite">{line(`A crew has at most ${CREW_MAX_MEMBERS} people.`)}</View> : null
+      ) : (
+        <View style={styles.footer} accessibilityLiveRegion="polite">
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.ink]}>
+            <Text style={[font('body', bold, FONT_FAMILY.mono[500]), styles.ink]}>{picked.length}</Text>
+            {' invited'}
+          </Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), full ? styles.ink : { color: secondary }, styles.note]}>
+            {full ? `A crew has at most ${CREW_MAX_MEMBERS} people.` : 'Invites last 14 days'}
+          </Text>
+        </View>
+      )}
     </>
   )
 }
 
-export type ConsentStepProps = {
+/** The emblem beside the name on Make's first step (board 02 A). */
+const MAKE_EMBLEM = 56
+
+export type NameAndFriendsStepProps = {
   name: string
-  summary: string
-  previewSeed: string
+  onName: (next: string) => void
+  onNameBlur?: () => void
+  nameError?: string
+  emblemSeed: string
+  onShuffle: () => void
+  /** The friends list, as `FriendsStep` takes it, less the label (this step writes it from the picks). */
+  friends: Omit<FriendsStepProps, 'label'>
+}
+
+/**
+ * Make, step 1 · Name and friends (board 02 A): the emblem draws live beside the name, and the friends come on the same
+ * screen, because they are the point of a crew. The windowed picker is `FriendsStep`, under "Friends to ask · n picked".
+ */
+export function NameAndFriendsStep(p: NameAndFriendsStepProps) {
+  return (
+    <>
+      <View style={styles.nameRow}>
+        <View style={styles.emblemColumn}>
+          {/* Each Shuffle is a new seed, and a new seed dances once (SCRUM-1053). */}
+          <CrewEmblem seed={p.emblemSeed} size={MAKE_EMBLEM} scene="dance" testID="make-emblem-live" />
+          <Button label="Shuffle" icon="shuffle" kind="tertiary" size="sm" onPress={p.onShuffle} accessibilityLabel="Shuffle the crew’s look" />
+        </View>
+        <View style={styles.fill}>
+          <TextField
+            value={p.name}
+            onChangeText={p.onName}
+            onBlur={p.onNameBlur}
+            placeholder="Crew name"
+            limit={CREW_NAME_MAX}
+            error={p.nameError}
+            autoCapitalize="words"
+            returnKeyType="done"
+            testID="make-name"
+          />
+        </View>
+      </View>
+      <FriendsStep {...p.friends} label={`Friends to ask · ${p.friends.picked.length} picked`} />
+    </>
+  )
+}
+
+export type VibeStepProps = {
+  choice: IntentChoice
+  onChoice: (next: IntentChoice) => void
+  /** The crew's own hashtags, as typed, without the #. */
+  tags: readonly string[]
+  onTags: (next: string[]) => void
+  /** `GET /crews` → `tagIdeas`. */
+  tagIdeas: readonly string[]
+  /** The server's refusal of the tags, under the field. */
+  tagsError?: string
+  openToSolo: boolean
+  onOpenToSolo: (next: boolean) => void
   keepAnonymous: boolean
   onKeepAnonymous: (next: boolean) => void
 }
 
-/** Step 3 · Consent: the sentence, always on screen; Make the crew is the agreement. */
-export function ConsentStep({ name, summary, previewSeed, keepAnonymous, onKeepAnonymous }: ConsentStepProps) {
+/**
+ * Make, step 2 · Your crew's vibe (board 02 A): all of it optional — here for, tags, Room for one more — and the consent,
+ * which the step's button ("Make Nebula · ask 3 friends") agrees to. The line about the crew is not on the board's Make: it is
+ * written on the crew page (Edit crew), which keeps its 140 and its moderation.
+ */
+export function VibeStep(p: VibeStepProps) {
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const secondary = contrast ? COLOR.textPrimary : COLOR.textSecondary
   return (
     <>
-      <View style={styles.consent}>
-        <View style={styles.consentLine}>
-          <Icon name="eye" size={ICON.control} />
-          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.ink, styles.fill]}>{CONSENT_LINE}</Text>
+      <View style={styles.group}>
+        <View style={styles.labelRow}>
+          <FieldLabel text="Here for · optional" bold={bold} contrast={contrast} />
         </View>
-        <View style={styles.anon}>
-          <View style={styles.fill}>
-            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink]}>{KEEP_ANONYMOUS_LABEL}</Text>
-            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: secondary }]}>You can change this later. It applies from then on.</Text>
-          </View>
-          <Toggle value={keepAnonymous} onValueChange={onKeepAnonymous} accessibilityLabel={KEEP_ANONYMOUS_LABEL} />
-        </View>
+        <ChipSet
+          items={INTENT_CHOICES.map((c) => ({ key: c.value, label: c.label }))}
+          selection="single"
+          selected={[p.choice]}
+          onToggle={(key) => p.onChoice(key as IntentChoice)}
+          testID="make-intent"
+        />
       </View>
-      <View style={styles.summary} accessible accessibilityLabel={`${name}, ${summary}`}>
-        <CrewEmblem seed={previewEmblemSeed(previewSeed)} size={56} />
+      <TagsInput tags={p.tags} onTags={p.onTags} ideas={p.tagIdeas} error={p.tagsError} testID="make-tag" />
+      <View style={[styles.block, styles.blockRow]}>
         <View style={styles.fill}>
-          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink]}>{name}</Text>
-          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: secondary }]}>{summary}</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink]}>Room for one more</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: secondary }]}>Solo people who opt in can find you. Crews of 6 or fewer.</Text>
+        </View>
+        <Toggle value={p.openToSolo} onValueChange={p.onOpenToSolo} accessibilityLabel="Room for one more" />
+      </View>
+      <View style={styles.block}>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: secondary }]}>{CONSENT_LINE}</Text>
+        <View style={styles.blockRow}>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold, TYPE.bodyStrong.fontFamily), styles.ink, styles.fill]}>{KEEP_ANONYMOUS_LABEL}</Text>
+          <Toggle value={p.keepAnonymous} onValueChange={p.onKeepAnonymous} accessibilityLabel={KEEP_ANONYMOUS_LABEL} />
         </View>
       </View>
     </>
@@ -363,6 +424,7 @@ const styles = StyleSheet.create({
   group: { gap: SPACE.sm },
   // FieldLabel carries the 4 pt left inset itself; the row adds only the right one (a counter beside it), not a second left.
   labelRow: { paddingRight: SPACE.xs },
+  previewLabelRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: SPACE.sm },
   toggleRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -403,24 +465,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  consent: {
+  nameRow: { flexDirection: 'row', alignItems: 'flex-start', gap: SPACE.md },
+  emblemColumn: { alignItems: 'center', gap: SPACE.xs },
+  // A filled block in the sheet (Room for one more, the consent), as board 02 A draws them.
+  block: {
     borderRadius: RADIUS.sheet,
     backgroundColor: SHEET_FILL,
     padding: SPACE.lg,
     gap: SPACE.md,
   },
-  consentLine: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: SPACE.md,
-  },
-  anon: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACE.md,
-    paddingTop: SPACE.md,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: COLOR.hairline,
-  },
-  summary: { flexDirection: 'row', alignItems: 'center', gap: SPACE.lg },
+  blockRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md },
 })

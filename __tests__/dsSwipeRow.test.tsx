@@ -51,6 +51,33 @@ beforeEach(() => {
 })
 
 describe('<SwipeRow>', () => {
+  describe('a long swipe commits the last action (Going, SCRUM-1074 option 1)', () => {
+    const laidOut = async (props: Partial<React.ComponentProps<typeof SwipeRow>>) => {
+      await render(row(props))
+      await act(async () => fireEvent(screen.getByTestId('s'), 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 390, height: 64 } } }))
+    }
+    it('past 60% of the row: the last action runs, with a second H.threshold, and the row goes back', async () => {
+      const onFullSwipe = jest.fn()
+      await laidOut({ onFullSwipe })
+      await drag(-(390 * 0.6 + 10))
+      expect(onFullSwipe).toHaveBeenCalledTimes(1)
+      expect(detent).toHaveBeenCalledTimes(2)
+      expect(withSpring).toHaveBeenLastCalledWith(0, expect.anything())
+    })
+    it('past halfway of the tray but short of 60%: it only opens', async () => {
+      const onFullSwipe = jest.fn()
+      await laidOut({ onFullSwipe })
+      await drag(-(W / 2 + 10))
+      expect(onFullSwipe).not.toHaveBeenCalled()
+      expect(withSpring).toHaveBeenLastCalledWith(-W, expect.anything())
+    })
+    it('control: without onFullSwipe the same long drag only opens (Banter rows never commit)', async () => {
+      await laidOut({})
+      await drag(-(390 * 0.6 + 10))
+      expect(withSpring).toHaveBeenLastCalledWith(-W, expect.anything())
+    })
+  })
+
   it('a hold opens the same tray with H.longPress, once, and does not open the thread', async () => {
     const onPress = jest.fn()
     const onOpenChange = jest.fn()

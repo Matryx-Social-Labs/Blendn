@@ -1,3 +1,4 @@
+import { eventDock } from '../lib/eventFacts'
 import { readFileSync } from "fs"
 import { join } from "path"
 
@@ -36,9 +37,11 @@ const GOING = read("app", "(tabs)", "going.tsx")
  * producer, not a string that happens to be nearby.
  */
 const CTA_STATE = (() => {
-  const at = DETAIL.indexOf("const ctaState: SceneCTAState")
-  return at === -1 ? "" : DETAIL.slice(at, DETAIL.indexOf("\n\n", at))
+  const at = DETAIL.indexOf("const ctaNow = ")
+  return at === -1 ? "" : DETAIL.slice(at, DETAIL.indexOf("\n", at))
 })()
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { sceneCtaState } = require("../lib/attendanceState") as typeof import("../lib/attendanceState")
 
 describe("the entry point to peer rating", () => {
   it("exists at all", () => {
@@ -48,10 +51,16 @@ describe("the entry point to peer rating", () => {
   it("only appears after the event has ended", () => {
     /*
      * `PLACEHOLDER_SCREENS.md`: "Only after the event ends — during the night a
-     * rating is leverage; afterwards it is reflection."
+     * rating is leverage; afterwards it is reflection." The page's CTA is the
+     * shared `sceneCtaState` (SCRUM-882), fed the attended flag.
      */
-    // A cancelled event has nothing to rate; otherwise the first question is whether it has ended.
-    expect(CTA_STATE).toMatch(/^const ctaState: SceneCTAState = cancelled\s*\? 'cancelled'\s*: isEnded/)
+    expect(CTA_STATE).toMatch(/sceneCtaState\(\{ phase: event \? attendancePhase\(event\) : 'upcoming', rsvpStatus, checkedIn: isCheckedIn, attended \}\)/)
+    const base = { rsvpStatus: null, checkedIn: true, attended: true }
+    expect(sceneCtaState({ ...base, phase: "live" })).not.toBe("rate")
+    expect(sceneCtaState({ ...base, phase: "upcoming" })).not.toBe("rate")
+    // A cancelled event has nothing to rate.
+    expect(sceneCtaState({ ...base, phase: "cancelled" })).toBe("cancelled")
+    expect(sceneCtaState({ ...base, phase: "ended" })).toBe("rate")
   })
 
   it("only appears to somebody who was actually there", () => {
@@ -62,14 +71,8 @@ describe("the entry point to peer rating", () => {
      * from its entire audience.
      */
     expect(DETAIL).toMatch(/const attended = !!checkInStatus\?\.status/)
-    /*
-     * The *ended* branch specifically. `isCheckedIn` appears legitimately
-     * further down the same expression — it is what selects "You're in" — so
-     * asserting it was absent from the whole thing was simply wrong, and the
-     * first version of this test failed for that reason rather than finding
-     * anything.
-     */
-    expect(CTA_STATE).toMatch(/isEnded\s*\n?\s*\?\s*\(attended \? 'rate' : 'ended'\)/)
+    expect(sceneCtaState({ phase: "ended", rsvpStatus: "going", checkedIn: false, attended: true })).toBe("rate")
+    expect(sceneCtaState({ phase: "ended", rsvpStatus: "going", checkedIn: false, attended: false })).toBe("ended")
   })
 
   it("reads the status the server was already sending, on every path that fills it", () => {
@@ -90,23 +93,18 @@ describe("the entry point to peer rating", () => {
   })
 
   it("is a live control", () => {
-    expect(CTA).toContain("rate: 'Rate who you met'")
-    // Nobody else there: the prompt is the night, not people.
-    expect(CTA).toMatch(/state === 'rate' && alone \? 'Rate the night'/)
-    expect(DETAIL).toMatch(/alone=\{checkInCount <= 1\}/)
-    // Nothing after the end is disabled: `rate` rates, `ended` offers tonight.
-    expect(CTA).toMatch(/const disabled = !onPress/)
-    // The CTA is never disabled now: a check-in is the pass's, so there is no busy state here (Flow 4).
-    expect(DETAIL).toMatch(/onPress=\{cancelled \? undefined : primaryActionPress\}/)
+    // The dock's words (Flow 4 E-B): the label, and the night when nobody else came.
+    const dock = (alone: boolean) => eventDock({ cta: 'rate', when: 'Sat 8 Nov · 6 PM', roomOpen: false, canInvite: true, between: null, alone })
+    expect(dock(false)?.action).toMatchObject({ label: 'Rate who you met', does: 'rate' })
+    expect(dock(true)?.action?.label).toBe('Rate the night')
+    expect(DETAIL).toMatch(/alone: checkInCount <= 1/)
+    // Nothing after the end is a dead end: `rate` rates, `ended` offers tonight.
+    expect(eventDock({ cta: 'ended', when: '', roomOpen: false, canInvite: true, between: null, alone: false })?.action?.does).toBe('tonight')
   })
 
-  it("sends somebody who wasn’t there to tonight, not to a dead pill", () => {
-    const press = DETAIL.slice(DETAIL.indexOf("const primaryActionPress"))
-    const rate = press.indexOf("'/rate/[eventId]'")
-    const tonight = press.indexOf("toTheOverlay(openBlendn)")
-    // After the rate branch: attending wins.
-    expect(rate).toBeGreaterThan(-1)
-    expect(tonight).toBeGreaterThan(rate)
+  it("sends somebody who wasn’t there to tonight, and somebody who was to the rating", () => {
+    expect(DETAIL).toMatch(/rate: \(\) => router\.push\(\{ pathname: '\/rate\/\[eventId\]'/)
+    expect(DETAIL).toMatch(/tonight: \(\) => toTheOverlay\(openBlendn\)/)
   })
 })
 

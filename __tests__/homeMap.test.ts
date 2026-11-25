@@ -6,7 +6,8 @@ import {
   buildingUnder,
   cameraMove,
   cityPickAction,
-  insideLastCircle,
+  boxAround,
+  insideLastBox,
   lightCandidates,
   lightSignature,
   liveAt,
@@ -14,14 +15,13 @@ import {
   locateRide,
   locateTarget,
   mapPadding,
-  MAX_QUERY_RADIUS_KM,
   pinsFor,
-  roundQuery,
   shadeOf,
   shouldFollowFix,
+  panSource,
   snapRecentre,
   tiltedZoom,
-  viewportQuery,
+  viewportBox,
   visibleCentreY,
   compassBelow,
 } from '../lib/homeMap'
@@ -36,24 +36,31 @@ import { MAP_THEME } from '../lib/mapTheme'
  * somebody may check in.
  */
 
-describe('a viewport becomes the lists\' own query (HM-CU02)', () => {
-  it('asks for its centre and a radius reaching its corners', () => {
-    // About 2.2 km corner to corner around central Bengaluru.
-    const q = viewportQuery([77.59, 12.96, 77.6, 12.975])
-    expect(q.lat).toBeCloseTo(12.9675, 4)
-    expect(q.lon).toBeCloseTo(77.595, 4)
-    expect(q.radius).toBeGreaterThan(0.9)
-    expect(q.radius).toBeLessThan(1.1)
+describe('a viewport is asked as its box (backend round 3, SCRUM-1086)', () => {
+  it('asks for the view it shows, rounded outward to ~110 m so the whole screen is covered and a nudge is the same question', () => {
+    expect(viewportBox([77.59012, 12.96087, 77.60011, 12.97534])).toEqual({ bbox: [77.59, 12.96, 77.601, 12.976] })
   })
 
-  it("never asks past the server’s bound, and never for nothing", () => {
-    expect(viewportQuery([70, 5, 90, 25]).radius).toBe(MAX_QUERY_RADIUS_KM)
-    expect(viewportQuery([77.5946, 12.9716, 77.5946, 12.9716]).radius).toBe(0.1)
+  it('never asks past the edge of the world (the server refuses it)', () => {
+    expect(viewportBox([-181.2, -91, 181.5, 92]).bbox).toEqual([-180, -90, 180, 90])
+  })
+
+  it('a box around a point reaches the given distance each way', () => {
+    const [w, s, e, n] = boxAround([77.6, 12.98], 1.5).bbox
+    expect((n - s) * 110.574).toBeGreaterThanOrEqual(3)
+    expect((e - w) * 111.32 * Math.cos((12.98 * Math.PI) / 180)).toBeGreaterThanOrEqual(3)
+    expect((w + e) / 2).toBeCloseTo(77.6, 2)
+    expect((s + n) / 2).toBeCloseTo(12.98, 2)
   })
 })
 
 const at = (minutesFromNow: number) => new Date(Date.now() + minutesFromNow * 60_000).toISOString()
-const event = (id: string, startIn: number, endIn: number, coords = { latitude: 12.97, longitude: 77.59 }) => ({
+const event = (
+  id: string,
+  startIn: number,
+  endIn: number,
+  coords: { latitude: number; longitude: number; venue?: { name: string } | null; venue_name?: string } = { latitude: 12.97, longitude: 77.59 }
+) => ({
   id,
   title: id,
   ...coords,
@@ -85,6 +92,16 @@ describe('the pins follow the segment (HM-CU04)', () => {
       ['quiet', 'venue', false, 1],
       ['busy', 'venue', true, 4],
     ])
+  })
+
+  it('an event pin carries its venue’s name (the linked venue first), for a chip that holds several', () => {
+    const named = pinsFor('events', { events: [event('a', 10, 60, { latitude: 12.97, longitude: 77.59, venue: { name: ' Church Street Social ' }, venue_name: 'Old name' }), event('b', 10, 60, { latitude: 12.97, longitude: 77.59, venue_name: 'Lupa' })], venues: [] })
+    expect(named.map((p) => p.place)).toEqual(['Church Street Social', 'Lupa'])
+  })
+
+  it('control: no venue from the server, no name; a venue pin is its own place', () => {
+    expect(pinsFor('events', { events: [event('a', 10, 60)], venues: [] })[0].place).toBeNull()
+    expect(pinsFor('places', data)[0].place).toBeNull()
   })
 
   it('reads a venue with no bucket (an older server) as quiet, never live', () => {
@@ -166,7 +183,7 @@ const component = code('components/home/HomeMap.tsx')
 
 describe('the check-in boundary is never drawn (HM-CU01, plan v2 §4)', () => {
   // The map's own layers live in two files: the component and its lit layers.
-  const layers = component + code('components/home/MapLitLayers.tsx')
+  const layers = component + code('components/home/MapLitLayers.tsx') + code('components/home/EventPiles.tsx')
   // Everything that decides what the map draws: the component, its layers, its lighting, its pure parts, its style and its theme.
   const drawing = [
     'components/home/HomeMap.tsx',
@@ -183,9 +200,23 @@ describe('the check-in boundary is never drawn (HM-CU01, plan v2 §4)', () => {
   })
 
   it('adds only extruded buildings and circles: no fill or line that could outline an area', () => {
+    // Near me's reach (N1) is the one exception: fixed rings round the person (a 20-minute walk, a short ride), never an event's.
     const types = [...layers.matchAll(/type="([a-z-]+)"/g)].map((m) => m[1])
     expect(types.length).toBeGreaterThan(0)
-    expect(types.filter((t) => t !== 'fill-extrusion' && t !== 'circle')).toEqual([])
+    // A pile's numerals are text (`symbol`, the `pile-count` layer), not an area.
+    const areas = types.filter((t) => t !== 'fill-extrusion' && t !== 'circle' && t !== 'symbol')
+    expect(types.filter((t) => t === 'symbol')).toHaveLength(1)
+    expect(layers).toMatch(/id="pile-count"\s+source="pins"\s+type="symbol"/)
+    const reach = [...layers.matchAll(/<Layer id="reach-[a-z-]+" type="([a-z-]+)"/g)].map((m) => m[1])
+    expect(reach).toEqual(['fill', 'line', 'fill', 'line'])
+    expect(areas).toEqual(reach)
+  })
+
+  it('the reach is drawn from where the person stands, with the fixed walk and ride, nothing off a payload', () => {
+    expect(component).toMatch(/reachShapes\(reachHere\)/)
+    // And only while sharing is on: the reach is the person's position (security review, 2026-11-05).
+    expect(component).toMatch(/const reachHere = sharing \? reach : null/)
+    expect(code('lib/homeMap.ts')).toMatch(/export function reachShapes\(c: LatLng, rideKm: number = 8\)/)
   })
 
   it('moves the camera only through one stop helper, every stop with the padding', () => {
@@ -200,8 +231,10 @@ describe('the check-in boundary is never drawn (HM-CU01, plan v2 §4)', () => {
     expect(component).toMatch(/const padding = mapPadding\(\{ topChrome, mapHeight, drawerTop: drawerSnapTop \}\)/)
   })
 
-  it("draws the person’s dot as a plain puck, never one that follows the compass (Android redrew the map forever)", () => {
-    expect(component).toMatch(/<NativeUserLocation mode="default" \/>/)
+  it("draws the person as our own violet mark, never the native puck (blue; on Android its compass mode redrew the map forever)", () => {
+    expect(component).toMatch(/<YouMark part="halo" fix=\{center\} sharing=\{sharing\} now=\{now\} \/>/)
+    expect(component).toMatch(/<YouMark part="dot" fix=\{center\} sharing=\{sharing\} now=\{now\} \/>/)
+    expect(component).not.toMatch(/NativeUserLocation/)
   })
 
   it('is tilted between 45° and 60°', () => {
@@ -212,13 +245,24 @@ describe('the check-in boundary is never drawn (HM-CU01, plan v2 §4)', () => {
 
   it("sizes circles only by the theme: the bucket’s glow, the fixed dot, the fixed ground glow — never anything a place carries", () => {
     const radii = [...layers.matchAll(/'circle-radius':\s*([^,\n]+(?:,[^\n]*?\])?)\s*,?\s*\n/g)].map((m) => m[1].trim().replace(/,$/, ''))
-    expect(radii.length).toBe(3)
+    // The piles (pulse-map 08): the glow, the dot (dimmed beside a focus), a number by its count, the focus and its halo.
+    expect(radii.length).toBe(6)
     for (const r of radii) {
-      expect(["['*', ['get', 'glow'], MAP_THEME.pin.glowPxPerStep]", 'MAP_THEME.pin.dotRadiusPx', 'GLOW_RADIUS']).toContain(r)
+      expect([
+        "['*', ['get', 'glow'], MAP_THEME.pin.glowPxPerStep]",
+        'lit ? MAP_THEME.pin.dimmed.radiusPx : MAP_THEME.pin.dotRadiusPx',
+        'BUBBLE_RADIUS as never',
+        'MAP_THEME.pin.glowPxPerStep * 2',
+        'MAP_THEME.pin.focus.radiusPx',
+        'radius',
+      ]).toContain(r)
     }
-    expect(layers).toMatch(/const GLOW_RADIUS = glowRadius\(\)/)
+    // A number's size reads its count of events (`n`, a pile's sum of its spots') and nothing a place carries.
+    expect(layers).toMatch(/const BUBBLE_RADIUS = \['step', \['get', 'n'\]/)
+    // At the browsed city's latitude (SCRUM-998), and nothing a place carries.
+    expect(layers).toMatch(/const radius = useMemo\(\(\) => glowRadius\(latitude\), \[latitude\]\)/)
     // The ground glow is the theme's metres at every zoom, read off nothing.
-    expect(JSON.stringify(glowRadius())).not.toMatch(/get|feature|properties/)
+    expect(JSON.stringify(glowRadius(13))).not.toMatch(/get|feature|properties/)
   })
 
   it('lights only public shapes: the building layer the basemap drew, or the pin', () => {
@@ -228,6 +272,37 @@ describe('the check-in boundary is never drawn (HM-CU01, plan v2 §4)', () => {
     expect(queried).toEqual(['layer'])
     expect(lighting).toMatch(/const layer = featureIds \? OWN_BUILDINGS_LAYER_ID : BUILDING_LAYER_ID/)
     expect(component).not.toMatch(/queryRenderedFeatures/)
+  })
+
+  it('keeps every name out from under the edge marker (part 2 drive: it covered a chip)', () => {
+    const lighting = code('components/home/useMapLighting.ts')
+    expect(lighting).toMatch(/const marker = edgeAt \? edgeMarker\(edgeAt, edge\?\.box \?\? zone, EDGE_BLOCK\) : null/)
+    expect(lighting).toMatch(/if \(marker\) blocked\.push\(/)
+    // The same box the marker itself keeps to.
+    expect(component).toMatch(/edge: edgeTarget \? \{ at: edgeTarget\.at, box: edgeBox \} : null/)
+    expect(component).toMatch(/box=\{edgeBox\}/)
+  })
+
+  it('keeps every name out from under the stale callout, on the side it is drawn (map-finish drive: a chip sat 3 pt off it)', () => {
+    const lighting = code('components/home/useMapLighting.ts')
+    // The side is the screen's one decision (from the marker as drawn, `onPlaced`); the names keep out of that side.
+    expect(lighting).toMatch(/if \(stale && dot\) blocked\.push\(staleCalloutBox\(dot, stale\.room, stale\.below\)\)/)
+    expect(component).toMatch(/stale: you\.kind === 'stale' \? \{ room: STALE_CALLOUT, below: staleBelow \} : null/)
+    expect(component).toMatch(/onPlaced=\{setEdgeRect\}/)
+    // Asked again when the dot goes grey, or the side changes (no camera move does either).
+    expect(lighting).toMatch(/\$\{stale \? `stale:\$\{stale\.below\}` : ''\}/)
+  })
+
+  it('the lead’s chip says the lead card’s own distance too (Android drive: 800 m over a card reading 850 m)', () => {
+    const lighting = code('components/home/useMapLighting.ts')
+    expect(component).toMatch(/knownDistance: focus\?\.pin && typeof focus\.km === 'number' \? \{ id: focus\.pin\.id, km: focus\.km \} : null/)
+    expect(lighting).toMatch(/withDistance\(when, p\.at, userAt, reading, knownKm\(p\)\)/)
+    expect(lighting).toMatch(/\$\{knownDistance \? `\$\{knownDistance\.id\}=\$\{knownDistance\.km\}` : ''\}/)
+  })
+
+  it('the edge marker says the lead card’s own distance (drive: the marker read 800 m over a card reading 850 m)', () => {
+    expect(component).toMatch(/const edgeKm = focus\?\.km \?\? /)
+    expect(code('app/(tabs)/events.tsx')).toMatch(/km: focusKm/)
   })
 
   it("keeps OpenFreeMap’s buildings extrudable, credited by our own corner credit (the native one is off)", () => {
@@ -240,16 +315,13 @@ describe('the check-in boundary is never drawn (HM-CU01, plan v2 §4)', () => {
 })
 
 describe('asking for pins (step 2 review)', () => {
-  it('rounds a view to ~100 m, so a nudge is the same question', () => {
-    expect(roundQuery({ lat: 12.971634, lon: 77.594612, radius: 1.23456 })).toEqual({ lat: 12.972, lon: 77.595, radius: 1.23 })
-  })
-
-  it('asks nothing for a view inside the circle already loaded, and asks for one that leaves it', () => {
-    const last = { lat: 12.97, lon: 77.59, radius: 2 }
-    expect(insideLastCircle(last, { lat: 12.971, lon: 77.591, radius: 1 })).toBe(true)
-    expect(insideLastCircle(last, { lat: 12.99, lon: 77.59, radius: 1 })).toBe(false)
-    expect(insideLastCircle(last, { lat: 12.97, lon: 77.59, radius: 3 })).toBe(false)
-    expect(insideLastCircle(null, last)).toBe(false)
+  it('asks nothing for a view inside the box already loaded, and asks for one that leaves it', () => {
+    const last = { bbox: [77.58, 12.96, 77.6, 12.98] as [number, number, number, number] }
+    expect(insideLastBox(last, { bbox: [77.585, 12.965, 77.595, 12.975] })).toBe(true)
+    expect(insideLastBox(last, last)).toBe(true)
+    expect(insideLastBox(last, { bbox: [77.585, 12.965, 77.61, 12.975] })).toBe(false)
+    expect(insideLastBox(last, { bbox: [77.57, 12.95, 77.61, 12.99] })).toBe(false)
+    expect(insideLastBox(null, last)).toBe(false)
   })
 
   it("backs off on refusals, doubling to a minute, and never earlier than the server’s Retry-After", () => {
@@ -266,24 +338,34 @@ describe('asking for pins (step 2 review)', () => {
 
   it('asks the segment showing, and only it', async () => {
     const api = { getEvents: jest.fn(() => ok({ events })), getVenues: jest.fn(() => ok({ venues })) }
-    const q = { lat: 12.97, lon: 77.59, radius: 1 }
+    const q = { bbox: [77.58, 12.96, 77.6, 12.98] as [number, number, number, number] }
     const places = await loadPins('places', q, api, 50)
-    expect(places).toEqual({ kind: 'pins', pins: [expect.objectContaining({ id: 'v', kind: 'venue', glow: 2 })], truncated: false })
-    expect(api.getVenues).toHaveBeenCalledWith({ ...q, limit: 50, sortBy: 'distance' })
+    expect(places).toEqual({ kind: 'pins', pins: [expect.objectContaining({ id: 'v', kind: 'venue', glow: 2 })], total: 1, truncated: false })
+    // A capped page is the venues nearest the middle of the view, not the box's first by name: its centre and a
+    // distance sort go beside the box (the order only; a pin never reads the distance that comes back).
+    expect(api.getVenues).toHaveBeenCalledWith({ ...q, lat: 12.97, lon: 77.59, sortBy: 'distance', limit: 50 })
     expect(api.getEvents).not.toHaveBeenCalled()
     const evts = await loadPins('events', q, api, 50)
-    expect(evts).toEqual({ kind: 'pins', pins: [expect.objectContaining({ id: 'e', kind: 'event', live: true })], truncated: false })
+    // Events keep the server's time order: the box alone.
+    expect(api.getEvents).toHaveBeenCalledWith({ ...q, limit: 50 })
+    expect(evts).toEqual({ kind: 'pins', pins: [expect.objectContaining({ id: 'e', kind: 'event', live: true })], total: 1, truncated: false })
   })
 
-  it('says a full page may not be all there is, so it never counts as covering the circle (review M2)', async () => {
-    const api = { getEvents: jest.fn(), getVenues: jest.fn(() => ok({ venues: [...venues, { ...venues[0], id: 'w' }] })) }
-    const q = { lat: 12.97, lon: 77.59, radius: 1 }
-    expect(await loadPins('places', q, api, 2)).toMatchObject({ kind: 'pins', truncated: true })
-    expect(await loadPins('places', q, api, 3)).toMatchObject({ kind: 'pins', truncated: false })
+  it("takes the server's total in view, so a capped page says how many it left out and never counts as covering the box", async () => {
+    const two = [...venues, { ...venues[0], id: 'w' }]
+    const q = { bbox: [77.58, 12.96, 77.6, 12.98] as [number, number, number, number] }
+    const counted = { getEvents: jest.fn(), getVenues: jest.fn(() => ok({ venues: two, pagination: { totalCount: 130 } })) }
+    expect(await loadPins('places', q, counted, 50)).toMatchObject({ kind: 'pins', total: 130, truncated: true })
+    const all = { getEvents: jest.fn(), getVenues: jest.fn(() => ok({ venues: two, pagination: { totalCount: 2 } })) }
+    expect(await loadPins('places', q, all, 2)).toMatchObject({ kind: 'pins', total: 2, truncated: false })
+    // An older server with no total: a full page may not be all there is (review M2).
+    const bare = { getEvents: jest.fn(), getVenues: jest.fn(() => ok({ venues: two })) }
+    expect(await loadPins('places', q, bare, 2)).toMatchObject({ kind: 'pins', total: 2, truncated: true })
+    expect(await loadPins('places', q, bare, 3)).toMatchObject({ kind: 'pins', total: 2, truncated: false })
   })
 
   it('reports a refusal as rate-limited (with its wait) and anything else as failed, never throwing', async () => {
-    const q = { lat: 12.97, lon: 77.59, radius: 1 }
+    const q = { bbox: [77.58, 12.96, 77.6, 12.98] as [number, number, number, number] }
     const refused = { getEvents: jest.fn(), getVenues: jest.fn(() => Promise.resolve({ success: false, errorCode: 'RATE_LIMITED', retryAfter: 12 })) }
     expect(await loadPins('places', q, refused, 50)).toEqual({ kind: 'rate_limited', retryAfter: 12 })
     const broken = { getEvents: jest.fn(() => Promise.reject(new Error('offline'))), getVenues: jest.fn() }
@@ -459,10 +541,22 @@ describe('your position sits in the middle of the map you can see (owner, TestFl
     expect(snapRecentre({ now: 1_400, inFlight: pick, following: false, fix: null })).toEqual({ kind: 'read' })
   })
 
-  it('re-centres once per settled snap, with a centre and the new padding, never per drag frame', () => {
-    expect(component).toMatch(/useEffect\(\(\) => \{\s*const before = shown\.current\s*shown\.current = \{ padding, mapHeight \}/)
+  it('pans: the camera takes what is now where the moved point must come from, by the same offset (SCRUM-1090)', () => {
+    // Camera centre at (200, 300); the middle moves 70 pt down: the camera reads its centre 70 pt up.
+    expect(panSource([200, 300], [200, 300], [200, 370])).toEqual([200, 230])
+    // A fix off the middle (180, 310) going to (200, 370): the offset is the fix's, not the middle's.
+    expect(panSource([200, 300], [180, 310], [200, 370])).toEqual([180, 240])
+    // Control: nothing to move, nothing read elsewhere.
+    expect(panSource([200, 300], [200, 370], [200, 370])).toEqual([200, 300])
+  })
+
+  it('re-centres once per settled snap, with a centre and the camera\'s own padding, never per drag frame', () => {
+    // Not at full (SCRUM-1090): the drawer covers the map, which stays as it was for when it comes back down.
+    expect(component).toMatch(/useEffect\(\(\) => \{\s*(\/\/[^\n]*\n\s*)*if \(!mapShown\) return\s*const before = shown\.current\s*shown\.current = \{ padding, mapHeight \}/)
     // The old centre is read with the padding AND the map height it was drawn with (review M3).
-    expect(component).toMatch(/unproject\(\[width \/ 2, visibleCentreY\(before\.padding, before\.mapHeight\)\]\)/)
+    expect(component).toMatch(/\[width \/ 2, visibleCentreY\(before\.padding, before\.mapHeight\)\]/)
+    // A pan in the camera's own padding (SCRUM-1090): never the new snap's.
+    expect(component).toMatch(/stop\(\{ center: centred as \[number, number\], padding: camPad\.current, duration: settle \}\)/)
     // A tick later, and dropped if a move started meanwhile: a pick in the same commit wins (review M1).
     expect(component).toMatch(/const startedAt = moves\.current[\s\S]*?setTimeout\(\(\) => \{\s*if \(moves\.current !== startedAt\) return/)
     expect(component).toMatch(/\.then\(\(centred\) => \{\s*if \(moves\.current !== startedAt\) return/)
@@ -471,17 +565,36 @@ describe('your position sits in the middle of the map you can see (owner, TestFl
     // Keyed on the settled snap's top, not the animated drawer value.
     expect(code('components/home/HomeShell.tsx')).toMatch(/drawerSnapTop=\{points\[snap\]\}/)
     // The map waits for its own height, so the first frame is centred too.
-    expect(code('components/home/HomeShell.tsx')).toMatch(/\{mapHeight !== null && mapPainted \? \(\s*<HomeMap/)
+    expect(code('components/home/HomeShell.tsx')).toMatch(/\{mapHeight !== null && mapPainted && fallbackCentre \? \(\s*<HomeMap/)
   })
 })
 
 describe('"my location"', () => {
-  it('goes to the fix at the map\'s own zoom and tilt', () => {
+  it('goes back to the default view: the fix, north up, at the map\'s own zoom and tilt (owner 2026-11-20)', () => {
     expect(locateTarget({ latitude: 49.2354, longitude: 6.9965 })).toEqual({
       center: [6.9965, 49.2354],
       zoom: MAP_THEME.camera.zoom,
       pitch: MAP_THEME.camera.pitch,
+      bearing: 0,
     })
+    expect(MAP_THEME.camera.bearing).toBe(0)
+  })
+
+  it('turns the map north up on every move that carries a heading: the ease, the jump and a drawer snap re-issuing it', () => {
+    // A rotated map stayed rotated after "my location" (owner, phone): no stop carried a heading.
+    expect(component).toMatch(/lastMove\.current = \{ to: move\.to, zoom: move\.at\?\.zoom, pitch: move\.at\?\.pitch, bearing: move\.at\?\.bearing, until/)
+    expect(component).toMatch(/const at = move\.at && \{ pitch: move\.at\.pitch, zoom: tiltedZoom\([^)]*\), \.\.\.bearingOf\(move\.at\.bearing\) \}/)
+    expect(component).toMatch(/stop\(\{ zoom: view\.current\.zoom, pitch: 0, \.\.\.bearingOf\(bearing\), padding: pad, duration: 0 \}\)/)
+    expect(component).toMatch(/\.\.\.bearingOf\(plan\.move\.bearing\)/)
+  })
+
+  it('has one way back: the round glyph always, and the "Browsing … · Back to you" banner goes through the same locate', () => {
+    // The pill (#589) is gone (owner 2026-11-20): it did not bring the map back on the phone.
+    expect(code('components/home/LocateButton.tsx')).not.toMatch(/Back to you|back\?: boolean|map-back-to-you/)
+    expect(component).not.toMatch(/back=\{/)
+    // The banner's action picks the phone's own city with `here`, which HomeMap turns into `locate()` (`cityPickAction`).
+    expect(code('app/(tabs)/events.tsx')).toMatch(/onSwitch=\{\(city\) => bannerActions\.current\.chooseCity\(\{ city \}, true\)\}/)
+    expect(component).toMatch(/if \(action === 'locate'\) \{\s*seenPick\.current = cityPick\.n\s*locate\(\)/)
   })
 
   it('has nowhere to go without a fix: the button asks for one instead', () => {
@@ -522,7 +635,7 @@ describe('"my location"', () => {
     expect(shell).toMatch(/<HomeDrawer\s+y=\{drawerTop\}/)
     expect(shell).toMatch(/drawerTop=\{drawerTop\}/)
     expect(code('components/home/HomeDrawer.tsx')).not.toMatch(/const y = useSharedValue/)
-    expect(code('components/home/LocateButton.tsx')).toMatch(/locateRide\(drawerTop\.get\(\), drawer\)/)
+    expect(code('components/home/LocateButton.tsx')).toMatch(/locateRide\(drawerTop\.get\(\), drawer, lift \? lift\.get\(\) : 0\)/)
   })
 
   it('is wired: a tap with no fix asks through the Pulse, and every move takes the one camera rule', () => {
@@ -532,7 +645,7 @@ describe('"my location"', () => {
     // MapLibre iOS jumps (drive, 2026-10-15): flat first, or a tilted camera put Bengaluru a kilometre from
     // Saarbrücken; the zoom last, once tilted, or it lands a step out. And the opening zoom set again once tilted.
     expect(component).toMatch(
-      /const \{ zoom, pitch \} = move\.at \?\? MAP_THEME\.camera\s*stop\(\{ zoom: view\.current\.zoom, pitch: 0, [^}]*\}\)\s*stop\(\{ center: move\.to, pitch, padding: pad, duration: 0 \}\)\s*stop\(\{ center: move\.to, zoom, padding: pad, duration: 0 \}\)/
+      /const \{ zoom, pitch \} = move\.at \?\? MAP_THEME\.camera\s*const bearing = move\.at\?\.bearing\s*stop\(\{ zoom: view\.current\.zoom, pitch: 0, [^}]*\}\)\s*stop\(\{ center: move\.to, pitch, padding: pad, duration: 0 \}\)\s*stop\(\{ center: move\.to, zoom, padding: pad, duration: 0 \}\)/
     )
     // Once: a style that loads again does not send the camera back to where it opened (review L2).
     expect(component).toMatch(/if \(!ready\.current\) \{\s*ready\.current = true[\s\S]{0,300}stop\(\{ center: opening, zoom: MAP_THEME\.camera\.zoom, padding: shown\.current\.padding, duration: 0 \}\)/)
@@ -547,13 +660,14 @@ describe('"my location"', () => {
     // The Pulse hands over its own location flow; it never grows a second one.
     expect(code('app/(tabs)/events.tsx')).toMatch(/requestLocation: requestLocationIfNeeded/)
     const pulse = code('app/(tabs)/events.tsx')
-    expect(pulse).toMatch(/setSelection\(\{ city, source: 'chosen' \}\)\s*setCityPick\(\(p\) => \(\{ n: p\.n \+ 1, here \}\)\)/)
+    expect(pulse).toMatch(/setSelection\(next\)\s*setCityPick\(\(p\) => \(\{ n: p\.n \+ 1, here \}\)\)/)
     // Where you stand is a choice of you, not of a city centre (review L5); the picker's rows are picks.
-    expect(pulse).toMatch(/onSwitch=\{\(city\) => chooseCity\(city, true\)\}/)
+    expect(pulse).toMatch(/onSwitch=\{\(city\) => bannerActions\.current\.chooseCity\(\{ city \}, true\)\}/)
     expect(pulse).toMatch(/onChoose=\{chooseCity\}/)
     const picker = code('components/pulse/CityPicker.tsx')
-    expect(picker).toMatch(/choose\(deviceCity, true\)/)
-    expect(picker.match(/choose\(item\.city, false\)/g)).toHaveLength(2)
+    expect(picker).toMatch(/choose\(\{ city: deviceCity, slug: null \}, true\)/)
+    expect(picker).toMatch(/const pick = \(\) => choose\(\{ city: item\.city, slug: item\.slug \?\? null \}, false\)/)
+    expect(picker.match(/onPress=\{pick\}/g)).toHaveLength(2)
   })
 })
 

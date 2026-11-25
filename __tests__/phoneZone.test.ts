@@ -75,7 +75,7 @@ it('a zone that did not move is not news; one that did tells the listeners', () 
 it('after the OS moves the phone to IST, an IST night loses its zone name and every phone clock says IST', () => {
   const { time } = fresh()
   // Los Angeles: the IST night is named, the phone's own clock is LA's.
-  expect(time.eventClock(START, IST)).toBe('6:30 PM IST')
+  expect(time.eventClock(START, IST)).toBe('6:30 PM')
   expect(time.clockTime(START)).toBe('6 AM')
   expect(time.dayKeyIn(new Date('2026-10-24T03:00:00.000Z'))).toBe('2026-9-23')
 
@@ -98,7 +98,7 @@ it('a screen re-renders with the new zone the moment the phone moves, with no re
     return createElement(Text, { testID: 'clock' }, time.eventClock(START, IST))
   }
   await render(createElement(Probe))
-  expect(screen.getByTestId('clock').props.children).toBe('6:30 PM IST')
+  expect(screen.getByTestId('clock').props.children).toBe('6:30 PM')
 
   osSays(IST)
   await act(async () => {

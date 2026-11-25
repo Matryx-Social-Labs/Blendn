@@ -1,6 +1,6 @@
 /**
  * Contact support: the card says what the draft carries (app, phone, account), Email support opens the mail app with
- * it, no mail app is an info toast with the address, the address copies, and the Help centre failing is a toast.
+ * it, no mail app is an info toast with the address, the address copies, and the Help center failing is a toast.
  */
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native'
 import * as WebBrowser from 'expo-web-browser'
@@ -63,12 +63,12 @@ it('the address copies, and the toast names it', async () => {
   await waitFor(() => expect(mockToast).toHaveBeenCalledWith(`Copied ${SUPPORT_EMAIL}`, 'success'))
 })
 
-it('the Help centre opens in the app, and a refusal is a toast', async () => {
+it('the Help center opens in the app, and a refusal is a toast', async () => {
   await render(<SupportScreen />)
-  fireEvent.press(screen.getByLabelText(/^Help centre/))
+  fireEvent.press(screen.getByLabelText(/^Help center/))
   await waitFor(() => expect(WebBrowser.openBrowserAsync).toHaveBeenCalledWith(BLENDN_LINKS.help, expect.any(Object)))
   ;(WebBrowser.openBrowserAsync as jest.Mock).mockRejectedValueOnce(new Error('no browser'))
-  fireEvent.press(screen.getByLabelText(/^Help centre/))
+  fireEvent.press(screen.getByLabelText(/^Help center/))
   await waitFor(() => expect(mockToast).toHaveBeenCalledWith("That page didn’t open. Try again.", 'error'))
 })
 
@@ -92,5 +92,46 @@ describe('at the accessibility sizes', () => {
     const address = screen.getByText(SUPPORT_EMAIL)
     expect(address.props.numberOfLines).toBe(1)
     expect(address.props.adjustsFontSizeToFit).toBe(true)
+  })
+})
+
+// Board remaining-screens 04 A: a topic first; it becomes the email's subject, so the right person reads it first.
+const mockPlus = { gated: false }
+const mockGetMyPlus = jest.fn(async () => ({ success: true, data: { gated: mockPlus.gated, active: false } }))
+jest.mock('../lib/apiClient', () => ({ apiClient: { getMyPlus: () => mockGetMyPlus() } }))
+
+describe('the topic', () => {
+  const subjectOf = (open: jest.SpyInstance) => decodeURIComponent(String(open.mock.calls[0][0])).match(/subject=([^&]*)/)?.[1]
+
+  it('asks what it is about, with five topics where Blend’n+ is sold, none picked', async () => {
+    mockPlus.gated = true
+    await render(<SupportScreen />)
+    await screen.findByRole('button', { name: 'Blend’n+ or a payment' })
+    expect(screen.getByText('What is it about?')).toBeTruthy()
+    for (const t of ['My account', 'A person or a room', 'Blend’n+ or a payment', 'Something broke', 'Something else'])
+      expect(screen.getByRole('button', { name: t, selected: false })).toBeTruthy()
+    expect(screen.getByText('Your email includes these')).toBeTruthy()
+  })
+
+  it('never names Blend’n+ where it is not sold (the free app): four topics', async () => {
+    mockPlus.gated = false
+    await render(<SupportScreen />)
+    await waitFor(() => expect(mockGetMyPlus).toHaveBeenCalled())
+    expect(screen.queryByRole('button', { name: 'Blend’n+ or a payment' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Something else' })).toBeTruthy()
+  })
+
+  it('a picked topic is the subject line; tapping it again clears it back to the plain subject', async () => {
+    const open = jest.spyOn(Linking, 'openURL').mockResolvedValue(true)
+    await render(<SupportScreen />)
+    await fireEvent.press(screen.getByRole('button', { name: 'A person or a room' }))
+    fireEvent.press(screen.getByTestId('support-email'))
+    await waitFor(() => expect(open).toHaveBeenCalledTimes(1))
+    expect(subjectOf(open)).toBe('Blend’n support: A person or a room')
+    await fireEvent.press(screen.getByRole('button', { name: 'A person or a room' }))
+    fireEvent.press(screen.getByTestId('support-email'))
+    await waitFor(() => expect(open).toHaveBeenCalledTimes(2))
+    expect(decodeURIComponent(String(open.mock.calls[1][0])).match(/subject=([^&]*)/)?.[1]).toBe('Blend’n support')
+    open.mockRestore()
   })
 })

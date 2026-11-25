@@ -1,85 +1,56 @@
-import { useState } from 'react'
-import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { useEffect, useRef, useState } from 'react'
+import { AccessibilityInfo, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { Button } from '../ds/Button'
-import { MonoRun, PresenceDot } from '../ds/MonoFamily'
-import { font, IC_HAIRLINE, PRESSED_WASH, useBoldText, useIncreaseContrast } from '../ds/shared'
+import { font, IC_HAIRLINE, useBoldText, useIncreaseContrast } from '../ds/shared'
 import { Icon } from '../ui/Icon'
 import { Material } from '../ui/Material'
 import { useToastDock } from '../toastDock'
 import type { VenueDetail } from '../../lib/apiClient'
-import { COLOR, FONT_FAMILY, ICON, MATERIAL, MAX_FONT_SCALE, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
+import { COLOR, ICON, MAX_FONT_SCALE, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { useSessionTime } from '../../lib/useSessionTime'
-import { againLabel, spokenLeft, type DockMode } from '../../lib/venuePage'
+import { againLabel, liveDockLine, venueDockLine, type DockMode } from '../../lib/venuePage'
+import { DockRow } from '../ds/DockRow'
+import { Swap } from '../motion/Swap'
 
-/** The live pill is 36 tall (Flow 11 `livePill`); its chips 22 and 24. */
-const PILL_HEIGHT = 36
-const ENDING_CHIP = 22
-const EXTEND_CHIP = 24
+const ENDING_SAID = 'Your live time is ending. Open it to extend.'
 
 /**
- * "● Live · Toit · 32 min": minutes only, stepped once a minute; in the last
- * five minutes mm:ss, a solid Ending chip and an Extend chip; "staying" with
- * Stay. Monochrome even then: the chip carries the warning colour, not the
- * pill. It sits on the dock's glass, so it is a fill, never glass on glass.
- * A leaf: it ticks itself.
+ * While you are live (venue live pill B, owner 2026-11-17, SCRUM-1063): the event page's checked-in line. "● Live ·
+ * 2h 45m" over "Extend or stop" on the left, which opens the live sheet (the time, Extend, and Stop with the neutral
+ * hold); Open the room on the right. In the last five minutes "● Ending · 4:59" over "Extend". Leaving is the sheet's
+ * Stop: there is no Leave button. A leaf: it ticks itself, so the page above does not re-render with the clock.
  */
-function LivePill({ name, live, onZero, onPress }: { name: string; live: VenueDetail['live']; onZero: () => void; onPress: () => void }) {
-  const bold = useBoldText()
-  const contrast = useIncreaseContrast()
+function LiveLine({ name, live, onZero, onPress, onOpenRoom }: { name: string; live: VenueDetail['live']; onZero: () => void; onPress: () => void; onOpenRoom?: () => void }) {
   const time = useSessionTime(live, onZero)
   const ending = time?.kind === 'ending'
+  // The last five minutes are news: said once as they start (both platforms; the line's label ticks, so no live region).
+  const wasEnding = useRef(ending)
+  useEffect(() => {
+    if (ending && !wasEnding.current) AccessibilityInfo.announceForAccessibility(ENDING_SAID)
+    wasEnding.current = ending
+  }, [ending])
   return (
-    <Pressable
-      testID="venue-live-pill"
-      onPress={() => {
-        // The Extend chip's cue: the sheet it opens has Extend ready.
+    <DockRow
+      testID="venue-live"
+      {...liveDockLine(time, name)}
+      onPressState={() => {
+        // The Extend cue: the sheet it opens has Extend ready.
         if (ending) H.primary()
         onPress()
       }}
-      android_ripple={{ color: PRESSED_WASH.android }}
-      accessibilityRole="button"
-      accessibilityLabel={`Live at ${name}${time ? `, ${spokenLeft(time)}` : ''}`}
-      accessibilityHint="Opens your live time"
-      style={[styles.pill, contrast && IC_HAIRLINE]}
-    >
-      <PresenceDot kind="live" />
-      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} numberOfLines={1} style={[font('meta', bold, FONT_FAMILY.brand[500]), styles.ink, styles.pillText]}>
-        {`Live · ${name}`}
-        {time ? (
-          <>
-            {' · '}
-            {time.kind === 'stay' ? (
-              'staying'
-            ) : (
-              <Text style={[font('meta', bold, FONT_FAMILY.mono[ending ? 700 : 500]), styles.tabular]}>
-                <MonoRun text={String(time.kind === 'minutes' ? time.left : time.clock)} />
-              </Text>
-            )}
-            {time.kind === 'minutes' ? ' min' : ''}
-          </>
-        ) : null}
-      </Text>
-      {ending ? (
-        <>
-          <View style={styles.endingChip} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} style={[font('caption', bold, FONT_FAMILY.brand[700]), styles.onWhite]}>Ending</Text>
-          </View>
-          <View style={styles.extendChip} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} style={[font('caption', bold, FONT_FAMILY.brand[700]), styles.onWhite]}>Extend</Text>
-          </View>
-        </>
-      ) : null}
-    </Pressable>
+      stateHint="Opens your live time"
+      action={onOpenRoom ? { label: 'Open the room', kind: 'lit', size: 'md', icon: 'radio', onPress: onOpenRoom, testID: 'venue-open-room' } : undefined}
+    />
   )
 }
 
 /**
  * The dock: one slot, by where you are and what the venue answers (Flow 11
  * `venueBoard`, Places.html). Go live; Go live again in one tap with Pick
- * another time under it; the live pill with Open the room and Leave; the
+ * another time under it; live, the checked-in line with Open the room; the
  * hand-off to an event's check-in; or the server's sentence when going live is
  * not possible here. The client never draws a boundary: it asks the server.
  *
@@ -96,7 +67,6 @@ export function VenueDock({
   onPickAnother,
   onOpenRoom,
   onPill,
-  onLeave,
   onEvent,
   onZero,
   onHeight,
@@ -110,8 +80,8 @@ export function VenueDock({
   onGoLive: () => void
   onPickAnother: () => void
   onOpenRoom: () => void
+  /** The live line's state: opens the live sheet. */
   onPill: () => void
-  onLeave: () => void
   onEvent: () => void
   onZero: () => void
   /** The dock's height as laid out: the page scrolls clear of it. */
@@ -121,6 +91,7 @@ export function VenueDock({
   const contrast = useIncreaseContrast()
   // The Android snackbar stands above the dock.
   const [height, setHeight] = useState(0)
+  const line = (mode.kind === 'goLive' && !mode.again) || mode.kind === 'handoff'
   // The toast adds the bottom inset itself, and this dock's height already holds it.
   useToastDock(Math.max(0, height - insets.bottom))
   return (
@@ -131,35 +102,51 @@ export function VenueDock({
         setHeight(e.nativeEvent.layout.height)
       }}
       testID="venue-dock"
-      style={[styles.dock, { paddingBottom: Math.max(insets.bottom, SPACE.lg) }, contrast && IC_HAIRLINE]}
+      style={[
+        styles.dock,
+        // Flow 4 V-A: the one-line dock (`.dock4`) is a straight bar, 12 over the row, the home indicator's room under it;
+        // a closed place is its note (`.dock4.note`, 16 over). Live keeps the standard dock: venue live pill B is drawn in
+        // it (16 over, the 24 gutter both sides) with an md action, which leaves "Ending · 4:59" whole at 360.
+        line ? [styles.line, { paddingBottom: Math.max(insets.bottom, SPACE.md) }] : mode.kind === 'closed' ? [styles.line, styles.note, { paddingBottom: Math.max(insets.bottom, SPACE.md) }] : { paddingBottom: Math.max(insets.bottom, SPACE.lg) },
+        contrast && IC_HAIRLINE,
+      ]}
     >
-      {mode.kind === 'goLive' ? (
-        <>
-          <Button
-            label={mode.again ? againLabel(mode.again) : 'Go live'}
-            kind="primary"
-            loading={busy}
-            onPress={onGoLive}
-            testID="venue-go-live"
+      {/* A mode is one part: going live, the live row, the hand-off and a closed place fade into each other (motion audit M27). */}
+      <Swap id={mode.kind === 'goLive' && mode.again ? 'again' : mode.kind} style={styles.modes}>
+        {mode.kind === 'goLive' && !mode.again ? (
+          <DockRow
+            testID="venue-dock-row"
+            {...venueDockLine('goLive')}
+            action={{ ...venueDockLine('goLive').action, onPress: onGoLive, loading: busy, pressHaptic: () => H.primary(), testID: 'venue-go-live' }}
           />
-          {mode.again ? <Button label="Pick another time" kind="tertiary" size="md" onPress={onPickAnother} disabled={busy} testID="venue-pick-another" /> : null}
-        </>
-      ) : null}
-      {mode.kind === 'live' ? (
-        <View style={styles.liveRow}>
-          <LivePill name={name} live={live} onZero={onZero} onPress={onPill} />
-          {live.chatGroupId ? (
-            <Button label="Open the room" kind="lit" size="md" icon="radio" onPress={onOpenRoom} style={styles.grow} testID="venue-open-room" />
-          ) : (
-            <View style={styles.grow} />
-          )}
-          <Button label="Leave" kind="secondary" size="md" onGlass onPress={onLeave} testID="venue-leave" />
-        </View>
-      ) : null}
-      {mode.kind === 'handoff' ? (
-        <Button label={eventTitle ? `Check in to ${eventTitle} instead` : 'Check in to the event'} kind="primary" onPress={onEvent} testID="venue-handoff" />
-      ) : null}
-      {mode.kind === 'closed' ? <ClosedLine message={mode.message} reason={mode.reason} /> : null}
+        ) : null}
+        {mode.kind === 'goLive' && mode.again ? (
+          <>
+            <Button
+              label={mode.again ? againLabel(mode.again) : 'Go live'}
+              kind="primary"
+              loading={busy}
+              onPress={onGoLive}
+              testID="venue-go-live"
+            />
+            {mode.again ? <Button label="Pick another time" kind="tertiary" size="md" onPress={onPickAnother} disabled={busy} testID="venue-pick-another" /> : null}
+          </>
+        ) : null}
+        {mode.kind === 'live' ? (
+          // The board's row is 56 (`.dr` min-height), the md action centred in it.
+          <View style={styles.liveRow}>
+            <LiveLine name={name} live={live} onZero={onZero} onPress={onPill} onOpenRoom={live.chatGroupId ? onOpenRoom : undefined} />
+          </View>
+        ) : null}
+        {mode.kind === 'handoff' ? (
+          <DockRow
+            testID="venue-dock-row"
+            {...venueDockLine('handoff')}
+            action={{ ...venueDockLine('handoff').action, onPress: onEvent, accessibilityHint: eventTitle ? `Opens ${eventTitle}` : undefined, testID: 'venue-handoff' }}
+          />
+        ) : null}
+        {mode.kind === 'closed' ? <ClosedLine message={mode.message} reason={mode.reason} /> : null}
+      </Swap>
     </Material>
   )
 }
@@ -169,13 +156,13 @@ function ClosedLine({ message, reason }: { message: string; reason: string | nul
   const bold = useBoldText()
   return (
     <View testID="venue-closed" accessible accessibilityLabel={[message, reason].filter(Boolean).join(' ')} style={styles.closed}>
-      <Icon name="map-pin-off" size={ICON.control} color={COLOR.textSecondary} />
+      <Icon name="eye-off" size={ICON.control} color={COLOR.textSecondary} />
       <View style={styles.closedWords}>
-        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink]}>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('group', bold), styles.ink]}>
           {message}
         </Text>
         {reason ? (
-          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('note', bold), styles.secondary]}>
             {reason}
           </Text>
         ) : null}
@@ -196,25 +183,12 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: RADIUS.sheet,
     borderTopRightRadius: RADIUS.sheet,
   },
-  liveRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm, minHeight: SIZE.primary },
-  grow: { flex: 1 },
-  pill: {
-    height: PILL_HEIGHT,
-    flexShrink: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACE.sm,
-    paddingHorizontal: SPACE.md,
-    borderRadius: RADIUS.capsule,
-    backgroundColor: MATERIAL.fillOnGlass,
-  },
-  pillText: { flexShrink: 1 },
-  extendChip: { height: EXTEND_CHIP, justifyContent: 'center', paddingHorizontal: SPACE.md, borderRadius: RADIUS.capsule, backgroundColor: COLOR.textPrimary },
-  endingChip: { height: ENDING_CHIP, justifyContent: 'center', paddingHorizontal: SPACE.sm, borderRadius: RADIUS.capsule, backgroundColor: COLOR.warning },
+  modes: { gap: SPACE.xs },
+  liveRow: { minHeight: SIZE.primary, justifyContent: 'center' },
   ink: { color: COLOR.textPrimary },
   secondary: { color: COLOR.textSecondary },
-  closed: { flexDirection: 'row', alignItems: 'flex-start', gap: SPACE.md, minHeight: SIZE.primary, paddingVertical: SPACE.xs },
-  closedWords: { flex: 1, gap: SPACE.xxs },
-  onWhite: { color: COLOR.ink },
-  tabular: { fontVariant: ['tabular-nums'] },
+  closed: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md },
+  closedWords: { flex: 1 },
+  line: { paddingTop: SPACE.md, paddingLeft: SPACE.gutter, paddingRight: SPACE.lg, borderTopLeftRadius: 0, borderTopRightRadius: 0 },
+  note: { paddingTop: SPACE.lg, paddingRight: SPACE.gutter },
 })

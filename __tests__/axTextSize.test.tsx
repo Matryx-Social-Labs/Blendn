@@ -34,11 +34,11 @@ import { SectionHeader } from '../components/ds/SectionHeader'
 import { AX_FONT_SCALE, CONTROL_FONT_CAP } from '../components/ds/shared'
 import { TabBar } from '../components/ds/TabBar'
 import { BanterRow } from '../components/banter/BanterParts'
-import { SceneCTA, sceneCtaLabel } from '../components/scene/SceneSections'
+import { DockRow } from '../components/ds/DockRow'
 import { NAVIGATOR_ROUTES, TextSizeBoundary } from '../components/TextSizeBoundary'
 import { MAX_FONT_SCALE, SPACE } from '../lib/design/tokens'
 import { ChatHeader } from '../components/chat/ChatHeader'
-import { MatchOpenerCard, NudgeLine, RevealLine, SayHi } from '../components/chat/DmParts'
+import { MatchOpenerCard, RevealLine, SayHi } from '../components/chat/DmParts'
 import { RevealBar } from '../components/ds/RevealBar'
 import { TextArea, TextField } from '../components/ds/TextField'
 import { Composer } from '../components/ds/Composer'
@@ -122,9 +122,9 @@ describe('at AX XXXL (fontScale 3.571)', () => {
     expect(oneLiners(screen.toJSON())).toEqual([])
   })
 
-  it('the Scene’s Go button: its label stops at the control cap (the pill is summed into SCENE_CTA_HEIGHT, a constant)', async () => {
-    await render(<SceneCTA state="rsvp" onPress={jest.fn()} />)
-    expect(screen.getByText(sceneCtaLabel('rsvp')).props.maxFontSizeMultiplier).toBe(CONTROL_FONT_CAP)
+  it('the event dock’s action: its label stops at the control cap inside its 52 pt pill (Flow 4 E-B)', async () => {
+    await render(<DockRow state="Free" sub="Sat 8 Nov · 6 PM" action={{ label: 'I’m going', kind: 'primary', onPress: jest.fn() }} />)
+    expect(screen.getByText('I’m going').props.maxFontSizeMultiplier).toBe(CONTROL_FONT_CAP)
     expect(clipped(screen.toJSON())).toEqual([])
   })
 
@@ -150,13 +150,12 @@ describe('at AX XXXL (fontScale 3.571)', () => {
           onMore={jest.fn()}
           moreLabel="More"
         />
-        <MatchOpenerCard you={face} them={face} title="You both said yes." body="Say something about the night." />
+        <MatchOpenerCard you={face} them={face} title="You both waved" body="Say something about the night." />
         <SayHi line="Say hi to Tumbling Moose." onPress={jest.fn()} />
-        <NudgeLine text="Tumbling Moose asked to know who you are" />
       </View>
     )
     expect(screen.getByText('Both anonymous').props.maxFontSizeMultiplier).toBe(CONTROL_FONT_CAP)
-    expect(screen.getByText('You both said yes.').props.maxFontSizeMultiplier).toBe(MAX_FONT_SCALE.heading)
+    expect(screen.getByText('You both waved').props.maxFontSizeMultiplier).toBe(MAX_FONT_SCALE.heading)
     expect(screen.getByText('Say hi to Tumbling Moose.').props.numberOfLines).toBeUndefined()
     expect(clipped(screen.toJSON())).toEqual([])
     expect(uncapped(screen.toJSON())).toEqual([])
@@ -165,7 +164,7 @@ describe('at AX XXXL (fontScale 3.571)', () => {
   it('the DM’s reveal bar and a form field’s name stop at their caps (D-3, D-8: EMAIL drew at 3.571x over a 1.3x input; now its label cap)', async () => {
     await render(
       <View>
-        <RevealBar you={{ name: 'Asha', face: { kind: 'creature', pseudonym: 'Tumbling Moose' } as never }} them={{ name: 'Tumbling Moose', face: { kind: 'creature', pseudonym: 'Tumbling Moose' } as never }} state="youOnly" />
+        <RevealBar you={{ name: 'Asha', face: { kind: 'creature', pseudonym: 'Tumbling Moose' } as never }} them={{ name: 'Tumbling Moose', face: { kind: 'creature', pseudonym: 'Tumbling Moose' } as never }} state="mine" />
         <TextField label="EMAIL" value="" onChangeText={jest.fn()} />
       </View>
     )
@@ -300,7 +299,7 @@ describe('a 360 dp phone at font scale 1.3 (Android, RC drive 3: text one word p
   const flat = (id: string) => StyleSheet.flatten(screen.getByTestId(id, hidden).props.style)
   beforeEach(at360)
 
-  it('the room’s anonymity banner: the sentence keeps six ems of measure, and Show who I am wraps under it rather than squeeze it ("You’re / anony / mous")', async () => {
+  it('the room’s anonymity banner: the sentence keeps six ems of measure, and Show who you are wraps under it rather than squeeze it ("You’re / anony / mous")', async () => {
     await render(<VisibilityBanner state="anon" onAction={jest.fn()} testID="b" />)
     const body = screen.getByTestId('b-body', hidden)
     expect(StyleSheet.flatten(body.props.style)).toMatchObject({ flexDirection: 'row', flexWrap: 'wrap' })

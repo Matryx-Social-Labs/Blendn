@@ -6,8 +6,11 @@ import type {
   Crew,
   CrewIntent,
   CrewInvite,
+  CrewLink,
+  CrewLinkPreview,
   CrewReportReason,
   CrewsAtEvent,
+  HiddenCrew,
 } from './crews'
 
 /*
@@ -33,7 +36,7 @@ export const crewsApi = {
    * My crews, and a page of the invites waiting (`invitesPagination`: `{ limit, hasMore, nextCursor, totalCount }`, newest 200 at
    * most). With no `cursor` the first page of 50; `crews` is not paged. A server before the paging sends none: all the invites, no more.
    */
-  myCrews(cursor?: string | null): Promise<ApiResponse<{ crews: Crew[]; invites: CrewInvite[]; invitesPagination?: InvitesPagination }>> {
+  myCrews(cursor?: string | null): Promise<ApiResponse<{ crews: Crew[]; invites: CrewInvite[]; invitesPagination?: InvitesPagination; tagIdeas?: string[] }>> {
     return apiClient.queuedRequest(`/api/mobile/crews?limit=${INVITES_PAGE}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`)
   },
 
@@ -79,13 +82,27 @@ export const crewsApi = {
     )
   },
 
+  /** Crews 5A, the owner only: members, invites, the chat (closed for good) and open Mixes end. Nobody is pushed; anyone else gets 404. */
+  end(crewId: string): Promise<ApiResponse<{ ended: true }>> {
+    return apiClient.queuedRequest(`/api/mobile/crews/${enc(crewId)}`, { method: 'DELETE' }, true, 2)
+  },
+
   leave(crewId: string, myId: string): Promise<ApiResponse<{ dissolved: boolean }>> {
     return apiClient.queuedRequest(`/api/mobile/crews/${enc(crewId)}/members/${enc(myId)}`, { method: 'DELETE' }, true, 2)
   },
 
-  /** "We're here": checks nobody in. `repeated: true` after the first tap of the night. */
-  here(crewId: string, eventId: string): Promise<ApiResponse<{ notified: number; repeated: boolean }>> {
-    return apiClient.queuedRequest(`/api/mobile/crews/${enc(crewId)}/here`, post({ eventId }), true, 2)
+  /**
+   * "Going together" (crews 4-A1): marks the event's next night for the crew — a line in the crew chat and one push per crew
+   * per night, by the server. 404 not a member / an event you can't take part in, 403 crews off, 400 no night left, 429 three
+   * nights told today. `repeated`: it was already planned (no second line or push).
+   */
+  plan(crewId: string, eventId: string): Promise<ApiResponse<{ planned: boolean; repeated: boolean; occurrenceId: string }>> {
+    return apiClient.queuedRequest(`/api/mobile/crews/${enc(crewId)}/plans`, post({ eventId }), true, 2)
+  },
+
+  /** Takes the plan back (its planner or the owner). Refunds nothing against the day's three. */
+  unplan(crewId: string, eventId: string): Promise<ApiResponse<{ planned: false }>> {
+    return apiClient.queuedRequest(`/api/mobile/crews/${enc(crewId)}/plans`, { method: 'DELETE', body: JSON.stringify({ eventId }) }, true, 2)
   },
 
   report(crewId: string, report: { reason: CrewReportReason; description?: string }): Promise<ApiResponse<{ reported: true }>> {
@@ -98,28 +115,64 @@ export const crewsApi = {
     )
   },
 
-  /** As one of your crews here (`asCrewId`), or as yourself. */
-  likeCrew(eventId: string, crewId: string, asCrewId?: string): Promise<ApiResponse<{ liked: true; blend: BlendRef | null }>> {
+  /**
+   * Wave for your crew (board crews/05-room A; admin #1003): as one of your crews here (`asCrewId`), or as yourself. Shares
+   * the like's refusals and its 30 a day; waving twice is waving once; a crew you blocked is 404. `blend` when it was mutual.
+   */
+  waveCrew(eventId: string, crewId: string, asCrewId?: string): Promise<ApiResponse<{ liked: true; waved: true; blend: BlendRef | null }>> {
     return apiClient.queuedRequest(
-      `/api/mobile/events/${enc(eventId)}/crews/${enc(crewId)}/like`,
+      `/api/mobile/events/${enc(eventId)}/crews/${enc(crewId)}/wave`,
       post(asCrewId ? { asCrewId } : {}),
       true,
       2
     )
   },
 
+  /** Block a crew for good (its card is gone from your rooms; its members aren't told). 404 your own, ended or not there. */
+  hideCrew(crewId: string): Promise<ApiResponse<{ hidden: true }>> {
+    return apiClient.queuedRequest(`/api/mobile/crews/${enc(crewId)}/hide`, post(), true, 2)
+  },
+
+  unhideCrew(crewId: string): Promise<ApiResponse<{ hidden: false }>> {
+    return apiClient.queuedRequest(`/api/mobile/crews/${enc(crewId)}/hide`, { method: 'DELETE' }, true, 2)
+  },
+
+  /** Settings → Blocked, the crews: newest first. */
+  hiddenCrews(page: number, limit: number): Promise<ApiResponse<{ crews: HiddenCrew[]; pagination: { page: number; limit: number; totalCount: number; totalPages: number; hasMore: boolean } }>> {
+    return apiClient.queuedRequest(`/api/mobile/crews/hidden?page=${page}&limit=${limit}`)
+  },
+
   /**
-   * A person, on your crew's behalf. `handle` is the deck's room handle. The
-   * answer is `{ liked: true }` whatever the server found out about them —
-   * it tells you nothing about the person, so nothing here may either.
+   * Wave at a person for your crew (admin #1007): `handle` is their room handle. A refusal about THEM is
+   * `{ sent: true, mutual: false }`, the same as a wave that stood: it tells you nothing about the person, so nothing here may.
    */
-  likePersonAsCrew(eventId: string, handle: string, asCrewId: string): Promise<ApiResponse<{ liked: true; blend: BlendRef | null }>> {
+  wavePersonAsCrew(eventId: string, handle: string, asCrewId: string): Promise<ApiResponse<{ sent: true; mutual: boolean; blend?: BlendRef }>> {
     return apiClient.queuedRequest(
-      `/api/mobile/events/${enc(eventId)}/matches/likes`,
-      post({ userId: handle, asCrewId }),
+      `/api/mobile/events/${enc(eventId)}/waves`,
+      post({ toUserId: handle, asCrewId }),
       true,
       2
     )
+  },
+
+  /** S7: a link into your crew, once, for 7 days (10 a day: 429). Share `url`. */
+  makeLink(crewId: string): Promise<ApiResponse<{ token: string; url: string; expiresAt: string }>> {
+    return apiClient.queuedRequest(`/api/mobile/crews/${enc(crewId)}/links`, post(), true, 2)
+  },
+
+  /** The invite card behind a link. Every dead link is one 404 (`INVITE_UNAVAILABLE`). `member`: you are in it already. */
+  link(token: string): Promise<ApiResponse<CrewLink>> {
+    return apiClient.queuedRequest(`/api/mobile/crews/links/${enc(token)}`)
+  },
+
+  /** Signed out: whose link and which crew, nothing more. */
+  linkPreview(token: string): Promise<ApiResponse<CrewLinkPreview>> {
+    return apiClient.queuedRequest(`/api/mobile/crews/links/${enc(token)}/preview`, {}, false)
+  },
+
+  /** Joins, and makes you and whoever shared it friends. Nothing is sent before the consent (`revealConsent`). */
+  joinByLink(token: string, consent: { revealConsent: true; keepMeAnonymous: boolean }): Promise<ApiResponse<{ crewId: string; chatGroupId: string }>> {
+    return apiClient.queuedRequest(`/api/mobile/crews/links/${enc(token)}`, post(consent), true, 2)
   },
 
   /**

@@ -6,17 +6,15 @@ import { AchievementBadge } from '../../components/ds/AchievementBadge'
 import { Button } from '../../components/ds/Button'
 import { CountTicks } from '../../components/ds/CountTicks'
 import { CrewCard, CrewRow, type CrewCardCrew } from '../../components/ds/CrewCard'
-import { CrewStrip, type StripCrew, type TellState } from '../../components/ds/CrewStrip'
+import { CrewStrip, type StripCrew } from '../../components/ds/CrewStrip'
 import { ExpiryPrompt, NotLiveNotice } from '../../components/ds/ExpiryPrompt'
 import { GoLiveSheet, type GoLiveChoice, type GoLiveRefusal } from '../../components/ds/GoLiveSheet'
 import { InAppBanner, type InAppBannerProps } from '../../components/ds/InAppBanner'
 import { LikingAsChip } from '../../components/ds/LikingAsChip'
 import { LinkPreviewCard, type LinkPreview, type ShareEvent } from '../../components/ds/LinkPreviewCard'
 import { ManageStatusRow, type PlusStatus } from '../../components/ds/ManageStatusRow'
-import { NeverForSalePanel } from '../../components/ds/NeverForSalePanel'
 import { NotificationRow, type NotificationRowProps } from '../../components/ds/NotificationRow'
 import { OfferCard } from '../../components/ds/OfferCard'
-import { OverlapLine } from '../../components/ds/OverlapLine'
 import { NightPassRow, PlanCard, PlanList } from '../../components/ds/PlanCard'
 import { RevealSheet, RevealSide, type RevealPerson } from '../../components/ds/RevealSheet'
 import { SessionSheet, type SessionTime } from '../../components/ds/SessionSheet'
@@ -61,11 +59,9 @@ export default function DsP4Preview() {
         <GoLive />
         <Session />
         <Expiry />
-        <Overlap />
         <Badges />
         <Tonight />
         <Plans />
-        <NeverForSale />
         <Manage />
         <Offers />
         <Share />
@@ -164,7 +160,7 @@ function LiveRequest() {
       <NotificationRow
         visual={{ type: 'creature', pseudonym: 'Quiet Heron' }}
         title="Quiet Heron asked to join your car"
-        context="The Board · Vinyl Night · 5h"
+        context="The Lobby · Vinyl Night · 5h"
         fresh={!state}
         state={state}
         doneText="You’re in the car"
@@ -243,30 +239,30 @@ function Crews() {
   const [liked, setLiked] = useState(false)
   const two = { ...NEBULA, here: 2 }
   return (
-    <Section title="CrewCard · CrewRow" note="Counts, never people · Like: H.like · liked keeps its check">
+    <Section title="CrewCard · CrewRow" note="Counts, never people · Wave: H.select · waved keeps its check">
       <Cell label="default" testID="ds-crewcard-default">
-        <CrewCard crew={NEBULA} like={{ onPress: noop }} onMore={noop} onPress={noop} />
+        <CrewCard crew={NEBULA} wave={{ state: 'idle', onPress: noop }} onPress={noop} />
       </Cell>
-      <Cell label="2 here · live Like" testID="ds-crewcard-here">
-        <CrewCard crew={two} like={{ liked, onPress: () => setLiked(true) }} onMore={noop} onPress={noop} />
+      <Cell label="2 here · live Wave" testID="ds-crewcard-here">
+        <CrewCard crew={two} wave={{ state: liked ? 'waved' : 'idle', onPress: () => setLiked(true) }} onPress={noop} />
       </Cell>
-      <Cell label="liked" testID="ds-crewcard-liked">
-        <CrewCard crew={two} like={{ liked: true, onPress: noop }} onMore={noop} />
+      <Cell label="waved" testID="ds-crewcard-liked">
+        <CrewCard crew={two} wave={{ state: 'waved', onPress: noop }} />
       </Cell>
-      <Cell label="liking as my crew" testID="ds-crewcard-as">
-        <CrewCard crew={two} like={{ as: 'Orbit', onPress: noop }} onMore={noop} />
+      <Cell label="sending as my crew" testID="ds-crewcard-as">
+        <CrewCard crew={two} wave={{ state: 'idle', as: 'Orbit', onPress: noop }} />
       </Cell>
-      <Cell label="liked for my crew" testID="ds-crewcard-likedas">
-        <CrewCard crew={two} like={{ as: 'Orbit', liked: true, onPress: noop }} onMore={noop} />
+      <Cell label="waved at my crew · Wave back" testID="ds-crewcard-likedas">
+        <CrewCard crew={two} wave={{ state: 'waveBack', as: 'Orbit', onPress: noop }} />
       </Cell>
-      <Cell label="no Like · your own crew" testID="ds-crewcard-own">
-        <CrewCard crew={{ ...NEBULA, here: 3 }} onMore={noop} />
+      <Cell label="no Wave · your own crew" testID="ds-crewcard-own">
+        <CrewCard crew={{ ...NEBULA, here: 3 }} />
       </Cell>
       <Cell label="with overlap" testID="ds-crewcard-overlap">
-        <CrewCard crew={two} overlap="Both crews: Techno heads · out for friendship" like={{ onPress: noop }} onMore={noop} />
+        <CrewCard crew={two} overlap="Both crews: Techno heads · out for friendship" wave={{ state: 'idle', onPress: noop }} />
       </Cell>
       <Cell label="compact" testID="ds-crewcard-compact">
-        <CrewCard crew={two} compact like={{ onPress: noop }} onMore={noop} />
+        <CrewCard crew={two} compact wave={{ state: 'idle', onPress: noop }} />
       </Cell>
       <Cell label="rows · 40 emblem · the crew badge (G4)" testID="ds-crewrow" style={styles.surface}>
         <CrewRow name="Nebula" emblemSeed="nebula" size={4} onPress={noop} />
@@ -277,45 +273,35 @@ function Crews() {
   )
 }
 
+const mate = (name: string, you = false) => ({ userId: `h-${name}`, name, photo: null, you })
 const strip = (o: Partial<StripCrew> = {}): StripCrew => ({
   id: 'n',
   name: 'Nebula',
   emblemSeed: 'nebula',
-  size: 4,
-  here: 2,
+  size: 5,
+  in: 3,
+  people: [mate('Priya'), mate('Arjun'), mate('Sagar', true)],
   context: 'Vinyl Night · Toit',
-  told: 'no',
   ...o,
 })
 
 function Strips() {
-  const [told, setTold] = useState<TellState>('no')
-  useEffect(() => {
-    if (told !== 'sending') return
-    const timer = setTimeout(() => setTold('yes'), SERVER_MS)
-    return () => clearTimeout(timer)
-  }, [told])
+  const twelve = ['Thiruvananthapuram', 'प्रियंका', 'Zoë', 'Priya', 'Arjun', 'Meera', 'Kabir', 'Ravi'].map((n) => mate(n))
   const kinds: [string, StripCrew[], boolean?][] = [
-    ['alone', [strip({ here: 1 })]],
-    ['two', [strip()]],
-    ['all', [strip({ here: 4, context: 'Crew Nebula is here', told: 'yes' })]],
-    ['here', [strip({ context: 'Crew Nebula is here', told: 'yes' })]],
-    ['sent', [strip({ told: 'yes' })]],
-    ['repeated', [strip({ told: 'already' })]],
+    ['named', [strip()]],
+    ['all', [strip({ in: 5, people: [...strip().people, mate('Kabir'), mate('Meera')] })]],
+    ['count only', [strip({ in: 2, people: [] })]],
+    ['twelve', [strip({ name: 'Indiranagar Sunrise Run Club Cre', size: 12, in: 9, people: [...twelve, mate('Sagar', true)] })]],
     ['off', [strip()], true],
-    ['twoCrews', [strip(), strip({ id: 'q', name: 'Quiz Night Irregulars', emblemSeed: 'quiz', size: 5, here: 1 })]],
+    ['twoCrews', [strip(), strip({ id: 'q', name: 'Quiz Night Irregulars', emblemSeed: 'quiz', size: 4, in: 2, people: [mate('Zoë'), mate('Sagar', true)] })]],
   ]
   return (
-    <Section title="CrewStrip" note="After your own check-in · We’re here: H.primary, H.success on OK · a count rising: none">
+    <Section title="CrewStrip" note="After your own check-in · who is in with the crew, by first name · a count rising: none">
       {kinds.map(([label, crews, off]) => (
-        <Cell key={label} label={label} testID={`ds-crewstrip-${label}`}>
-          <CrewStrip crews={crews} off={off} onTell={noop} />
+        <Cell key={label} label={label} testID={`ds-crewstrip-${label.replace(' ', '-')}`}>
+          <CrewStrip crews={crews} off={off} />
         </Cell>
       ))}
-      <Cell label="live · tap We’re here" testID="ds-crewstrip-live">
-        <CrewStrip crews={[strip({ told })]} onTell={() => setTold('sending')} />
-        <Button kind="tertiary" size="sm" label="Reset" onPress={() => setTold('no')} />
-      </Cell>
     </Section>
   )
 }
@@ -339,7 +325,7 @@ function LikingAs() {
       <Cell label="beside the heading · tap to switch" testID="ds-likingas-inplace">
         <View style={styles.headingRow}>
           <Text style={styles.headingSmall}>Crews here · 2</Text>
-          <Text style={styles.note}>Liking as</Text>
+          <Text style={styles.note}>Sending as</Text>
           <LikingAsChip crew={asCrew ? { name: 'Nebula', emblemSeed: 'nebula' } : null} pseudonym="Cosmic Panda" onPress={() => setAsCrew(!asCrew)} />
         </View>
       </Cell>
@@ -483,7 +469,7 @@ const SESSIONS: Record<string, { time: SessionTime; extended?: boolean }> = {
 function Session() {
   const [open, setOpen] = useState<string | null>(null)
   return (
-    <Section title="SessionSheet" note="Extend in the last 5 minutes: H.primary, H.success on OK · End confirms (H.destructive on the confirm)">
+    <Section title="SessionSheet" note="Extend in the last 5 minutes: H.primary, H.success on OK · End asks with the neutral hold (H.tick ×3, H.commit)">
       {Object.keys(SESSIONS).map((k) => (
         <Open key={k} id={`session-${k}`} label={`Open: ${k}`} onPress={() => setOpen(k)} />
       ))}
@@ -519,47 +505,6 @@ function Expiry() {
 }
 
 // ── Matching v2 (Flow 14) ───────────────────────────────────────────────────
-
-function Overlap() {
-  return (
-    <Section title="OverlapLine" note="The server’s sentence, never a score · 2 labels before a reveal, 4 after · nothing when there’s nothing">
-      <Cell label="before a reveal · 2 labels" testID="ds-overlap-pre">
-        <OverlapLine
-          line="You both picked Filter coffee over Chai"
-          labels={[
-            { text: 'Filter coffee', shared: true },
-            { text: 'Friendship', shared: true },
-            { text: 'Kannada', shared: true },
-          ]}
-        />
-      </Cell>
-      <Cell label="after a reveal · 4 labels" testID="ds-overlap-post">
-        <OverlapLine
-          revealed
-          line="Both from Tamil Nadu"
-          labels={[
-            { text: 'Tamil Nadu', shared: true },
-            { text: 'Filter coffee', shared: true },
-            { text: 'CSK', shared: true },
-            { text: 'Friendship', shared: true },
-          ]}
-        />
-      </Cell>
-      <Cell label="weak · one shared, one not" testID="ds-overlap-weak">
-        <OverlapLine line="You both picked Cubbon Park over Lalbagh" labels={[{ text: 'Cubbon Park', shared: true }, { text: 'Leo' }]} />
-      </Cell>
-      <Cell label="intent only" testID="ds-overlap-intent">
-        <OverlapLine line="Both here to make friends" labels={[{ text: 'Friendship', shared: true }]} />
-      </Cell>
-      <Cell label="crew · crew-held" testID="ds-overlap-crew">
-        <OverlapLine line="Both crews: Techno heads · out for friendship" labels={[{ text: 'Techno heads', shared: true }, { text: 'Friendship', shared: true }]} />
-      </Cell>
-      <Cell label="none · the card has no line" testID="ds-overlap-none">
-        <OverlapLine line={null} />
-      </Cell>
-    </Section>
-  )
-}
 
 function Badges() {
   const [meaning, setMeaning] = useState<string | null>(null)
@@ -690,16 +635,6 @@ function Plans() {
   )
 }
 
-function NeverForSale() {
-  return (
-    <Section title="NeverForSalePanel" note="Before the plans · a heading and a list">
-      <Cell label="default" testID="ds-neverforsale">
-        <NeverForSalePanel />
-      </Cell>
-    </Section>
-  )
-}
-
 const STATUS: [PlusStatus, string][] = [
   ['launch', 'Everything’s unlocked in Bengaluru until 30 Nov. Nothing to pay, nothing renews.'],
   ['trial', '14 days of Blend’n+, free, until 29 Oct. Nothing renews: choose a plan when it ends, or don’t.'],
@@ -822,7 +757,7 @@ function Previews() {
     ['A1 · the app', { template: 'app' }],
   ]
   return (
-    <Section title="LinkPreviewCard" note="1200 × 630 · everything that must survive in the centre 630 · the title in og:title">
+    <Section title="LinkPreviewCard" note="1200 × 630 · everything that must survive in the center 630 · the title in og:title">
       {cards.map(([label, preview]) => (
         <Cell key={label} label={label} testID={`ds-og-${label.split(' ')[0].toLowerCase()}-${label.split(' · ')[1].replace(/\s+/g, '-')}`}>
           <LinkPreviewCard preview={preview} width={w} />

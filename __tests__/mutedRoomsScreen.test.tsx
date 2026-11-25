@@ -3,10 +3,11 @@
  * own. Read from the Banter's own `GET /chat/groups`, page by page; scale from none to hundreds.
  */
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native'
+import { StyleSheet } from 'react-native'
 
 jest.mock('@react-native-async-storage/async-storage', () => require('@react-native-async-storage/async-storage/jest/async-storage-mock'))
 jest.mock('../lib/logger', () => ({ Logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() } }))
-jest.mock('expo-router', () => ({ router: { back: jest.fn(), push: jest.fn() } }))
+jest.mock('expo-router', () => ({ router: { back: jest.fn(), push: jest.fn(), navigate: jest.fn() }, useFocusEffect: (effect: () => void) => require('react').useEffect(effect, [effect]) }))
 jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 59, bottom: 34, left: 0, right: 0 }) }))
 jest.mock('../lib/useAuth', () => ({ useAuth: () => ({ user: { id: 'u_me' } }) }))
 jest.mock('../lib/apiClient', () => ({
@@ -24,6 +25,7 @@ import { router } from 'expo-router'
 import MutedRoomsScreen from '../app/muted-rooms'
 import NotificationSettingsScreen from '../app/notification-settings'
 import { apiClient } from '../lib/apiClient'
+import { COLOR } from '../lib/design/tokens'
 import { MUTED_PAGE_SIZE, MUTED_SCAN_PAGES, resetMutedRooms } from '../lib/mutedRooms'
 import { markRoomLeft, rememberRoomMute, resetRoomMembership } from '../lib/roomMembership'
 
@@ -78,9 +80,15 @@ describe('Notifications screen: the muted rooms group', () => {
 })
 
 describe('Muted rooms screen', () => {
-  it('says there are none, with how rooms get here', async () => {
+  // Board remaining-screens 05 A: bell-off lit in the violet hue, both ways to mute named, one neutral way on.
+  it('says there are none, names both ways to mute, and Go to the Banter opens it', async () => {
     await render(<MutedRoomsScreen />)
     expect(await screen.findByText('No muted rooms')).toBeTruthy()
+    expect(screen.getByText('Mute a room from its info, or swipe a chat left in the Banter. It lands here, so you can turn it back on.')).toBeTruthy()
+    const well = StyleSheet.flatten(screen.getByTestId('muted-rooms-empty-well', { includeHiddenElements: true }).props.style)
+    expect(well.backgroundColor).toBe(COLOR.selectionVioletFill)
+    await fireEvent.press(screen.getByRole('button', { name: 'Go to the Banter' }))
+    expect(router.navigate).toHaveBeenCalledWith('/(tabs)/chat')
   })
 
   it('says it did not load, and Try again reads again', async () => {

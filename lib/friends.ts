@@ -33,6 +33,18 @@ export interface FriendRequest {
   id: string
   person: FriendPerson
   createdAt: string
+  /**
+   * How it came (admin #998): your link, or a match where you both revealed. `null` for a request made before the source was
+   * recorded, and then no source is said at all: a guess was wrong for every match.
+   */
+  via?: 'link' | 'match' | null
+}
+
+/** "From your link" / "From a match", only when the server said which (Flow 7 4-A); null otherwise, never a guess. */
+export function requestSource(request: Pick<FriendRequest, 'via'>): string | null {
+  if (request.via === 'link') return 'From your link'
+  if (request.via === 'match') return 'From a match'
+  return null
 }
 
 /** The server's page meta (admin #724). Absent on an older server: read as one page, the whole list. */
@@ -47,6 +59,8 @@ export interface PageMeta {
 export interface FriendsPayload {
   friends: Friend[]
   count: number
+  /** `?order=name` only: the whole list's heads and their counts (read through `lettersFrom`). */
+  letters?: unknown
   pagination?: PageMeta
 }
 
@@ -70,6 +84,18 @@ export interface FriendProfile {
   age: number | null
   location: string | null
   interests: { id: string; name: string; slug: string; icon: string | null }[]
+  /** The names of `interests` you hold too (SCRUM-896), as `GET /users/:id` sends them. Absent from an older server: nothing is outlined. */
+  sharedInterests?: string[]
+  /**
+   * What `GET /friends/:id` sends for the about line and the badges, as `GET /users/:id` does for somebody you may see (a friend
+   * always may). Absent from an older server: the page then simply draws less (YOU-04).
+   */
+  work_field?: string | null
+  languages?: string[]
+  homeState?: string | null
+  sign?: string | null
+  /** `{ kind, label }[]`, read through `parseBadges`; the key is absent when they turned badges off. */
+  badges?: unknown
   friendsSince: string
   /** An open DM, if there is one. */
   conversationId: string | null
@@ -89,7 +115,7 @@ export interface FriendInvite {
 export function inviteCta(state: FriendState): { label: string; action: 'ask' | 'open' | 'share' | null } {
   switch (state) {
     case 'none':
-      return { label: 'Send friend request', action: 'ask' }
+      return { label: 'Add friend', action: 'ask' }
     case 'incoming':
       return { label: 'Accept friend request', action: 'ask' }
     case 'requested':
@@ -97,7 +123,7 @@ export function inviteCta(state: FriendState): { label: string; action: 'ask' | 
     case 'friends':
       return { label: 'View profile', action: 'open' }
     case 'self':
-      return { label: 'Share your link', action: 'share' }
+      return { label: 'Share my link', action: 'share' }
   }
 }
 
@@ -109,11 +135,11 @@ export function inviteLine(state: FriendState): string {
     case 'friends':
       return 'You’re friends.'
     case 'requested':
-      return 'Your request is waiting. You’ll hear when they accept.'
+      return 'Request sent. You’ll hear when they accept.'
     case 'incoming':
       return 'They asked to be your friend.'
     case 'none':
-      return 'Wants you as a friend on Blend’n.'
+      return 'invited you to be friends on Blend’n'
   }
 }
 

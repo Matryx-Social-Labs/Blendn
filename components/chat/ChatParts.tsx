@@ -1,14 +1,16 @@
 import { Image } from 'expo-image'
-import { useEffect } from 'react'
-import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { useEffect, useRef } from 'react'
+import { AccessibilityInfo, Pressable, StyleSheet, Text, View } from 'react-native'
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated'
 import { scheduleOnRN } from 'react-native-worklets'
 
 import { COLOR, EASING, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { useReducedMotion } from '../../lib/motion'
-import { BUBBLE } from '../ds/chatShared'
+import { compactCount } from '../../lib/format'
+import { BUBBLE, plural } from '../ds/chatShared'
 import { PresenceDot } from '../ds/MonoFamily'
-import { CONTROL_FONT_CAP, font, minTarget, useBoldText } from '../ds/shared'
+import { NewPill } from '../ds/NewPill'
+import { CONTROL_FONT_CAP, font, minTarget, useAnnounced, useBoldText } from '../ds/shared'
 import { glassContentsIn, glassRiseIn, popOut } from '../motion/presence'
 import { Icon } from '../ui/Icon'
 import { Material } from '../ui/Material'
@@ -62,11 +64,32 @@ export function LoadOlder({ busy, onPress }: { busy: boolean; onPress: () => voi
 }
 
 /**
- * Scroll to newest (Flow 5 room #15): a glass capsule above the composer,
- * the count of what arrived while you read back, in Geist Mono. No haptic.
+ * Scroll to newest (Flow 5 room #15): a glass capsule above the composer. Once
+ * something arrives while you read back it is the DS `NewPill`, centred:
+ * "48 new messages", the count in Geist Mono (compact past 999, said whole),
+ * announced once. Nothing moves the list but a tap on it. No haptic.
  */
 export function NewestChip({ count, bottom, onPress }: { count: number; bottom: number; onPress: () => void }) {
-  const bold = useBoldText()
+  const said = useRef(false)
+  const words = count === 1 ? 'new message' : 'new messages'
+  useEffect(() => {
+    if (!count || said.current) return
+    said.current = true
+    AccessibilityInfo.announceForAccessibility(plural(count, 'new message'))
+  }, [count])
+  if (count) {
+    return (
+      <NewPill
+        direction="down"
+        count={compactCount(count)}
+        label={words}
+        bottom={bottom}
+        accessibilityLabel={`${plural(count, 'new message')}, jump to the newest`}
+        onPress={onPress}
+        testID="chat-newest"
+      />
+    )
+  }
   return (
     <Animated.View entering={glassRiseIn} exiting={popOut} style={[styles.chipPlace, { bottom }]}>
       <Pressable
@@ -74,17 +97,11 @@ export function NewestChip({ count, bottom, onPress }: { count: number; bottom: 
         onPress={onPress}
         hitSlop={(minTarget() - CHIP) / 2}
         accessibilityRole="button"
-        accessibilityLabel={count ? `${count} new, jump to the newest` : 'Jump to the newest message'}
+        accessibilityLabel="Jump to the newest message"
       >
         <Material role="control" style={styles.chip}>
           <Animated.View entering={glassContentsIn} style={styles.chipContents}>
             <Icon name="arrow-down" size={ICON.control} />
-            {count ? (
-              <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={styles.ink}>
-                <Text style={[font('meta', bold, FONT_FAMILY.mono[700]), styles.tabular]}>{count}</Text>
-                <Text style={font('caption', bold)}> new</Text>
-              </Text>
-            ) : null}
           </Animated.View>
         </Material>
       </Pressable>
@@ -93,13 +110,16 @@ export function NewestChip({ count, bottom, onPress }: { count: number; bottom: 
 }
 const CHIP = SIZE.control - SPACE.sm
 
+const JUST_MUTED = 'Just now · the host muted you'
+
 /** A mute that arrived while you were here (R2-D2 #06): one line over the flipped composer. */
 export function JustMutedLine() {
   const bold = useBoldText()
+  useAnnounced(JUST_MUTED)
   return (
     <View style={styles.justMuted} accessible accessibilityLiveRegion="polite">
       <Icon name="mic-off" size={ICON.inline} color={COLOR.textTertiary} />
-      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} style={[font('caption', bold), styles.tertiary]}>Just now · the organizer muted you</Text>
+      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} style={[font('caption', bold), styles.tertiary]}>{JUST_MUTED}</Text>
     </View>
   )
 }
@@ -110,7 +130,7 @@ export function JustMutedLine() {
  */
 export function FeedSkeleton({ faces = true }: { faces?: boolean }) {
   return (
-    <View testID="chat-skeleton" accessibilityLabel="Loading messages" style={styles.skeleton}>
+    <View accessible testID="chat-skeleton" accessibilityLabel="Loading messages" style={styles.skeleton}>
       {[0, 1, 2, 3].map((i) => {
         const mine = i % 2 === 1
         return (

@@ -11,6 +11,38 @@
 const { findViolations, checkSource, staleAllowances, LATE_RULE_ALLOWLIST, GRADIENT_LEGACY } = require('../scripts/check-design-tokens')
 
 describe('design tokens', () => {
+  /*
+   * A raw size passes the checker with a `design-exception` comment, and seven components had used that hatch for type
+   * that sat 1 or 2 points off a role (15/20, 13/16, 32/40): drift, not exceptions (SCRUM-865). What may still carry
+   * one is what no role can draw: an emoji, the Google mark's label, the one mono value and a motion moment.
+   */
+  it('keeps a raw type size to the files where no role can draw it (SCRUM-865)', () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const fs = require('fs') as typeof import('fs')
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const path = require('path') as typeof import('path')
+    const root = path.join(__dirname, '..')
+    const walk = (dir: string): string[] =>
+      fs.readdirSync(path.join(root, dir), { withFileTypes: true }).flatMap((d) =>
+        d.isDirectory() ? walk(path.join(dir, d.name)) : /\.tsx?$/.test(d.name) ? [path.join(dir, d.name)] : []
+      )
+    const raw = [...walk('app'), ...walk('components')]
+      .filter((f) => /\bfontSize:\s*-?\d/.test(fs.readFileSync(path.join(root, f), 'utf8')))
+      .sort()
+    expect(raw).toEqual([
+      'app/f/[token].tsx', // Flow 7 3-A's headline: the name alone at 34/38, 30/34 for a long one, between display and title
+      'app/index.tsx', // the Google mark's label, drawn to Google's spec
+      'app/rate/[eventId].tsx', // Flow 4 rate's "How was the night?", 28/33: no role at 28
+      'components/chat/ChatParts.tsx', // an emoji in flight
+      'components/ds/ChatBubble.tsx', // an emoji-only message, and Flow 5 F-A's 16/22 words (`BUBBLE_TYPE`, the host card's too)
+      'components/ds/LensBlocks.tsx', // Flow 5 P-A's bio and empty line, 16/22 (owner picks r1 C, r2 A): no role at 16/22
+      'components/ds/MomentPour.tsx', // motion #9's "You're in."
+      'components/ds/shared.ts', // monoValue, the one mono size between 12 and 40
+      'components/profile/ProfileLensHero.tsx', // Flow 5 P-A's profile name 28/34 and its line 15/22: no role at either
+      'components/scene/SceneHero.tsx', // Flow 4 E-B's stamp poster: its date is the art (20/24 words, a 120 day)
+    ])
+  })
+
   it('app/ and components/ use only the design system', () => {
     const violations = findViolations().map(
       (v: { file: string; line: number; message: string }) => `${v.file}:${v.line} ${v.message}`
@@ -44,7 +76,7 @@ describe('design tokens', () => {
       'const g = { lineHeight: 26, textTransform: "uppercase" }',
       '<HeartIcon size={18} />',
       // on the scale: none of these should be reported
-      'const ok = { color: EMBER.textPrimary, borderRadius: EMBER_RADIUS.pill, backgroundColor: tint(EMBER.success, 0.16) }',
+      'const ok = { color: COLOR.textPrimary, borderRadius: RADIUS.capsule, backgroundColor: tint(COLOR.brandRose, 0.16) }',
       'const ok2 = { borderRadius: 0 }',
       "// design-exception: Google’s own button chrome",
       "const brand = { backgroundColor: '#FFFFFF' }",

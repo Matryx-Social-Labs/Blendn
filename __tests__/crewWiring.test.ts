@@ -8,7 +8,7 @@ import { join } from 'path'
 const src = (rel: string) => readFileSync(join(__dirname, '..', rel), 'utf8')
 
 describe('crew and Blend rooms in the chat screen', () => {
-  const chat = src('app/chat/[id].tsx')
+  const chat = src('components/chat/RoomChat.tsx')
 
   it('reads a closed crew or Blend room before the "not in this room" branch', () => {
     // A Blend answers 403 to somebody it took out; read as FORBIDDEN first (the
@@ -57,14 +57,36 @@ describe('the surfaces are wired', () => {
     expect(banter).toContain("r.kind === 'crew'")
   })
 
-  it('the Room has a Crews view (R2-D1: People | Crews)', () => {
+  it('the Room has a Crews view, reached by its row (R2-D1; audit A-1: no second tab row)', () => {
     const screen = src('components/blendn/BlendnScreen.tsx')
     expect(screen).toContain('<CrewsHead')
     expect(screen).toContain('crewCards={crewCards(crews)}')
+    // The row counts every crew here, as the Crews view's head does, never the pages read so far (44 here said "30 crews here").
+    expect(screen).toContain("crewsHere={showSegments && crews.state.status === 'ready' ? crews.state.data.total : null}")
     const room = src('components/blendn/RoomView.tsx')
-    // The segmented control is the ds one: 48 pt, reached at its own height.
-    expect(room).toContain("items={['People', 'Crews']}")
+    // One row in and out of the crews, in the friends row's shape; never a second People | Crews switch.
+    expect(room).toContain('<RoomCrewsRow')
+    expect(room).not.toContain('SegmentedControl')
     // M12: the cards are rows of the Room's own list, not a mapped column.
     expect(room).toContain('data={crewsView ? props.crewCards : people}')
+  })
+})
+
+describe('a blocked crew’s wave never reaches the crew chat (task 17 b1)', () => {
+  const chat = require('fs').readFileSync(require('path').join(__dirname, '../components/chat/RoomChat.tsx'), 'utf8') as string
+  it('the feed is filtered whatever the link says the room is, and a live wave line reads the history for who it was', () => {
+    expect(chat).toContain('withoutBlockedCrews(messages.filter((m) => !blocked.has(m.sender_id)), hiddenCrews)')
+    expect(chat).toContain('useHiddenCrewIds(messages.some(isCrewsWave))')
+    expect(chat).toContain('if (fresh && isCrewWavedLine(incoming)) void loadMessagesRef.current(true)')
+  })
+})
+
+describe('Share a crew link (S7 b2)', () => {
+  it('the row sits on the sheet’s own plate: the page’s card is the colour of Android’s solid sheet', () => {
+    expect(src('components/crews/InviteFriendsSheet.tsx')).toContain('<RowsCard onSheet')
+    expect(src('components/crews/RowsCard.tsx')).toContain('onSheet: { backgroundColor: SHEET_FILL }')
+  })
+  it('is shared with the one link builder’s words, through the system sheet', () => {
+    expect(src('app/crews/[crewId].tsx')).toContain("shareNatively({ kind: 'crew', name: crew.name, url: result.data.url })")
   })
 })

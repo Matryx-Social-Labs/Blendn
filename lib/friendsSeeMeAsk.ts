@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useIsFocused } from 'expo-router'
 import { useState } from 'react'
 
-import { apiClient } from './apiClient'
+import { apiClient, type OwnProfileEnvelope } from './apiClient'
 import { isBlendnOpen } from './blendnOverlay'
 import { Logger } from './logger'
 import { isSheetOpen, showSheet } from './sheet'
@@ -54,9 +54,8 @@ async function rememberOn(userId: string): Promise<void> {
 const asking = new Set<string>()
 
 /** Whether the person's own switch is on; null when the profile would not say. */
-function switchOf(data: unknown): boolean | null {
-  const d = data as { profile?: Record<string, unknown> } & Record<string, unknown>
-  const value = (d?.profile ?? d)?.friends_see_me_in_rooms
+function switchOf(data: OwnProfileEnvelope | undefined): boolean | null {
+  const value = data?.profile?.friends_see_me_in_rooms
   return typeof value === 'boolean' ? value : null
 }
 

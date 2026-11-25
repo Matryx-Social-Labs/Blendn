@@ -19,7 +19,7 @@ const GATE_TOP = 0.34
  */
 export function VenueSkeleton() {
   return (
-    <View accessibilityLabel="Loading the place" accessibilityState={{ busy: true }} testID="venue-skeleton">
+    <View accessible accessibilityLabel="Loading the place" accessibilityState={{ busy: true }} testID="venue-skeleton">
       <View style={[styles.block, styles.hero]} />
       <View style={styles.body}>
         <View style={[styles.block, TITLE_LINE, styles.line]} />

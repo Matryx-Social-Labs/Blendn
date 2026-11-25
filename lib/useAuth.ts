@@ -1,22 +1,31 @@
 import { useEffect, useState } from 'react'
+import { AppState } from 'react-native'
 import { apiClient, AuthUser, nextSession, TokenStorage } from './apiClient'
 import { setAppIconBadge } from './appBadge'
 import { forgetAuthMethod, rememberAuthMethod } from './authMethod'
+import type { DeletionProof } from './deletionProof'
 import { onCriticalPath } from './criticalPath'
 import { REQUEST_TIMEOUT_MS, settleWithin } from './fetchTimeout'
+import { resetCrewInvites } from './crewInvites'
+import { resetInboxBadge } from './inboxBadge'
+import { resetFriendRequests } from './friendRequests'
 import { Logger } from './logger'
+import { setLocationSharing } from './shareLocation'
 import { outageFrom, type Outage } from './outage'
 import { syncPurchasesUser } from './purchases'
 import { clearOutbox } from './chatOutbox'
 import { queryCache } from './queryCache'
-import { clearRoomSignal } from './roomSignal'
+import { clearRoomSignal, stopRoomSignalSource } from './roomSignal'
 import { resetRoomMembership } from './roomMembership'
 import { forgetRosters } from './rosterMemory'
 import { forgetHeldForm } from './heldSignInForm'
 import { forgetEventDetails } from './eventDetailCache'
-import { rateLimitedMessage } from './signInRefusal'
+import { DELETION_REFUSED, rateLimitedMessage } from './signInRefusal'
 import { Sentry } from './sentry'
 import { markSessionExpired, subscribeSessionExpired } from './sessionEvents'
+
+/** How long the cold start waits on the keychain for the stored account's location switch. */
+const LOCATION_SWITCH_READ_MS = 1_500
 
 export interface AuthState {
   session: { user: AuthUser } | null // Maintain session shape for compatibility
@@ -81,6 +90,8 @@ let initializationPromise: Promise<AuthState> | null = null // Promise-based wai
 const updateAuthState = (newState: Partial<AuthState>) => {
   const previousUserId = globalAuthState.user?.id
   globalAuthState = { ...globalAuthState, ...newState }
+  // The account's own switch (and the default once it has gone) is what the distance reads obey.
+  if ('user' in newState) setLocationSharing(globalAuthState.user?.profile?.share_location)
   // Any path that produces a user has reached the server, or has a user to
   // carry on with. Either way the "can't reach" screen no longer applies.
   if (newState.user) globalAuthState.unreachable = false
@@ -97,6 +108,32 @@ const updateAuthState = (newState: Partial<AuthState>) => {
 }
 
 // Initialize auth system once
+/** Launch reads the keychain refused while the app was in the foreground: after this many it is taken for empty (SCRUM-878). */
+const LOCKED_READ_TRIES = 3
+const LOCKED_READ_RETRY_MS = 1000
+let lockedReadsInForeground = 0
+let readAgainPending = false
+
+/** Run the launch's restore again once the app is in the foreground (unlocked), or in a second if it already is. */
+const readAgainWhenActive = () => {
+  if (readAgainPending) return
+  readAgainPending = true
+  const again = () => {
+    readAgainPending = false
+    void initializeAuth()
+  }
+  if (AppState.currentState === 'active') {
+    lockedReadsInForeground += 1
+    setTimeout(again, LOCKED_READ_RETRY_MS)
+    return
+  }
+  const sub = AppState.addEventListener('change', (state) => {
+    if (state !== 'active') return
+    sub.remove()
+    again()
+  })
+}
+
 const initializeAuth = async (): Promise<AuthState> => {
   if (globalAuthState.initialized) {
     return globalAuthState
@@ -126,7 +163,7 @@ const initializeAuth = async (): Promise<AuthState> => {
         Logger.info('auth', 'Signed out on this phone; not restoring the keychain session')
         // Its own ending: a refresh still in flight for that session stores nothing over the clear (H1, re-review L2).
         nextSession()
-        const cleared = await settleWithin(TokenStorage.clearAll().then(() => true), REQUEST_TIMEOUT_MS, false)
+        const cleared = await settleWithin(TokenStorage.clearAll(), REQUEST_TIMEOUT_MS, false)
         if (cleared) await TokenStorage.forgetSignedOut()
         updateAuthState({ session: null, user: null, loading: false, initialized: true, unreachable: false })
         isInitializing = false
@@ -135,11 +172,27 @@ const initializeAuth = async (): Promise<AuthState> => {
 
       // Check if we have stored tokens. Both are read now, on the critical path, into memory (RC drive 2 D-A): no request or
       // refresh after this waits on the keychain, whatever is stuck on the native queue later.
-      const [accessToken] = await Promise.all([TokenStorage.getAccessToken(), TokenStorage.getRefreshToken()])
+      const [accessToken, refreshToken] = await Promise.all([TokenStorage.accessTokenOrUnknown(), TokenStorage.refreshTokenOrUnknown()])
+
+      /*
+       * The keychain refused (SCRUM-878): iOS launched the app in the background while the phone was locked (a push,
+       * prewarming). That says nothing about the session, so nothing is decided: the launch stays loading and reads again
+       * once the person opens the app, when the phone is unlocked. Only a keychain that keeps refusing in the foreground
+       * is taken for empty, as before, so a broken one cannot hold the splash for good.
+       */
+      if ((accessToken === undefined || refreshToken === undefined) && lockedReadsInForeground < LOCKED_READ_TRIES) {
+        Logger.warn('auth', 'keychain:unreadable at launch; reading again when the app is active', { appState: AppState.currentState })
+        isInitializing = false
+        initializationPromise = null
+        readAgainWhenActive()
+        return globalAuthState
+      }
 
       if (accessToken) {
         // We have a token, verify it's still valid
         Logger.debug('auth', 'Found stored access token, verifying session...')
+        // The switch is known before the session answers: a read on the way up obeys it (`lib/shareLocation`). Bounded: no keychain waits for it.
+        setLocationSharing((await settleWithin(TokenStorage.getUser(), LOCATION_SWITCH_READ_MS, null))?.profile?.share_location)
 
         const result = await apiClient.getSession()
 
@@ -158,7 +211,8 @@ const initializeAuth = async (): Promise<AuthState> => {
            * the tokens if it was refused, so no tokens left means refused.
            */
           Logger.debug('auth', 'Session verification failed, attempting refresh...')
-          const outcome = (await TokenStorage.getAccessToken())
+          // A token the keychain could not read (undefined) may be there: refreshed for, never taken for refused (SCRUM-878).
+          const outcome = (await TokenStorage.accessTokenOrUnknown()) !== null
             ? await apiClient.refreshSessionOutcome()
             : 'rejected'
 
@@ -166,7 +220,7 @@ const initializeAuth = async (): Promise<AuthState> => {
             const retryResult = await apiClient.getSession()
             if (retryResult.success && retryResult.data) {
               await signInVerified(retryResult.data, 'Session refreshed successfully')
-            } else if (await TokenStorage.getAccessToken()) {
+            } else if ((await TokenStorage.accessTokenOrUnknown()) !== null) {
               // Refreshed, then the re-read did not land. Nothing refused us.
               await keepStoredSession()
             } else {
@@ -260,13 +314,22 @@ const keepStoredSession = async () => {
   })
 }
 
+/** When coming to the foreground last re-read the session (`refreshAuthUserOnForeground`). */
+let lastForegroundRefresh = 0
+
 /**
  * Everything this phone holds for the session in memory, cleared at once: signed out, and the root layout routes to the
  * entry screen. Never waits on a native call (SCRUM-733, RC drive D1): the keychain shares one native queue with every Expo
  * module, and a call stuck there would keep somebody in a session they asked to leave. The keychain is the caller's.
  */
 const resetLocalSession = () => {
+  // The next account's first foreground read is not held back by the last one's throttle.
+  lastForegroundRefresh = 0
+  resetInboxBadge()
   void forgetAuthMethod()
+  // The asks waiting were the last account's: Notifications, Friends, Me and Crews start from nothing.
+  resetFriendRequests()
+  resetCrewInvites()
   // The icon's number was the last account's: the next person to open the app on this phone does not inherit it.
   void setAppIconBadge(0)
   /*
@@ -277,6 +340,7 @@ const resetLocalSession = () => {
    * plans for tonight. Cleared here rather than in `signOut` because a failed
    * background refresh reaches this path without going through it.
    */
+  stopRoomSignalSource()
   clearRoomSignal()
   /*
    * So are a thread's draft and unsent messages, and the rooms you left or
@@ -410,6 +474,8 @@ export const signInWithGoogle = async (
         // there anything to ask about.
         isNewAccount: isNewUser === true,
       })
+      // This route's profile carries no `photos` (the Me tab's face): the session read has them.
+      void refreshAuthUser()
 
       return { success: true, isNewUser }
     } else {
@@ -450,6 +516,8 @@ export const signInWithApple = async (
         // there anything to ask about.
         isNewAccount: isNewUser === true,
       })
+      // This route's profile carries no `photos` (the Me tab's face): the session read has them.
+      void refreshAuthUser()
 
       return { success: true, isNewUser }
     } else {
@@ -492,7 +560,8 @@ export const signInWithEmail = async (
 
       return { success: true }
     } else {
-      Logger.error('auth', 'Email sign in failed', { error: result.error })
+      // A wrong password or a limit is the person's answer, already on screen; the server reports its own failures (BLENDN-1H, T).
+      Logger.warn('auth', 'Email sign in failed', { error: result.error })
       updateAuthState({ loading: false })
       // The server's "Too many requests" drops the wait it sent (SCRUM-487).
       if (result.errorCode === 'RATE_LIMITED') {
@@ -631,11 +700,16 @@ export const sameUser = (a: AuthUser | null | undefined, b: AuthUser): boolean =
  */
 export const refreshAuthUser = async (): Promise<void> => {
   try {
+    // Nobody signed in has nothing to refresh; and the read is for whoever started it.
+    const startedFor = globalAuthState.user?.id
+    if (!startedFor) return
     const result = await apiClient.getSession()
     if (!result.success || !result.data) {
       Logger.warn('auth', 'Session refresh did not return a user', { error: result.error })
       return
     }
+    // A read in flight when they signed out, or when another account signed in, lands on nobody: it is not theirs.
+    if (globalAuthState.user?.id !== startedFor || result.data.id !== startedFor) return
     // Settings reads the session every time it opens: an unchanged user must not notify every `useAuth` subscriber.
     if (sameUser(globalAuthState.user, result.data)) return
     updateAuthState({ session: { user: result.data }, user: result.data })
@@ -647,15 +721,29 @@ export const refreshAuthUser = async (): Promise<void> => {
   }
 }
 
-export const deleteAccount = async (appleAuthorizationCode?: string): Promise<{ success: boolean; error?: string }> => {
+/** How often coming back to the app may re-read the session (moderation pulls and other devices change `profile.photos`). */
+export const FOREGROUND_REFRESH_MS = 60_000
+/** `refreshAuthUser()` when the app comes to the foreground, at most once a minute, and only while signed in. */
+export const refreshAuthUserOnForeground = async (now: number = Date.now()): Promise<void> => {
+  if (!globalAuthState.user || now - lastForegroundRefresh < FOREGROUND_REFRESH_MS) return
+  lastForegroundRefresh = now
+  await refreshAuthUser()
+}
+
+export const deleteAccount = async (proof: DeletionProof = {}): Promise<{ success: boolean; error?: string; errorCode?: string }> => {
   try {
     Logger.info('auth', 'Deleting account...')
 
-    const result = await apiClient.deleteAccount(appleAuthorizationCode)
+    const result = await apiClient.deleteAccount(proof)
 
     if (!result.success) {
-      Logger.error('auth', 'Account deletion failed', { error: result.error })
-      return { success: false, error: result.error || 'Failed to delete account' }
+      // A wrong password is somebody mistyping, not a defect; only the rest reaches Sentry.
+      if (result.errorCode && (Object.values(DELETION_REFUSED) as string[]).includes(result.errorCode)) {
+        Logger.warn('auth', 'Account deletion refused', { errorCode: result.errorCode })
+      } else {
+        Logger.error('auth', 'Account deletion failed', { error: result.error, errorCode: result.errorCode })
+      }
+      return { success: false, error: result.error || 'Failed to delete account', errorCode: result.errorCode }
     }
 
     await clearAuthState()

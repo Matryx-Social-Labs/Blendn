@@ -19,7 +19,7 @@ const read = (...p: string[]) =>
     .replace(/^\s*\/\/.*$/gm, "")
 
 const SURFACES: Array<[string, string]> = [
-  ["the room", read("app", "chat", "[id].tsx")],
+  ["the room", read("components", "chat", "RoomChat.tsx")],
   ["a direct message", read("app", "private-chat", "[conversationId].tsx")],
 ]
 

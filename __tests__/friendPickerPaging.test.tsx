@@ -28,11 +28,10 @@ const page = (items: ReturnType<typeof friend>[], total: number, next: string | 
   data: { friends: items, count: total, pagination: { limit: 100, hasMore: next !== null, nextCursor: next, totalCount: total } },
 })
 
+/** The friends are on Make's first step (board 02 A): open it and wait for the first read. */
 async function toFriends() {
   await render(<NewCrewScreen />)
-  await fireEvent.changeText(screen.getByTestId('make-name-input'), 'Nebula')
-  await fireEvent.press(screen.getByLabelText('Next'))
-  await waitFor(() => screen.getByText('Friends only. The count says how many, never who was skipped.'))
+  await waitFor(() => expect(api.getFriends).toHaveBeenCalled())
 }
 const list = () => screen.getByTestId('friend-pick-list')
 const reachEnd = async () => {
@@ -81,7 +80,7 @@ it('101 friends: the 101st comes by cursor when the end is reached, and Try agai
   expect(list().props.data).toHaveLength(101)
 })
 
-it('1,000 friends: ten pages, fixed 64 pt rows, a window of seven, and the pick cap of eleven still holds', async () => {
+it('1,000 friends: ten pages, fixed 64 pt rows, a window of seven, and the pick cap of 24 still holds', async () => {
   for (let p = 0; p < 10; p++) api.getFriends.mockResolvedValueOnce(page(friends(100, p * 100), 1000, p < 9 ? `c${p + 1}` : null))
   await toFriends()
   await waitFor(() => screen.getByTestId('friend-pick-list'))
@@ -89,9 +88,9 @@ it('1,000 friends: ten pages, fixed 64 pt rows, a window of seven, and the pick 
   expect(list().props.data).toHaveLength(1000)
   expect(list().props.getItemLayout(null, 999)).toEqual({ length: 64, offset: 64 * 999, index: 999 })
   expect(list().props.windowSize).toBeLessThanOrEqual(7)
-  // Eleven picks fill the crew; the twelfth row is dimmed.
-  for (let i = 0; i < 11; i++) await fireEvent.press(screen.getByRole('checkbox', { name: `Ask Friend ${i}` }))
-  expect(screen.getByText('A crew has at most 12 people.')).toBeTruthy()
+  // 24 picks fill the crew (25 with you).
+  for (let i = 0; i < 24; i++) await fireEvent.press(screen.getByRole('checkbox', { name: `Ask Friend ${i}` }))
+  expect(screen.getByText('A crew has at most 25 people.')).toBeTruthy()
 })
 
 it('a failed first read is not "no friends": it offers the retry', async () => {
@@ -140,7 +139,7 @@ describe('search in the picker', () => {
     api.getFriends.mockResolvedValueOnce(page([friend(7)], 1))
     await type('Friend 7')
     await fireEvent.press(screen.getByRole('checkbox', { name: 'Ask Friend 7' }))
-    expect(screen.getAllByText('2').length).toBeGreaterThan(0)
+    expect(screen.getByText('Friends to ask · 2 picked')).toBeTruthy()
     api.getFriends.mockResolvedValueOnce(page(friends(20), 20))
     await type('')
     expect(screen.getByRole('checkbox', { name: 'Ask Friend 3' }).props.accessibilityState).toMatchObject({ checked: true })

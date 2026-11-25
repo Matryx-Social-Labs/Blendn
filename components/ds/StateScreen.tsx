@@ -1,4 +1,7 @@
 import { useEffect, type ReactNode } from 'react'
+
+import { useLatest } from '../../lib/useLatest'
+import { useFocused } from '../toastDock'
 import { AccessibilityInfo, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
@@ -6,7 +9,8 @@ import { Icon, type IconName } from '../ui/Icon'
 import { COLOR, MAX_FONT_SCALE, RADIUS, SPACE } from '../../lib/design/tokens'
 import { Button, type ButtonKind, type ButtonProps } from './Button'
 import { monoCaption } from './MonoFamily'
-import { font, IC_HAIRLINE, useBoldText, useIncreaseContrast } from './shared'
+import { font, IC_HAIRLINE, useBoldText, useIncreaseContrast, useSelection } from './shared'
+import { Title } from './Title'
 
 /** One component, two well sizes (the R3 ruling): 56 inline (a list, a card), 80 for a whole screen. */
 const WELL = { inline: 56, screen: 80 } as const
@@ -15,20 +19,21 @@ const GLYPH_FRACTION = { inline: 0.5, screen: 0.45 } as const
 const WELL_TOP = 0.22
 
 /** The circle a state's glyph sits in. Decorative: the title says what happened. */
-export function GlyphWell({ icon, size = 'inline', testID }: { icon: IconName; size?: 'inline' | 'screen'; testID?: string }) {
+export function GlyphWell({ icon, size = 'inline', lit = false, testID }: { icon: IconName; size?: 'inline' | 'screen'; lit?: boolean; testID?: string }) {
   const contrast = useIncreaseContrast()
+  const sel = useSelection()
   const side = WELL[size]
   return (
     <View
       testID={testID}
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"
-      style={[styles.well, { width: side, height: side }, contrast && IC_HAIRLINE]}
+      style={[styles.well, { width: side, height: side }, lit && { backgroundColor: sel.fill }, contrast && IC_HAIRLINE]}
     >
       <Icon
         name={icon}
         size={Math.round(side * GLYPH_FRACTION[size])}
-        color={size === 'screen' || contrast ? COLOR.textPrimary : COLOR.textSecondary}
+        color={lit ? sel.glyph : size === 'screen' || contrast ? COLOR.textPrimary : COLOR.textSecondary}
       />
     </View>
   )
@@ -47,6 +52,7 @@ export type StateAction = {
   /** A counting figure after the label, in Geist Mono ("Try again in 0:48"). Give `accessibilityLabel` too: the figure is not part of the label. */
   price?: ButtonProps['price']
   accessibilityLabel?: string
+  testID?: string
 }
 
 /** An action's kind when the caller names none: the first is the lit recovery, the rest stay quiet (rc7 D4). */
@@ -54,6 +60,8 @@ export const stateActionKind = (index: number): ButtonKind => (index === 0 ? 'li
 
 export type StateScreenProps = {
   icon: IconName
+  /** The well lit in the screen's hue (fill + glyph): an empty state that is calm, not a failure (Muted rooms, remaining-screens 05 A). */
+  litWell?: boolean
   title: string
   /** One paragraph; the server's sentence verbatim where there is one. */
   body?: string
@@ -76,6 +84,8 @@ export type StateScreenProps = {
   foot?: ReactNode
   /** The first action is in flight. */
   busy?: boolean
+  /** `inline` only: the actions at their own width, centred under the text, as a list's states draw them (Flow 9 A · 3). Absent, they span the column. */
+  fitActions?: boolean
   /** `inline` in a list or card; `screen` fills it, with the actions docked at the bottom. */
   variant?: 'inline' | 'screen'
   /**
@@ -83,7 +93,24 @@ export type StateScreenProps = {
    * action stop at the page's margins instead of running edge to edge. Off by default: a card or a padded list already has them.
    */
   gutter?: boolean
+  /**
+   * What a screen reader is told on arrival, when not the title and body: a fixed line for a state whose title changes as you
+   * type ("No chats match …"), or `false` for one its screen already says.
+   */
+  announce?: string | false
   testID?: string
+}
+
+/**
+ * A state said on arrival, inline too: a load that fails where "Loading" was read must say so (M4), and a card that replaces
+ * the content must say what replaced it (M29). Inline queues, so it never cuts off what is being read; an inline state on a
+ * screen behind another (a tab, a pushed route) stays quiet. A whole screen interrupts.
+ */
+export function useSaidOnArrival(said: string | null, screen = false) {
+  const inFront = useLatest(useFocused())
+  useEffect(() => {
+    if (said && (screen || inFront.current)) AccessibilityInfo.announceForAccessibilityWithOptions(said, { queue: !screen })
+  }, [screen, said, inFront])
 }
 
 /**
@@ -96,16 +123,14 @@ export type StateScreenProps = {
  * Text scales freely; the well never does. Increase Contrast: the well's
  * hairline, a white glyph, secondary text lifted to white.
  */
-export function StateScreen({ icon, title, body, bodyLink, lead, note, noteMono = false, actions = [], foot, busy = false, variant = 'inline', gutter = false, testID }: StateScreenProps) {
+export function StateScreen({ icon, litWell = false, title, body, bodyLink, lead, note, noteMono = false, actions = [], fitActions = false, foot, busy = false, variant = 'inline', gutter = false, announce, testID }: StateScreenProps) {
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const insets = useSafeAreaInsets()
   const { height } = useWindowDimensions()
   const screen = variant === 'screen'
 
-  useEffect(() => {
-    if (screen) AccessibilityInfo.announceForAccessibility(body ? `${title}. ${body}` : title)
-  }, [screen, title, body])
+  useSaidOnArrival(announce === false ? null : (announce ?? (body ? `${title}. ${body}` : title)), screen)
 
   const content = (
     <View style={styles.column}>
@@ -114,19 +139,13 @@ export function StateScreen({ icon, title, body, bodyLink, lead, note, noteMono 
           {lead}
         </View>
       ) : (
-        <GlyphWell icon={icon} size={variant} testID={testID && `${testID}-well`} />
+        <GlyphWell icon={icon} size={variant} lit={litWell} testID={testID && `${testID}-well`} />
       )}
       {/* Inline, the state sits in a list or under a section heading, so its title is a step below both (r7 M5: 24 pt bold read louder than the page). */}
       {/* Every line stops at its role's cap, so at AX XXXL the actions under it stay on the screen (A21, A25). */}
-      <Text
-        accessibilityRole="header"
-        textBreakStrategy="balanced"
-        lineBreakStrategyIOS="standard"
-        maxFontSizeMultiplier={MAX_FONT_SCALE[screen ? 'title' : 'bodyStrong']}
-        style={[font(screen ? 'title' : 'bodyStrong', bold), styles.title]}
-      >
+      <Title variant={screen ? 'title' : 'bodyStrong'} accessibilityRole="header" textBreakStrategy="balanced" lineBreakStrategyIOS="standard" style={styles.title}>
         {title}
-      </Text>
+      </Title>
       {body ? (
         <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.center, { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>
           <BodyWithLink body={body} link={bodyLink} />
@@ -155,7 +174,7 @@ export function StateScreen({ icon, title, body, bodyLink, lead, note, noteMono 
     return (
       <View testID={testID} style={[styles.column, gutter && styles.gutter]}>
         {content}
-        {buttons.length ? <View style={styles.actions}>{buttons}</View> : null}
+        {buttons.length ? <View style={[styles.actions, fitActions && styles.fit]}>{buttons}</View> : null}
       </View>
     )
   }
@@ -194,6 +213,7 @@ const styles = StyleSheet.create({
   title: { color: COLOR.textPrimary, textAlign: 'center' },
   center: { textAlign: 'center' },
   actions: { alignSelf: 'stretch', gap: SPACE.sm, marginTop: SPACE.md },
+  fit: { alignItems: 'center' },
   gutter: { paddingHorizontal: SPACE.gutter },
   fill: { flex: 1 },
   foot: { alignItems: 'center', gap: SPACE.sm },

@@ -13,6 +13,9 @@ import { IC_HAIRLINE, PRESSED_WASH, useIncreaseContrast } from './shared'
 
 /** The number holds at least two digits' width, so the discs never shift between 9 and 10. */
 const NUMBER_MIN_WIDTH = 24
+/** `.lstep .stp`: 40 pt discs around a 36 pt number. */
+const COMPACT_DISC = 40
+const COMPACT_NUMBER = 36
 /** A press against a bound pushes the number this far toward that side and lets it back (motion #40). */
 const BOUND_NUDGE = SPACE.xs
 const NUDGE_SPRING = SPRING.press
@@ -31,6 +34,8 @@ export type StepperProps = {
   onGlass?: boolean
   /** While posting: 45%, nothing steps. */
   disabled?: boolean
+  /** The Lobby compose sheet's `.lstep`: 40 pt discs 4 apart around a 36 pt number, each disc's slop still a 44 target. */
+  compact?: boolean
   /** The design gallery only: draws one disc pressed with no finger. */
   previewState?: 'pressed-minus' | 'pressed-plus'
   testID?: string
@@ -50,7 +55,7 @@ export type StepperProps = {
  * buttons. The number caps at 1.3×; the discs are fixed. Increase Contrast:
  * the 50% hairline on the discs.
  */
-export function Stepper({ label, value, onChange, min = 1, max = 20, onGlass = false, disabled = false, previewState, testID }: StepperProps) {
+export function Stepper({ label, value, onChange, min = 1, max = 20, onGlass = false, disabled = false, compact = false, previewState, testID }: StepperProps) {
   const android = Platform.OS === 'android'
   const contrast = useIncreaseContrast()
   const reduceMotion = useReducedMotion()
@@ -84,11 +89,13 @@ export function Stepper({ label, value, onChange, min = 1, max = 20, onGlass = f
           onPress={() => step(side === 'minus' ? -1 : 1)}
           disabled={disabled}
           pressedScale={android ? 1 : PRESS.scale}
+          hitSlop={compact ? (SIZE.circleButton - COMPACT_DISC) / 2 : undefined}
           onPressIn={() => android && setDown(side)}
           onPressOut={() => setDown(null)}
           android_ripple={{ color: PRESSED_WASH.android, foreground: true }}
           style={[
             styles.disc,
+            compact && styles.discCompact,
             { backgroundColor: onGlass ? MATERIAL.fillOnGlass : COLOR.surfaceSunken },
             android && pressed && { borderRadius: RADIUS.pressedAndroid },
             contrast && IC_HAIRLINE,
@@ -113,10 +120,10 @@ export function Stepper({ label, value, onChange, min = 1, max = 20, onGlass = f
       accessibilityState={{ disabled }}
       accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
       onAccessibilityAction={({ nativeEvent }) => step(nativeEvent.actionName === 'increment' ? 1 : -1)}
-      style={[styles.row, disabled && { opacity: OPACITY.disabled }]}
+      style={[styles.row, compact && styles.rowCompact, disabled && { opacity: OPACITY.disabled }]}
     >
       {disc('minus')}
-      <Animated.View style={[styles.number, nudged]}>
+      <Animated.View style={[styles.number, compact && styles.numberCompact, nudged]}>
         <RollingNumber value={value} role="stepper" testID={testID && `${testID}-number`} />
       </Animated.View>
       {disc('plus')}
@@ -135,6 +142,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  rowCompact: { gap: SPACE.xs },
+  discCompact: { width: COMPACT_DISC, height: COMPACT_DISC },
+  numberCompact: { width: COMPACT_NUMBER },
   wash: { backgroundColor: PRESSED_WASH.android },
   number: { minWidth: NUMBER_MIN_WIDTH, alignItems: 'center' },
 })

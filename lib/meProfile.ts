@@ -52,6 +52,12 @@ export function identityMeta(
   return parts.length ? parts.join(' · ') : null
 }
 
+/**
+ * The fewest interests that let matching rank you: blendn-admin `lib/interest-coverage.ts` `MIN_INTERESTS_TO_RANK`, which
+ * `lib/board.ts` also holds a board post to. Under it nothing refuses the save; Me and Edit profile say so (SCRUM-519).
+ */
+export const MIN_INTERESTS = 2
+
 export interface ProfileGap {
   key: 'photo' | 'photos' | 'bio' | 'interests'
   label: string
@@ -77,7 +83,9 @@ export function profileGaps(profile: {
     gaps.push({ key: 'photos', label: `Add photos · ${photos} of ${MAX_PHOTOS}` })
   }
   if (!profile.bio?.trim()) gaps.push({ key: 'bio', label: 'Write a bio' })
-  if (!profile.interests?.length) gaps.push({ key: 'interests', label: 'Pick interests' })
+  const interests = profile.interests?.length ?? 0
+  if (interests === 0) gaps.push({ key: 'interests', label: 'Pick interests' })
+  else if (interests < MIN_INTERESTS) gaps.push({ key: 'interests', label: 'Pick one more interest' })
   return gaps.slice(0, 3)
 }
 

@@ -1,6 +1,4 @@
-import { useEffect } from "react";
 import {
-  AccessibilityInfo,
   ScrollView,
   StyleSheet,
   useWindowDimensions,
@@ -40,13 +38,7 @@ export function RoomCancelled({
   const { height } = useWindowDimensions();
   const sel = useSelection();
   const said = `${title} was cancelled`;
-  useEffect(() => {
-    // Unsolicited: heard once, politely, as it arrives.
-    AccessibilityInfo.announceForAccessibilityWithOptions(
-      `${said}. You’re checked out.`,
-      { queue: true },
-    );
-  }, [said]);
+  // Heard once, politely, as it arrives: the StateScreen says itself, queued (M4).
   return (
     <Animated.View
       testID={testID}

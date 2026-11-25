@@ -5,7 +5,7 @@ import Animated, { FadeIn, LinearTransition } from 'react-native-reanimated'
 import { type IconName } from '../ui/Icon'
 import { COLOR, DURATION, REDUCE_MOTION, SIZE, SPACE, SPRING, STAGGER } from '../../lib/design/tokens'
 import { useReducedMotion } from '../../lib/motion'
-import { Chip } from './Chip'
+import { Chip, type ChipSize } from './Chip'
 import { monoCaption } from './MonoFamily'
 import { RollingNumber } from './RollingNumber'
 import { CONTROL_FONT_CAP, minTarget, useBoldText } from './shared'
@@ -40,6 +40,7 @@ type SetChipProps = {
   on: boolean
   dimmed: boolean
   capHint?: string
+  size?: ChipSize
   onToggle: (key: string) => void
   testID?: string
 }
@@ -67,6 +68,8 @@ export type ChipSetProps = {
   capHint?: string
   /** Replaces the counter ("Any", "2 chosen"). */
   counter?: string
+  /** Every chip's size (`Chip` `size`). */
+  size?: ChipSize
   /** Fold everything past this many into a "+n more" chip; a chosen one beyond it stays drawn. */
   foldAfter?: number
   /** Read by a screen reader as "18 more home states". */
@@ -92,6 +95,7 @@ export function ChipSet({
   max,
   capHint,
   counter,
+  size,
   foldAfter,
   foldNoun = 'more',
   hint,
@@ -130,6 +134,7 @@ export function ChipSet({
         on={on}
         dimmed={item.dimmed ?? (atCap && !on)}
         capHint={capHint}
+        size={size}
         accessibilityLabel={item.accessibilityLabel}
         onToggle={toggle}
         testID={testID && `${testID}-${item.key}`}

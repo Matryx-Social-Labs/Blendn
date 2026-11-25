@@ -43,6 +43,9 @@ const REVEAL_MIN = 0.001
  *
  * Reduce Motion: the mark fades in over 200 ms, the orbs hold, the haptic at once.
  */
+/** Longest Ready waits for its Modal before it plays anyway: onboarding never ends on a screen with nothing to tap. */
+export const READY_MAX_WAIT_MS = 3000
+
 export function MomentReady({ name, onDone, testID }: { name?: string; onDone: () => void; testID?: string }) {
   const reduceMotion = useReducedMotion()
   const bold = useBoldText()
@@ -55,7 +58,14 @@ export function MomentReady({ name, onDone, testID }: { name?: string; onDone: (
   const shown = useSharedValue(0)
   const [done, setDone] = useState(false)
 
+  const [onStage, setOnStage] = useState(false)
+  // The end of onboarding: if the screen is never handed over (a turn held elsewhere), it still plays and hands off.
   useEffect(() => {
+    const timer = setTimeout(() => setOnStage(true), READY_MAX_WAIT_MS)
+    return () => clearTimeout(timer)
+  }, [])
+  useEffect(() => {
+    if (!onStage) return
     if (reduceMotion) {
       scrim.set(fade(1, duration.base))
       shown.set(fade(1, duration.base))
@@ -67,7 +77,7 @@ export function MomentReady({ name, onDone, testID }: { name?: string; onDone: (
     mark.set(spring(1, 'pop', MARK_AT))
     // Once, as it appears.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [onStage])
 
   const skipBeats = useBeats([
     { at: reduceMotion ? 0 : MARK_DONE, run: () => H.success({ important: true }) },
@@ -78,7 +88,7 @@ export function MomentReady({ name, onDone, testID }: { name?: string; onDone: (
         onDone()
       },
     },
-  ])
+  ], onStage)
   const skip = () => {
     scrim.set(1)
     orbs.set(0)
@@ -98,7 +108,7 @@ export function MomentReady({ name, onDone, testID }: { name?: string; onDone: (
   const counterStyle = useAnimatedStyle(() => ({ transform: [{ scale: 1 / open() }] }))
 
   return (
-    <MomentStage testID={testID} label={`You’re all set${name ? `, ${name}` : ''}.`} scrimAlpha={SCRIM} scrim={scrim} orbs="brand" orbsOpacity={orbs} orbsOnInk={false} done={done} onSkip={skip}>
+    <MomentStage testID={testID} onShown={() => setOnStage(true)} label={`You’re all set${name ? `, ${name}` : ''}.`} scrimAlpha={SCRIM} scrim={scrim} orbs="brand" orbsOpacity={orbs} orbsOnInk={false} done={done} onSkip={skip}>
       {/* Not a button: a tap on the mark falls through to skip. */}
       <View testID={testID && `${testID}-centre`} pointerEvents="none" style={[StyleSheet.absoluteFill, styles.centre]}>
         <Animated.View testID={testID && `${testID}-mark`} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={markStyle}>

@@ -118,16 +118,24 @@ describe('<ReactionBar>', () => {
 })
 
 describe('<ReactionPill>', () => {
-  it('the emoji and a Geist Mono count past one; yours outlined; read with “including you”', async () => {
+  // Flow 5 F-A `.rx`: a 24 pt surfaceRaised chip, yours in the screen's hue (ember outside a HueProvider).
+  it('the emoji and a Geist Mono count; yours in the hue; read with “including you”', async () => {
     await render(<ReactionPill emoji="🔥" count={3} mine onPress={jest.fn()} testID="p" />)
     expect(StyleSheet.flatten(screen.getByText('3').props.style).fontFamily).toBe(FONT_FAMILY.mono[500])
-    expect(StyleSheet.flatten(screen.getByTestId('p').props.style).borderColor).toBe(COLOR.textPrimary)
+    expect(StyleSheet.flatten(screen.getByTestId('p').props.style)).toMatchObject({ height: 24, backgroundColor: COLOR.selectionEmberFill })
     expect(screen.getByRole('button', { name: 'fire, 3, including you' })).toBeTruthy()
   })
 
-  it('one: no count', async () => {
-    await render(<ReactionPill emoji="😂" count={1} mine={false} />)
-    expect(screen.queryByText('1')).toBeNull()
+  it('theirs: surfaceRaised; one still shows its count (a count chip, F-A)', async () => {
+    await render(<ReactionPill emoji="😂" count={1} mine={false} testID="p" />)
+    expect(screen.getByText('1')).toBeTruthy()
+    expect(StyleSheet.flatten(screen.getByTestId('p').props.style).backgroundColor).toBe(COLOR.surfaceRaised)
+  })
+
+  it('compact past 999 for the eye, whole for a screen reader', async () => {
+    await render(<ReactionPill emoji="🔥" count={12480} mine={false} />)
+    expect(screen.getByText('12k')).toBeTruthy()
+    expect(screen.getByLabelText('fire, 12480')).toBeTruthy()
   })
 
   it('a tap gives it with H.reaction(land); taking yours back is silent', async () => {
@@ -141,6 +149,25 @@ describe('<ReactionPill>', () => {
     await fireEvent.press(screen.getByRole('button'))
     expect(onPress).toHaveBeenCalledTimes(2)
     expect(reaction).not.toHaveBeenCalled()
+  })
+
+  /*
+   * SCRUM-1044: Android draws a Text's lineHeight at the full system text size, past its maxFontSizeMultiplier
+   * (TextAttributeProps), while laying the line out at the capped size. At font scale 2.0 the chip's 24 pt lines drew
+   * at about 34, so the emoji and the count sat low and were cut along the chip's bottom. No line in the chip may set
+   * a height that scales: the emoji does not scale at all, and the count has no lineHeight of its own.
+   */
+  it('no line in the chip sets a line height that scales with the text (SCRUM-1044)', async () => {
+    await render(<ReactionPill emoji="🔥" count={12480} mine={false} testID="p" />)
+    const lines = screen.getByTestId('p').queryAll((n) => n.type === 'Text')
+    expect(lines).toHaveLength(2)
+    for (const line of lines) {
+      const scales = line.props.allowFontScaling !== false
+      expect({ text: line.props.children, scalingLineHeight: scales && StyleSheet.flatten(line.props.style).lineHeight != null }).toEqual({ text: line.props.children, scalingLineHeight: false })
+    }
+    // The count still grows with the text, to 1.3x; the emoji keeps its size.
+    expect(screen.getByText('12k').props.maxFontSizeMultiplier).toBe(1.3)
+    expect(screen.getByText('🔥').props.allowFontScaling).toBe(false)
   })
 
   it('#37: yours lands with a pop on M.pop; under Reduce Motion it just appears', async () => {

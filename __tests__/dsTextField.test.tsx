@@ -8,7 +8,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react-native'
 import React from 'react'
 import { AccessibilityInfo, Platform, StyleSheet, TextInput } from 'react-native'
 
-import { TextArea, TextField } from '../components/ds/TextField'
+import { FieldLabelCase, TextArea, TextField } from '../components/ds/TextField'
 import { COLOR, FONT_FAMILY, MATERIAL, MAX_FONT_SCALE, RADIUS, SIZE, SPACE } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 import { OPACITY } from '../lib/theme'
@@ -236,5 +236,106 @@ describe('one label, one inset', () => {
     for (const text of ['Email', 'About me', 'THIS OR THAT']) {
       expect(StyleSheet.flatten(screen.getByText(text).props.style).paddingLeft).toBe(SPACE.xs)
     }
+  })
+})
+
+describe('labelAside: an action at the end of the label row (Flow 1c: "Forgot password?" on Password)', () => {
+  const { Text } = jest.requireActual('react-native')
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const windowHook = require('react-native/Libraries/Utilities/useWindowDimensions')
+  const at = (fontScale: number) => jest.spyOn(windowHook, 'default').mockReturnValue({ width: 390, height: 844, scale: 3, fontScale })
+  afterEach(() => jest.restoreAllMocks())
+
+  it('at the default size: in the label row, after the label, the row spreading them to its two ends', async () => {
+    at(1)
+    await render(field({ label: 'Password', secure: true, labelAside: <Text testID="aside">Forgot password?</Text> }))
+    const row = screen.getByTestId('f-label-row')
+    expect(row.queryAll((n) => n.props.testID === 'aside')).toHaveLength(1)
+    expect(StyleSheet.flatten(row.props.style)).toMatchObject({ flexDirection: 'row', justifyContent: 'space-between' })
+    // The field itself is untouched: the eye is still the capsule's.
+    expect(screen.getByLabelText('Show password')).toBeTruthy()
+  })
+
+  it('at the accessibility sizes: stacked under the label, at the row’s end, so neither is cut', async () => {
+    at(2)
+    await render(field({ label: 'Password', secure: true, labelAside: <Text testID="aside">Forgot password?</Text> }))
+    const row = screen.getByTestId('f-label-row')
+    expect(StyleSheet.flatten(row.props.style).flexDirection).toBeUndefined()
+    expect(row.queryAll((n) => n.props.testID === 'aside')).toHaveLength(1)
+  })
+
+  it('without one, the label row is as before: the label alone, no spread', async () => {
+    at(1)
+    await render(field({ label: 'Email' }))
+    expect(StyleSheet.flatten(screen.getByTestId('f-label-row').props.style).justifyContent).toBeUndefined()
+  })
+})
+
+/*
+ * Me + settings A 03 (owner approved 2026-11-18): "Senior Product Designer, Accessibility & Design Systems" was cut at a
+ * word with nothing to say it went on. At rest a long value ends in an ellipsis; focused, the field is the plain input.
+ */
+describe('a long value at rest ends in an ellipsis', () => {
+  const JOB = 'Senior Product Designer, Accessibility & Design Systems'
+  const rest = () => screen.getByTestId('f-rest', { includeHiddenElements: true })
+
+  it('blurred: one line, tail ellipsis, the input’s own text hidden under it', async () => {
+    await render(field({ value: JOB }))
+    expect(rest().props).toMatchObject({ numberOfLines: 1, ellipsizeMode: 'tail' })
+    expect(rest().props.children).toBe(JOB)
+    expect(StyleSheet.flatten(input().props.style).color).toBe('transparent')
+  })
+
+  it('focused: the plain input, no overlay', async () => {
+    await render(field({ value: JOB }))
+    await fireEvent(input(), 'focus')
+    expect(screen.queryByTestId('f-rest', { includeHiddenElements: true })).toBeNull()
+    expect(StyleSheet.flatten(input().props.style).color).toBe(COLOR.textPrimary)
+  })
+
+  it('is not read twice: the overlay is hidden from a screen reader, the input keeps the value', async () => {
+    await render(field({ value: JOB }))
+    expect(rest().props).toMatchObject({ accessibilityElementsHidden: true, importantForAccessibility: 'no' })
+    expect(input().props.value).toBe(JOB)
+  })
+
+  it.each([
+    ['empty', { value: '' }],
+    ['a password', { value: 'hunter22', secure: true }],
+  ] as const)('control: %s draws no overlay', async (_name, props) => {
+    await render(field(props))
+    expect(screen.queryByTestId('f-rest', { includeHiddenElements: true })).toBeNull()
+  })
+})
+
+/* Me + settings A 03/04: the editors' labels in sentence case, Satoshi 13/18 500 (the board's `field`), not SHOUTED. */
+describe('sentence-case labels inside FieldLabelCase "sentence"', () => {
+  const label = () => screen.getByText('Job title · shown once you reveal')
+  // Bold Text's last answer is shared across components: an earlier test turned it on.
+  beforeEach(async () => {
+    jest.spyOn(AccessibilityInfo, 'isBoldTextEnabled').mockResolvedValue(false)
+  })
+  const settle = () => act(async () => {})
+
+  it('draws the label as written, in Satoshi 500 at 13/18', async () => {
+    await render(
+      <FieldLabelCase.Provider value="sentence">
+        {field({ label: 'Job title · shown once you reveal' })}
+      </FieldLabelCase.Provider>
+    )
+    await settle()
+    expect(StyleSheet.flatten(label().props.style)).toMatchObject({ fontFamily: FONT_FAMILY.brand[500], fontSize: 13, lineHeight: 18 })
+    expect(StyleSheet.flatten(label().props.style).textTransform).toBeUndefined()
+  })
+
+  it('a TextArea’s label too', async () => {
+    await render(<FieldLabelCase.Provider value="sentence">{area({ label: 'Bio' })}</FieldLabelCase.Provider>)
+    await settle()
+    expect(StyleSheet.flatten(screen.getByText('Bio').props.style).fontFamily).toBe(FONT_FAMILY.brand[500])
+  })
+
+  it('control: outside it, the DS label stays Geist Mono uppercase', async () => {
+    await render(field({ label: 'Job title · shown once you reveal' }))
+    expect(StyleSheet.flatten(label().props.style)).toMatchObject({ textTransform: 'uppercase' })
   })
 })

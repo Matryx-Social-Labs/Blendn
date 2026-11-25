@@ -30,6 +30,12 @@ describe('mutedRoomsFrom', () => {
     expect(titles).toEqual({ e1: 'Bass Thursday', v1: 'Toit', c1: 'Nebula' })
   })
 
+  // C7 naming follow-up (owner 2026-11-15, SCRUM-1042): a room with no name of its own is "The room", never "Event chat".
+  it('a muted room with no name anywhere is "The room"', () => {
+    const [room] = mutedRoomsFrom({ groups: [{ id: 'x1', mute: { muted: true, until: null } }] }, NOW)
+    expect(room.title).toBe('The room')
+  })
+
   it('carries what the room opens on', () => {
     const [event, , crew] = mutedRoomsFrom(payload, NOW)
     expect(event.eventTitle).toBe('Bass Thursday')

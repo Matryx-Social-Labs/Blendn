@@ -1,5 +1,7 @@
 import { LinearGradient } from 'expo-linear-gradient'
-import type { ViewProps } from 'react-native'
+import { useId } from 'react'
+import { View, type ViewProps } from 'react-native'
+import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg'
 
 import { COLOR, GRADIENT } from '../../lib/design/tokens'
 import { tint } from '../../lib/theme'
@@ -40,6 +42,33 @@ export function PhotoScrim({ contrast = false, foot: ends, ...rest }: ViewProps 
   return <LinearGradient {...rest} colors={[tint(COLOR.ink, 0), tint(COLOR.ink, foot)]} />
 }
 
+/**
+ * The Pulse lead's rotation scrim (pulse-media sheet 08, owner 2026-11-17): Featured C rotates through frames nobody chose
+ * as the cover, so the words must hold over any of them. Ink from 15% of the card: 62% by 35%, 86% by 70%, 94% at the
+ * foot (the board's worst staging frame: overline 5.9:1, 3-line title 7.4:1). Increase Contrast deepens it 20%, as the
+ * photo scrim's.
+ */
+export const ROTATION_SCRIM = [
+  { at: 0, alpha: 0 },
+  { at: 0.15, alpha: 0 },
+  { at: 0.35, alpha: 0.62 },
+  { at: 0.7, alpha: 0.86 },
+  { at: 1, alpha: 0.94 },
+] as const
+/** At large text the words climb to about a quarter of the card (AX5 on iOS): the same curve, reached 15% sooner. */
+export const ROTATION_SCRIM_LARGE = [
+  { at: 0, alpha: 0 },
+  { at: 0.05, alpha: 0.3 },
+  { at: 0.2, alpha: 0.66 },
+  { at: 0.55, alpha: 0.86 },
+  { at: 1, alpha: 0.94 },
+] as const
+export function RotationScrim({ contrast = false, large = false, ...rest }: ViewProps & { contrast?: boolean; large?: boolean }) {
+  const deeper = (a: number) => (a > 0 && contrast ? Math.min(1, a + PHOTO_SCRIM.contrast) : a)
+  const stops = large ? ROTATION_SCRIM_LARGE : ROTATION_SCRIM
+  return <LinearGradient {...rest} colors={stops.map((s) => tint(COLOR.ink, deeper(s.alpha))) as [string, string, ...string[]]} locations={stops.map((s) => s.at) as [number, number, ...number[]]} />
+}
+
 /** A photo's head under the status bar (Flow 5 Room info hero: 45% → 0), so the clock reads over any cover. */
 export const STATUS_SCRIM = 0.45
 export function StatusScrim(props: ViewProps) {
@@ -70,4 +99,42 @@ const SIDEWAYS = {
  */
 export function SolidBarFade({ color, toward = 'bottom', ...rest }: ViewProps & { color: string; toward?: 'bottom' | keyof typeof SIDEWAYS }) {
   return <LinearGradient {...rest} colors={[tint(color, 0), color]} {...(toward === 'bottom' ? null : SIDEWAYS[toward])} />
+}
+
+/** The board's corner light on a card (`.fc`: ember at 20% from the top-left, gone by 60%), as a diagonal fade. */
+export const CORNER_GLOW = { alpha: 0.2, reach: 0.6 } as const
+export function CornerGlow({ color, ...rest }: ViewProps & { color: string }) {
+  // ponytail: expo-linear-gradient has no radial; a diagonal fade from the corner reads the same on a card this size.
+  return <LinearGradient {...rest} colors={[tint(color, CORNER_GLOW.alpha), tint(color, 0)]} locations={[0, CORNER_GLOW.reach]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} />
+}
+
+/**
+ * One layer of a board's `radial-gradient(<w>% <h>% at <x>% <y>%, <colour> <alpha>, transparent <reach>%)`: an ellipse of
+ * the box's own proportions, the colour at its centre fading to nothing at `reach` of its radius.
+ */
+export type RadialLayer = { color: string; alpha: number; at: readonly [number, number]; size: readonly [number, number]; reach: number }
+
+/**
+ * The washes the boards light a page with (the event poster's light, the offer's, a world's corner): CSS radial
+ * gradients, drawn with react-native-svg because expo-linear-gradient has no radial. Decorative, never under text alone.
+ */
+export function RadialWash({ layers, ...rest }: ViewProps & { layers: readonly RadialLayer[] }) {
+  const id = useId().replace(/:/g, '')
+  return (
+    <View pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants" {...rest}>
+      <Svg width="100%" height="100%">
+        <Defs>
+          {layers.map((l, i) => (
+            <RadialGradient key={i} id={`${id}-${i}`} cx={`${l.at[0]}%`} cy={`${l.at[1]}%`} rx={`${l.size[0]}%`} ry={`${l.size[1]}%`} fx={`${l.at[0]}%`} fy={`${l.at[1]}%`}>
+              <Stop offset="0" stopColor={l.color} stopOpacity={l.alpha} />
+              <Stop offset={l.reach} stopColor={l.color} stopOpacity={0} />
+            </RadialGradient>
+          ))}
+        </Defs>
+        {layers.map((_, i) => (
+          <Rect key={i} width="100%" height="100%" fill={`url(#${id}-${i})`} />
+        ))}
+      </Svg>
+    </View>
+  )
 }

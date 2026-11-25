@@ -93,7 +93,21 @@ describe('<PollBubble>', () => {
 
   it('reads as one poll: who it is from, then the question', async () => {
     await render(<PollBubble question={Q} options={counted} />)
-    expect(screen.getByLabelText(`Poll from the organizer: ${Q}`)).toBeTruthy()
+    expect(screen.getByLabelText(`Poll from the host: ${Q}`)).toBeTruthy()
+  })
+
+  it('names the host as the host card does (audit C-1): the org, then HOST; never "Organizer"', async () => {
+    await render(<PollBubble question={Q} options={counted} host="Nightshift Collective" closed />)
+    expect(screen.getByText(/Poll · Nightshift Collective/)).toBeTruthy()
+    expect(screen.getByText('HOST')).toBeTruthy()
+    expect(screen.getByLabelText(`Poll from the host, Nightshift Collective: ${Q}`)).toBeTruthy()
+    expect(screen.queryByText(/Organizer/)).toBeNull()
+  })
+
+  it('control: no name from the server is "Poll" and HOST, still never "Organizer"', async () => {
+    await render(<PollBubble question={Q} options={counted} />)
+    expect(screen.getByText('HOST')).toBeTruthy()
+    expect(screen.queryByText(/Organizer/)).toBeNull()
   })
 
   it('Increase Contrast: the hairline on the bubble', async () => {

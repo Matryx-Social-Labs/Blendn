@@ -5,16 +5,20 @@ import { COLOR, MATERIAL, RADIUS, SIZE, SPACE, MAX_FONT_SCALE } from '../../lib/
 import { H } from '../../lib/haptics'
 import { OPACITY, tint } from '../../lib/theme'
 import { Price, spokenPrice } from './MonoFamily'
-import { focusRing, font, PRESSED_WASH, useBoldText, useIncreaseContrast, useSelection } from './shared'
+import { focusRing, font, PRESSED_WASH, useBoldText, useIncreaseContrast, useLargeText, useSelection } from './shared'
 
 /** The page's 64 pt row and its 22 pt ring: the hue's 6 pt when picked, 35% at 1.5 pt when not. */
 const ROW_MIN_HEIGHT = SIZE.primary + SPACE.sm
 const RING = SPACE.xl - SPACE.xxs
+const RING_COMPACT = SPACE.lg + SPACE.xs
 const RING_ON = SPACE.sm - SPACE.xxs
 const RING_OFF = 1.5
 const RING_OFF_ALPHA = 0.35
 /** The hairline between rows starts past the ring (the page's 50 pt inset). */
 const HAIRLINE_INSET = SPACE.lg + RING + SPACE.md
+/** A plan card's edge (remaining-screens 01 A): 1 pt hairline, 2 pt in the hue when picked. */
+const CARD_EDGE_OFF = 1
+const CARD_EDGE_ON = 2
 /** The rule that sets the Night Pass apart: 22% white (Flow 12 `page`). */
 const APART_ALPHA = 0.22
 
@@ -52,13 +56,21 @@ export function PlanCard({ name, price, per, sub, selected = false, onPress, dis
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const [focused, setFocused] = useState(false)
+  // At the accessibility sizes the price takes its own line under the name (remaining-screens 02 A): beside it, its
+  // column squeezed the name to a letter a line.
+  const large = useLargeText()
+  const priceRun = (
+    <View testID={testID && `${testID}-price`} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+      <Price amount={price} per={per} />
+    </View>
+  )
   return (
     <View>
       <Pressable
         testID={testID}
         onPress={() => {
-          if (selected) return
-          H.select()
+          // A pick plays the cue; a re-tap is passed on silently (Manage's plans open the paywall on any tap).
+          if (!selected) H.select()
           onPress?.()
         }}
         disabled={disabled}
@@ -75,13 +87,12 @@ export function PlanCard({ name, price, per, sub, selected = false, onPress, dis
         ]}
       >
         <RadioRing selected={selected} testID={testID && `${testID}-ring`} />
-        <View style={styles.text}>
+        <View testID={testID && `${testID}-text`} style={styles.text}>
           <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink]}>{name}</Text>
           {sub ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>{sub}</Text> : null}
+          {large ? priceRun : null}
         </View>
-        <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-          <Price amount={price} per={per} />
-        </View>
+        {large ? null : priceRun}
       </Pressable>
       {focused || previewState === 'focused'
         ? focusRing(RADIUS.rowInCard).map((r, i) => <View key={i} testID={i ? undefined : testID && `${testID}-focus`} pointerEvents="none" style={r} />)
@@ -90,14 +101,17 @@ export function PlanCard({ name, price, per, sub, selected = false, onPress, dis
   )
 }
 
-/** The 22 pt radio ring the plan rows and the Go Live dial share: white 6 pt when picked, 35% at 1.5 pt when not. */
-export function RadioRing({ selected, testID }: { selected: boolean; testID?: string }) {
+/**
+ * The 22 pt radio ring the plan rows and the Go Live dial share: the hue's 6 pt when picked, 35% at 1.5 pt when not.
+ * `compact`: the 20 pt ring of a radio list on a page (Flow 4 `rate`, `.rd`), its 6 pt dot in the hue's glyph.
+ */
+export function RadioRing({ selected, compact = false, testID }: { selected: boolean; compact?: boolean; testID?: string }) {
   const contrast = useIncreaseContrast()
   const sel = useSelection()
   const ring = selected
-    ? { borderWidth: RING_ON, borderColor: sel.edge }
+    ? { borderWidth: RING_ON, borderColor: compact ? sel.glyph : sel.edge }
     : { borderWidth: RING_OFF, borderColor: contrast ? MATERIAL.hairlineIncreaseContrast : tint(COLOR.textPrimary, RING_OFF_ALPHA) }
-  return <View testID={testID} style={[styles.ring, ring]} />
+  return <View testID={testID} style={[styles.ring, compact && styles.ringCompact, ring]} />
 }
 
 /** The Night Pass row: a one-off, 24 hours from purchase, and another adds 24 more (G2). Never "until 6 am". */
@@ -111,19 +125,41 @@ export function NightPassRow(props: Omit<PlanCardProps, 'name' | 'sub' | 'per'>)
  * on Android's solid one (the Tonight sheet). `apartFrom`: the index of the
  * row the page sets apart (the Night Pass, a one-off among subscriptions): the
  * rule before it is the 22% white one, inset 8 pt, not the row hairline.
+ * `cards`: each row its own `surface` card, 8 pt apart, radius 20, a 1 pt
+ * hairline edge, 2 pt in the hue when picked (the paywall and Manage,
+ * remaining-screens 01 A / 03 A); `apartFrom` does not apply.
  */
 export function PlanList({
   children,
   onSheet = false,
   apartFrom,
+  cards = false,
   testID,
 }: {
   children: ReactNode
   onSheet?: boolean
   apartFrom?: number
+  cards?: boolean
   testID?: string
 }) {
   const rows = Children.toArray(children).filter(isValidElement)
+  const sel = useSelection()
+  const contrast = useIncreaseContrast()
+  if (cards) {
+    return (
+      <View testID={testID} accessibilityRole="radiogroup" style={styles.cards}>
+        {rows.map((row, i) => {
+          const picked = (row.props as { selected?: boolean }).selected === true
+          const edge = picked ? { borderWidth: CARD_EDGE_ON, borderColor: sel.edge } : { borderWidth: CARD_EDGE_OFF, borderColor: contrast ? MATERIAL.hairlineIncreaseContrast : COLOR.hairline }
+          return (
+            <View key={row.key ?? i} testID={testID && `${testID}-card-${i}`} style={[styles.card, edge]}>
+              {row}
+            </View>
+          )
+        })}
+      </View>
+    )
+  }
   const fill = !onSheet ? COLOR.surface : Platform.OS === 'android' ? COLOR.surfaceSunken : MATERIAL.fillOnGlass
   return (
     <View testID={testID} accessibilityRole="radiogroup" style={[styles.list, { backgroundColor: fill }]}>
@@ -147,9 +183,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACE.lg,
   },
   ring: { width: RING, height: RING, borderRadius: RADIUS.capsule },
+  ringCompact: { width: RING_COMPACT, height: RING_COMPACT },
   text: { flex: 1 },
   ink: { color: COLOR.textPrimary },
   list: { borderRadius: RADIUS.sheet, overflow: 'hidden' },
+  cards: { gap: SPACE.sm },
+  card: { borderRadius: RADIUS.tile, backgroundColor: COLOR.surface, overflow: 'hidden' },
   hairline: { height: StyleSheet.hairlineWidth, marginLeft: HAIRLINE_INSET, backgroundColor: COLOR.hairline },
   apart: { height: StyleSheet.hairlineWidth, marginVertical: SPACE.xs, marginHorizontal: SPACE.sm, backgroundColor: tint(COLOR.textPrimary, APART_ALPHA) },
 })

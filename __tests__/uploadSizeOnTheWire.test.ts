@@ -40,4 +40,7 @@ it('asks for the upload URL with the size and names the build', async () => {
   expect(calls).toHaveLength(1)
   expect(calls[0].body).toEqual({ filename: 'a.jpg', contentType: 'image/jpeg', folder: 'chat', size: 123456 })
   expect(calls[0].headers['X-App-Version']).toBe('1.0.1')
+  // SYS-14: the build number, which the server's MOBILE_MIN_APP_BUILD_{IOS,ANDROID} judges (every TestFlight build says 1.0.1).
+  expect(calls[0].headers['X-App-Build']).toBe('130')
+  expect(calls[0].headers['X-App-Platform']).toBe('ios')
 })

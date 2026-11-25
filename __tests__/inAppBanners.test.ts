@@ -51,8 +51,12 @@ describe('the capsule’s words', () => {
     expect(b).toMatchObject({ visual: { type: 'glyph', icon: 'user-plus' }, title: 'New friend request', context: 'Just now', data: { requestId: 'r1' }, merged: 1 })
   })
 
-  it('says “Someone from Nebula is here” for a crew, from the crew’s name in the push title', () => {
-    expect(bannerFor({ title: 'Nebula', body: 'x', data: { type: 'crew_here', crewId: 'c' } }, 1)?.title).toBe('Someone from Nebula is here')
+  it('a crew push says who, in the server’s words: the crew’s name, then its body (crews S3, admin #971)', () => {
+    const b = bannerFor({ title: 'Nebula', body: 'Priya and Arjun are in. Hold to Blend’n when you get there.', data: { type: 'crew_here', crewId: 'c' } }, 1)
+    expect(b?.title).toBe('Nebula')
+    expect(b?.context).toBe('Priya and Arjun are in. Hold to Blend’n when you get there.')
+    // "Going together" rides the same kind: its body is its own sentence, never "is here".
+    expect(bannerFor({ title: 'Nebula', body: 'Priya wants to go together. Open the crew to see the night.', data: { type: 'crew_here' } }, 1)?.title).not.toMatch(/is here/)
   })
 
   it('draws an event change as the event tile, saying what changed', () => {

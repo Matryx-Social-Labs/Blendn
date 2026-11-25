@@ -4,28 +4,34 @@
  */
 
 import { roundCoordinate } from './coordinates'
+import type { CrewPlan } from './crews'
+import { locationSharingOn, setLocationSharing } from './shareLocation'
+import { patchEventDetailStatus } from './eventDetailCache'
+import { emitEventStatusChanged } from './eventStatusSignal'
 import { markCheckIn } from './checkInTiming'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import type { AttendancePayload, RsvpEventsPayload, SavedEventsPayload } from './savedEvents'
 import type { PaywallEvent, PaywallTrigger } from './paywallPolicy'
 import type { PlusStatus } from './plus'
 import { noteBlocked } from './blockEpoch'
+import { forgetPersonalChats } from './queryCache'
 import { CONVERSATIONS_PAGE } from './conversationsPage'
 import { namedList, type NamedList } from './namedList'
 import * as SecureStore from 'expo-secure-store'
 import { AppState, Platform } from 'react-native'
-import { type ResponseHead, REQUEST_TIMEOUT_MS, TIMEOUT_MESSAGE, fetchWithTimeout, isTimeoutError, settleWithin } from './fetchTimeout'
-import type { CityOption } from './city'
+import { type ResponseHead, REQUEST_TIMEOUT_MS, TIMEOUT_MESSAGE, fetchWithTimeout, isNetworkFailure, isTimeoutError, settleWithin } from './fetchTimeout'
+import type { CityCatalogue } from './city'
 import { Logger } from './logger'
-import { markOffline, markOnline } from './networkStatus'
+import { markOffline, markOnline, markTimeout } from './networkStatus'
 import type { NotificationFeed } from './notificationFormat'
 import { noteFriendGone } from './friendsGone'
 import { FRIENDS_PAGE } from './friendsPaging'
 import type { FriendInvite, FriendPerson, FriendProfile, FriendRequestsPayload, FriendsPayload, FriendState } from './friends'
 import type { BoardPost, BoardReportReason, BoardRequestStatus, BoardRequests } from './board'
+import type { LobbyAlerts, LobbyMeta, LobbyPhase, LobbyPreview, LobbyState, LobbySubKind, LobbySummary } from './lobby'
 import type { Badge, Choice, Overlap, ProfileOptions } from './aboutYou'
 import { reasonOf, SESSION_END_CODES } from './sessionEnd'
-import { appVersionNumber } from './appVersion'
+import { appBuildNumber, appVersionNumber } from './appVersion'
 import { isUpdateRefusal, markUpdateRequired } from './updateRequired'
 import { markSessionExpired, markSessionStarted } from './sessionEvents'
 import { onCriticalPath } from './criticalPath'
@@ -34,6 +40,7 @@ import { msUntilExpiry, REFRESH_SKEW_MS } from './socketAuth'
 import { getPushTokenRef, setPushTokenRef } from './pushTokenRef'
 import type { ChatReaction } from './chatReactions'
 import { SEARCH_TOO_SHORT, searchTermOf } from './searchTerm'
+import type { DeletionProof } from './deletionProof'
 
 // API Configuration
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL
@@ -49,6 +56,13 @@ const PARTICIPANTS_SWR_TTL = 30 * 1000
  * Room info listed only the organiser of a room of 426, on an app left running through the drive). Past this, a read
  * waits for the server.
  */
+/**
+ * An id as one API path segment: encoded, so an id that came from a link or a route param can never add a segment, a
+ * query or a fragment to an authenticated request (security review, Wave PR (b)). A real id (uuid, cuid, room handle)
+ * is unchanged.
+ */
+export const pathSegment = (id: string): string => encodeURIComponent(id)
+
 export const SWR_STALE_LIMIT_MS = 5 * 60 * 1000
 
 if (!API_BASE_URL) {
@@ -69,8 +83,23 @@ const USER_KEY = 'blendn_user'
  */
 const SIGNED_OUT_KEY = 'blendn_signed_out'
 
-// Secure storage options
+/*
+ * Readable once the phone has been unlocked since it started, and never leaves it (SCRUM-878). iOS launches the app in the
+ * background while the phone is locked (prewarming, a push); WHEN_UNLOCKED refused the read then, and the launch took the
+ * refusal for no session.
+ *
+ * Under a new service, because the keychain keeps an item's accessibility when it is updated: changing it means a delete
+ * and an add, and a kill between the two (a write stuck on Expo's queue, RC drive 2) would lose the session. So older
+ * builds' items stay where they are, are read when the new service has none, and are deleted only once the new one is
+ * written (`secureSet`, at the next refresh). There is always one copy.
+ */
 const SECURE_OPTIONS: SecureStore.SecureStoreOptions = {
+  keychainService: 'blendn.api.auth.v2',
+  requireAuthentication: false,
+  keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY,
+}
+/** Where builds before SCRUM-878 kept the session: read as a fallback, deleted once the new service holds it. */
+const LEGACY_SECURE_OPTIONS: SecureStore.SecureStoreOptions = {
   keychainService: 'blendn.api.auth',
   requireAuthentication: false,
   keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
@@ -198,7 +227,9 @@ export class RequestQueue {
     } catch (error) {
       this.errorCount++
 
-      Logger.error('api', `Request #${requestId} failed`, {
+      // The id is a detail, not the sentence: the sentence is the Sentry issue's fingerprint (lib/logger).
+      Logger.error('api', 'Request failed', {
+        requestId,
         error,
         duration: Date.now() - startTime,
         type: item.type,
@@ -239,13 +270,22 @@ export class RequestQueue {
 
 const requestQueue = new RequestQueue()
 
-/** `?a=1&b=2` from the fields that are set, or '' when none are. */
-function toQuery(params: object = {}): string {
+/**
+ * `?a=1&b=2` from the fields that are set, or '' when none are.
+ *
+ * "Share location for nearby events" off: the question is asked without the person's position (`lib/shareLocation`), and
+ * without what only that position gives meaning (a `radius`, a sort by distance), so the server answers the city, not a
+ * wrong "nearest". `viewport`: the lat/lon are where a map camera points, not where the person is.
+ */
+function toQuery(params: object = {}, viewport = false): string {
   const searchParams = new URLSearchParams()
+  const withheld = !viewport && !locationSharingOn()
   for (const [key, raw] of Object.entries(params)) {
     // A `search` the server would refuse (under 2 characters, admin #751) is no search: never sent (`searchTermOf`).
     const value = key === 'search' ? searchTermOf(typeof raw === 'string' ? raw : null) : raw
     if (value === undefined || value === null) continue
+    // A box is a position too (the map's, around you): it goes only as a viewport, or with sharing on.
+    if (withheld && (key === 'lat' || key === 'lon' || key === 'radius' || key === 'bbox' || (key === 'sortBy' && value === 'distance'))) continue
     // A position never leaves in a URL at more than ~110 m (`lib/coordinates.ts`): the server logs query strings.
     searchParams.append(key, (key === 'lat' || key === 'lon') && typeof value === 'number' ? String(roundCoordinate(value)) : String(value))
   }
@@ -282,6 +322,17 @@ export const TIMED_OUT = Symbol('timed out')
  * as "no token" would clear the session and sign the person out over a slow keychain.
  */
 const withinDeadline = <T,>(work: Promise<T>): Promise<T | typeof TIMED_OUT> => settleWithin<T | typeof TIMED_OUT>(work, REQUEST_TIMEOUT_MS, TIMED_OUT)
+
+/** Sign-out waits this long for the keychain, not the request deadline: the person asked to leave, and a restored session's read can hang (SCRUM-733). */
+export const SIGN_OUT_READ_MS = 3_000
+
+/**
+ * A sign-in waits this long for the keychain writes, then goes on with the session it holds in memory (SCRUM-903). The server had
+ * signed the person in; three keychain writes behind a blocked native queue (one notification-permission read wedged on an iOS 27
+ * sim) kept the spinner up for good. The writes stay queued and land when the queue frees; if they never do, the next launch asks
+ * for a sign-in, which is the lesser loss.
+ */
+export const SIGN_IN_PERSIST_MS = 3_000
 
 /**
  * Which session the keychain holds: bumped by a stored sign-in (`keepSession`) and by every way out (`signOut`,
@@ -329,12 +380,17 @@ class TokenStorage {
   }
 
   private static async secureGet(key: string): Promise<string | null> {
+    return (await this.secureRead(key)) ?? null
+  }
+
+  /** As `secureGet`, but `undefined` when the keychain refused the read (locked): unknown, which is not "none". */
+  private static async secureRead(key: string): Promise<string | null | undefined> {
     if (this.memory.has(key)) return this.memory.get(key) ?? null
     const value = await this.readStored(key)
     // A write or a clear while the read was out is newer than what it found, and stays. The caller still gets what was
     // read: sign-out queues its reads ahead of its deletes so that the POST carries the session it is ending.
     if (value !== undefined && !this.memory.has(key)) this.memory.set(key, value)
-    return value ?? null
+    return value
   }
 
   /** The stored value, or `undefined` when the read failed (the fallback's answer, never remembered). */
@@ -349,7 +405,8 @@ class TokenStorage {
     }
     const started = Date.now()
     try {
-      return await SecureStore.getItemAsync(key, SECURE_OPTIONS)
+      // An install from before SCRUM-878 still has it under the old service until its next write.
+      return (await SecureStore.getItemAsync(key, SECURE_OPTIONS)) ?? (await SecureStore.getItemAsync(key, LEGACY_SECURE_OPTIONS))
     } catch (error) {
       // Unexpected on native (e.g. keychain access failure) — fall back but
       // log it so it's visible in Sentry rather than silently swallowed.
@@ -375,6 +432,10 @@ class TokenStorage {
     const started = Date.now()
     try {
       await SecureStore.setItemAsync(key, value, SECURE_OPTIONS)
+      // Written where it is readable while locked: the older copy goes (SCRUM-878), and AsyncStorage's if it was there.
+      try {
+        await SecureStore.deleteItemAsync(key, LEGACY_SECURE_OPTIONS)
+      } catch {}
       // Clear from AsyncStorage if it was there
       try {
         await AsyncStorage.removeItem(key)
@@ -387,18 +448,29 @@ class TokenStorage {
     }
   }
 
-  private static async secureRemove(key: string): Promise<void> {
+  /**
+   * True when every copy is known gone. Each service is deleted on its own (SCRUM-878 review): a failure on the new one must
+   * not leave the old copy, which the launch's fallback read would bring back after a sign-out.
+   */
+  private static async secureRemove(key: string): Promise<boolean> {
     this.memory.set(key, null)
+    let cleared = true
     if (Platform.OS !== 'web') {
-      try {
-        await SecureStore.deleteItemAsync(key, SECURE_OPTIONS)
-      } catch (error) {
-        Logger.warn('auth', 'SecureStore delete failed', { key, error })
+      for (const options of [SECURE_OPTIONS, LEGACY_SECURE_OPTIONS]) {
+        try {
+          await SecureStore.deleteItemAsync(key, options)
+        } catch (error) {
+          cleared = false
+          Logger.warn('auth', 'SecureStore delete failed', { key, service: options.keychainService, error })
+        }
       }
     }
     try {
       await AsyncStorage.removeItem(key)
-    } catch {}
+    } catch {
+      cleared = false
+    }
+    return cleared
   }
 
   static async getAccessToken(): Promise<string | null> {
@@ -411,6 +483,15 @@ class TokenStorage {
 
   static async getRefreshToken(): Promise<string | null> {
     return this.secureGet(REFRESH_TOKEN_KEY)
+  }
+
+  /** For whoever decides a session is over: `undefined` when the keychain could not be read (SCRUM-878). */
+  static async accessTokenOrUnknown(): Promise<string | null | undefined> {
+    return this.secureRead(ACCESS_TOKEN_KEY)
+  }
+
+  static async refreshTokenOrUnknown(): Promise<string | null | undefined> {
+    return this.secureRead(REFRESH_TOKEN_KEY)
   }
 
   static async setRefreshToken(token: string): Promise<void> {
@@ -433,12 +514,14 @@ class TokenStorage {
     return this.secureSet(USER_KEY, JSON.stringify(user))
   }
 
-  static async clearAll(): Promise<void> {
-    await Promise.all([
+  /** True only when every key is gone from both services: until then the "signed out here" marker stays (M2). */
+  static async clearAll(): Promise<boolean> {
+    const results = await Promise.all([
       this.secureRemove(ACCESS_TOKEN_KEY),
       this.secureRemove(REFRESH_TOKEN_KEY),
       this.secureRemove(USER_KEY),
     ])
+    return results.every(Boolean)
   }
 
   /** Mark this phone signed out (M2): called before any await at sign-out, so the write is issued whatever follows. */
@@ -471,14 +554,14 @@ class TokenStorage {
 // Profile Cache - shared across components to avoid duplicate fetches
 const PROFILE_CACHE_TTL = 60 * 1000 // 60 seconds
 interface ProfileCacheEntry {
-  data: UserProfileData
+  data: OwnProfileEnvelope
   timestamp: number
   userId: string
 }
 let profileCache: ProfileCacheEntry | null = null
 
 export const ProfileCache = {
-  get(userId: string): UserProfileData | null {
+  get(userId: string): OwnProfileEnvelope | null {
     if (!profileCache) return null
     if (profileCache.userId !== userId) return null
     if (Date.now() - profileCache.timestamp > PROFILE_CACHE_TTL) {
@@ -487,7 +570,7 @@ export const ProfileCache = {
     }
     return profileCache.data
   },
-  set(userId: string, data: UserProfileData): void {
+  set(userId: string, data: OwnProfileEnvelope): void {
     profileCache = { data, timestamp: Date.now(), userId }
   },
   clear(): void {
@@ -563,7 +646,14 @@ export interface MatchCard {
    */
   age?: number | null
   insideNow: boolean
+  /** An installed build's secret like (kept by the server for old clients). This client never reads it: waves only. */
   youLiked: boolean
+  /** You waved at them in this room (SCRUM-1042): the card's still "✓ Waved". Optional: a client outlives a deploy. */
+  youWaved?: boolean
+  /** They waved at you in this room and it is yours to answer: "Wave back". Waves only, never a like. */
+  wavedAtYou?: boolean
+  /** The conversation your mutual here opened: Say hi reaches it after a restart. Null otherwise; absent from an older server. */
+  conversationId?: string | null
   /**
    * Matching v2: display-only lines you share, as sentences the server wrote
    * ("Both CSK — in RCB country 💛", "You both speak Malayalam"). Never a
@@ -576,29 +666,98 @@ export interface MatchCard {
   sign?: string | null
   /** "Regular here", "Shows up", "5+ nights this month" — earned by check-ins. */
   badges?: Badge[]
+  /**
+   * Flow 5 P-A: their answer to tonight's question, for this page of the deck only. Null when they have not answered,
+   * the room asks nothing, or you operate the event (hosts never read answers). Optional: a client outlives a deploy.
+   */
+  tonightAnswer?: string | null
+  /** Flow 5 P-A: why they are here at a work-lens event (`hire` …), read through `parseWorkIntent`. Same readers as the answer. */
+  workIntent?: string | null
+  /** When they checked in here (ISO), the sheet's "Here 40 min" (SCRUM-1042); null to a host. Optional: a client outlives a deploy. */
+  checkInTime?: string | null
 }
 
-export interface LikeOutcome {
+/** `GET /events/:id/matches`: the page, and the room's lens (what leads on these cards; read through `parseLens`). */
+export interface MatchDeck {
+  matches: MatchCard[]
+  lens?: unknown
+}
+
+/** `GET`/`PUT /events/:id/matches/preferences`. `lens` is read through `parseLens`. */
+export interface MatchPreferences {
+  intent: string[]
+  revealed: boolean
+  openToCrews?: boolean
+  tonightAnswer?: string | null
+  /** Flow 5 P-A: why you are here (work lens only); read through `parseWorkIntent`. */
+  workIntent?: string | null
+  lens?: unknown
+}
+
+/**
+ * A wave's answer (`POST /events/:id/waves`, SCRUM-1042). A second wave at the same person is `{ sent: true, mutual:
+ * false }` and stores nothing. A mutual carries the conversation it opened and both pseudonyms, as a mutual like did.
+ */
+export interface WaveOutcome {
+  sent: true
   mutual: boolean
-  /** Present only on a mutual like -- the conversation it just opened. */
   conversationId?: string
-  /**
-   * Both pseudonyms, on a mutual like only.
-   *
-   * Connection Success draws a generated mark per person and `pseudonymAvatar`
-   * is seeded on the pseudonym, so without these the sheet could not paint
-   * without first fetching the conversation -- a round trip in the middle of
-   * the one moment that should feel instant.
-   */
   pseudonyms?: { you: string; them: string }
+}
+
+/** One wave to you (`GET /events/:id/waves`): a room handle and the room's name for them, never an id or a photo. */
+export interface ReceivedWave {
+  userId: string
+  displayName: string
+  wavedAt: string
+  /** You answered it (a wave or a like back): "✓ Waved". Only a row the list returned may offer Wave back. */
+  wavedBack: boolean
+}
+
+/** A crew's wave at you (admin #1007): the crew only, never who tapped. Waved back at as yourself (`lib/crewWaveBack.ts`). */
+export interface CrewWave {
+  crewId: string
+  name: string
+  emblemSeed: string
+  wavedAt: string
+  wavedBack: boolean
+}
+
+/** Waves to you in one room, newest first, 20 a page. `open: false` once the room has closed: nothing is answerable. */
+export interface ReceivedWavesPage {
+  open: boolean
+  /** The people; the crews are `crewTotal`. */
+  total: number
+  waves: ReceivedWave[]
+  nextCursor: string | null
+  /** The first page only, at most 50, newest first; absent from a server that predates them. */
+  crewTotal?: number
+  crewWaves?: CrewWave[]
+}
+
+/** B-A: one Banter row per open room with waves you have not answered (`GET /waves`). */
+export interface WavesWaitingRoom {
+  eventId: string
+  waiting: number
+  latest: ReceivedWave
+  /** The newest three waiting, newest first (handle and name only); absent from a server that predates it. */
+  latestFaces?: Pick<ReceivedWave, 'userId' | 'displayName'>[]
+}
+
+/** A room where crews' waves wait for you (`GET /waves` → `crewRooms`), merged into the room's one row by `eventId`. */
+export interface CrewWavesWaitingRoom {
+  eventId: string
+  waiting: number
+  latest: CrewWave
 }
 
 /**
  * The room from outside it: a number, and how many of them share your taste.
  *
- * `tasteMatchCount` is null under three people — "1 person here shares your
- * taste" in a room of two is that person — and blocked users are excluded
- * server-side, so neither number can be walked back to anybody.
+ * `tasteMatchCount` is a bucket floor, `null | 3 | 10` (null under three: "1
+ * person here shares your taste" in a room of two is that person), so it is
+ * shown as "3+" / "10+". Blocked users are excluded server-side, so neither
+ * number can be walked back to anybody.
  */
 export interface RoomPreview {
   hereCount: number
@@ -645,8 +804,21 @@ export interface WorkFieldsResponse {
  * a message request, a conversation) can forget it.
  */
 function noteBlockedOn<T extends { success: boolean }>(result: T): T {
-  if (result.success) noteBlocked()
+  if (result.success) {
+    noteBlocked()
+    notePeopleClosed()
+  }
   return result
+}
+
+/**
+ * A conversation was closed on the server (a leave, or a block of somebody you talk to): the Banter's People copy is
+ * dropped, so its next read is the server's. The forced read a block starts can lose a race with the one the return to
+ * the Banter starts, and leave the closed row on screen until a pull-to-refresh (SCRUM-919). Not marked dirty: that wakes
+ * the sync of the open conversation, which has just been closed.
+ */
+function notePeopleClosed(): void {
+  forgetPersonalChats()
 }
 
 export interface ApiResponse<T = unknown> {
@@ -697,7 +869,8 @@ export interface ApiResponse<T = unknown> {
    */
   roomKind?: string
   roomName?: string
-  errors?: Array<{ path: string; message: string }>
+  /** Field errors: `field` is the path the server names (`tags.2`), `message` its sentence. */
+  errors?: Array<{ field?: string; message: string }>
 }
 
 /**
@@ -745,6 +918,8 @@ export interface AuthUser {
     location: string | null
     interests: string[]
     onboarded: boolean
+    /** "Share location for nearby events" (`lib/shareLocation`); absent reads as on. */
+    share_location?: boolean
     /** Present on the sign-in and session shapes; `image` mirrors `photos[0]`. */
     photos?: string[]
   } | null
@@ -762,6 +937,8 @@ export interface PaginationMeta {
 /** Represents one event item as returned by the mobile API (camelCase). */
 export interface EventApiItem {
   id: string
+  /** The neighbourhood, from the detail route (an unlisted event names it, never the venue). Absent from a server that does not send it. */
+  area?: string | null
   slug: string
   title: string
   description: string | null
@@ -938,6 +1115,8 @@ export interface EventApiItem {
     ratingCount?: number
     averageRating?: number | null
   }
+  /** The list's own RSVP read (`GET /events`): your status on this event, null when none. Absent from an older server; the detail route's is `userStatus.rsvpStatus`. */
+  rsvpStatus?: 'going' | 'maybe' | 'not_going' | 'waitlisted' | null
   userStatus?: {
     isFavorited?: boolean
     isCheckedIn?: boolean
@@ -945,15 +1124,26 @@ export interface EventApiItem {
     checkInId?: string
     userRating?: number | null
     userReview?: string | null
-    rsvpStatus?: 'going' | 'maybe' | 'not_going' | null
+    rsvpStatus?: 'going' | 'maybe' | 'not_going' | 'waitlisted' | null
+    /** "Going together" (crews 4-A1): your own crews with a night of this event planned. Absent from an older server. */
+    myCrewPlans?: CrewPlan[]
   }
 }
 
 export interface EventsListResponse {
   events: EventApiItem[]
   pagination: PaginationMeta
+  /**
+   * `include=near` with a fix (backend round 3): is anything you could go to within `reachKm`, and if not, the nearest
+   * open city with something on and how far its centre is. Absent without the include or a fix, or from an older server.
+   */
+  near?: {
+    reachKm: number
+    empty: boolean
+    nearestCity: { slug: string; name: string; country: string; distanceKm: number; centre: { latitude: number; longitude: number } } | null
+  }
   activeCheckins?: Array<{ id: string; eventId: string; status: string; [key: string]: unknown }>
-  profile?: UserProfileData
+  profile?: OwnProfileEnvelope
 }
 
 /** One place in the Places list — `GET /api/mobile/venues`. */
@@ -1027,6 +1217,8 @@ export interface VenueDetail {
     /** The venue_type key ("pub_bar"): which plate the page draws when tonight has no cover. */
     venueType?: string | null
     venueTypeLabel: string
+    /** The venue's IANA zone (`venues.timezone`): its hours and its day are read in it, never the phone's. Absent from an older server. */
+    timezone?: string | null
     /** False: "Own this place? Claim it" applies. */
     claimed: boolean
     /*
@@ -1079,6 +1271,13 @@ export interface VenueDetail {
   tonight: { id: string; title: string; startTime: string; endTime: string; coverImageUrl?: string | null; timezone?: string | null } | null
 }
 
+/** A room a check-in or Go Live took you out of (blendn-admin `LeftRoom`). Absent from an older server: none. */
+export interface LeftRoom {
+  eventId: string
+  kind: string
+  name: string
+}
+
 /** `POST /api/mobile/venues/:venueId/live` — your window at a place. */
 export interface GoLiveResult {
   venueDayId: string
@@ -1087,15 +1286,114 @@ export interface GoLiveResult {
   stay: boolean
   stayUntil: string | null
   checkIn: { id: string; status: string; checkInTime: string }
+  left?: LeftRoom[]
   revealSuggestion: boolean
   intentNeeded: boolean
 }
 
-export interface UserProfileData {
+/** The fields of the nested `profile` object (`GET /profiles/:id`). */
+export interface ProfileFields {
+    /*
+     * The five matching fields, declared because the editor needs to *show*
+     * them, not just write them.
+     *
+     * They were always in the payload for your own profile -- the route spreads
+     * `selfProfileFields`, the whole row minus `date_of_birth` -- and were
+     * simply never typed or read, so `about-you` opened with every chip blank
+     * whatever you had already chosen. The route's "withheld from everyone"
+     * rule governs the *public* branch; self is the exception it is written
+     * against.
+     */
+    intent_default?: ('dating' | 'networking' | 'friendship' | 'just_here')[]
+    work_field?: string | null
+    /** The account's push switch (`profiles.push_enabled`); on unless somebody turned it off. */
+    push_enabled?: boolean
+    /** Off by default: friends see a pseudonym in rooms unless this is on. */
+    friends_see_me_in_rooms?: boolean
+    /** Your own profile only: the slugs you picked within the field (the route sends labels to everyone else). */
+    expertise?: string[]
+    gender?: 'woman' | 'man' | 'non_binary' | 'prefer_not_to_say' | null
+    orientations?: string[]
+    interested_in?: ('woman' | 'man' | 'non_binary' | 'prefer_not_to_say')[]
+    id?: string
+    phone?: string
+    name?: string
+    age?: number
+    location?: string
+    /** Home, as a catalogue slug (travel P2); null when unset. */
+    homeCitySlug?: string | null
+    bio?: string
+    occupation?: string
+    education?: string
+    interests?: string[]
+    photos?: string[]
+    profile_photos?: string[]
+    onboarded?: boolean
+    goals?: string[]
+    looking_for?: string[]
+    /**
+     * Returned to the owner only. Off means counted and not listed in any
+     * room — the roster and the grid leave you out — and the room banner
+     * says so (SCRUM-141).
+     */
+    show_online?: boolean
+    /**
+     * `GET /profiles/:id` (blendn-admin #716): what check-ins earned, for you and for anyone who may see who you are. Absent when
+     * the person turned badges off, for a viewer the profile is anonymous to, and from an older server (`parseBadges`).
+     */
+    badges?: Badge[]
+    /**
+     * Your own profile only: `photos` in order, each `pulled: false`, then the photos moderation took down in the last 7 days,
+     * `pulled: true` with `url: null` (the object is withdrawn) and `was_main`. Absent from an older server (`pulledPhotos`).
+     */
+    photo_states?: Array<{ url: string | null; pulled: boolean; pulled_at: string | null; was_main: boolean }>
+    created_at?: string
+    updated_at?: string
+  }
+
+/**
+ * `GET /profiles/:id`: the NESTED shape. The profile is `data.profile`; a top-level `photos` or `name` is not here (that is
+ * `GET /users/:id`, `PublicProfile`). Two endpoints used to share one type, which is how a top-level `photos` read compiled
+ * against the wrong one (SYS-19, O1).
+ */
+export interface OwnProfileEnvelope {
+  id?: string
+  email?: string
+  name?: string
+  image?: string | null
+  createdAt?: string
+  /** Whether to offer "Add friend" (`parseFriendOffer`). */
+  friend?: unknown
+  profile?: ProfileFields | null
+  /** The interests as structured rows (the editor's chips); `profile.interests` is the labels. */
+  interests?: { id: string; name: string; slug: string; icon: string | null }[]
+}
+
+/** `GET /users/:ref/shared-events`: one page, and the whole count. */
+export interface SharedEvent {
+  id: string
+  title: string
+  startTime: string
+  timezone: string
+  venueName: string | null
+  coverImageUrl: string | null
+}
+export interface SharedEventsPayload {
+  events: SharedEvent[]
+  pagination: { limit: number; hasMore: boolean; nextCursor: string | null; totalCount: number }
+}
+
+/**
+ * `GET /users/:id`: the FLAT shape, what a profile page draws for anyone. Photos, bio and occupation are sent only when
+ * `identityVisible` (the server's one answer to "revealed?").
+ */
+export interface PublicProfile {
   id?: string
   user_id?: string
   email?: string
   name?: string
+  /** Sent exactly when `name` is a room pseudonym (admin #998, SCRUM-1046); read through `roomNameFrom`. */
+  pseudonym?: string
   display_name?: string
   image?: string
   age?: number
@@ -1137,59 +1435,13 @@ export interface UserProfileData {
   friend?: unknown
   /** Their badges (`{ kind, label }[]`), top-level beside `friend` for whoever may see who they are; read through `parseBadges`. */
   badges?: unknown
-  /** Nested profile object from /api/mobile/profiles/[userId] */
-  profile?: {
-    /*
-     * The five matching fields, declared because the editor needs to *show*
-     * them, not just write them.
-     *
-     * They were always in the payload for your own profile -- the route spreads
-     * `selfProfileFields`, the whole row minus `date_of_birth` -- and were
-     * simply never typed or read, so `about-you` opened with every chip blank
-     * whatever you had already chosen. The route's "withheld from everyone"
-     * rule governs the *public* branch; self is the exception it is written
-     * against.
-     */
-    intent_default?: ('dating' | 'networking' | 'friendship' | 'just_here')[]
-    work_field?: string | null
-    /** Your own profile only: the slugs you picked within the field (the route sends labels to everyone else). */
-    expertise?: string[]
-    gender?: 'woman' | 'man' | 'non_binary' | 'prefer_not_to_say' | null
-    orientations?: string[]
-    interested_in?: ('woman' | 'man' | 'non_binary' | 'prefer_not_to_say')[]
-    id?: string
-    phone?: string
-    name?: string
-    age?: number
-    location?: string
-    bio?: string
-    occupation?: string
-    education?: string
-    interests?: string[]
-    photos?: string[]
-    profile_photos?: string[]
-    onboarded?: boolean
-    goals?: string[]
-    looking_for?: string[]
-    /**
-     * Returned to the owner only. Off means counted and not listed in any
-     * room — the roster and the grid leave you out — and the room banner
-     * says so (SCRUM-141).
-     */
-    show_online?: boolean
-    /**
-     * `GET /profiles/:id` (blendn-admin #716): what check-ins earned, for you and for anyone who may see who you are. Absent when
-     * the person turned badges off, for a viewer the profile is anonymous to, and from an older server (`parseBadges`).
-     */
-    badges?: Badge[]
-    /**
-     * Your own profile only: `photos` in order, each `pulled: false`, then the photos moderation took down in the last 7 days,
-     * `pulled: true` with `url: null` (the object is withdrawn) and `was_main`. Absent from an older server (`pulledPhotos`).
-     */
-    photo_states?: Array<{ url: string | null; pulled: boolean; pulled_at: string | null; was_main: boolean }>
-    created_at?: string
-    updated_at?: string
-  }
+  /**
+   * Flow 5 P-A: tonight's question and their answer (null: not answered). Only for an event-room handle, only to a viewer
+   * in that room as an attendee, and only when the room asks a question; absent otherwise. Read through `parseLens`.
+   */
+  tonight?: { lens?: unknown; answer?: string | null }
+  /** SCRUM-1042: the conversation a mutual wave in that room opened, by an event room handle only; absent otherwise. */
+  wave?: { conversationId?: string }
 }
 
 export interface ChatMessageData {
@@ -1203,6 +1455,11 @@ export interface ChatMessageData {
 }
 
 export interface CheckInResult {
+  /** The route's shape: the check-in row. `checkInId` below was never on it (ROOM-11). */
+  checkIn?: { id?: string }
+  /** Sent only when `withCrewId` was: whether that crew was told you're in (crews 4-A2). False never undoes the check-in. */
+  crewTold?: boolean
+  left?: LeftRoom[]
   checkInId?: string
   check_in_id?: string
   status?: string
@@ -1241,10 +1498,26 @@ export interface EventChatData {
   chatGroupName?: string
   id?: string
   name?: string
+  /** The room's own state, `active` or `locked` (the organiser's lock), for everyone in it. */
   status?: string
   memberCount?: number
+  /** You as this room names you (yours only). */
+  you?: { pseudonym?: string | null }
+  /** This caller's answer to "may I write here": `reason` names their mute, ban or the room's state; `message` is the closed sentence. */
+  write?: { allowed: boolean; reason?: string | null; message?: string | null; closesAt?: string | null; eventEndedAt?: string | null }
   [key: string]: unknown
 }
+
+/** What a room's `write` / `status` come in: the event door (`EventChatData`) and the history read both carry them. */
+export type RoomWriteRead = Pick<EventChatData, 'status' | 'write'>
+
+/**
+ * `GET /chat/groups/:id/messages`: an object `{ status, write, messages, pagination }` on a current server (SV-5), a bare
+ * array on an older one. `write` / `status` are for any room kind, so the composer's lock reads them here.
+ */
+export type ChatHistoryData =
+  | Array<Record<string, unknown>>
+  | (RoomWriteRead & { messages?: Array<Record<string, unknown>>; pagination?: { hasMore?: boolean; nextCursor?: string | null } })
 
 export interface AuthTokens {
   accessToken: string
@@ -1343,6 +1616,12 @@ export const LIST_PAGE = { conversations: CONVERSATIONS_PAGE, friends: FRIENDS_P
  */
 export const CHANNEL_SET_HEADER = { 'X-Channel-Set': String(PUSH_CHANNEL_SET) } as const
 
+/** `X-App-Build` and `X-App-Platform`: the build number the server's per-build minimum judges (SYS-14). Nothing when the build has no plain number. */
+function buildHeaders(): Record<string, string> {
+  const build = appBuildNumber()
+  return build ? { 'X-App-Build': build, 'X-App-Platform': Platform.OS } : {}
+}
+
 class ApiClientClass {
   private baseUrl: string
   private inFlight = new Map<string, Promise<ApiResponse<unknown>>>()
@@ -1380,7 +1659,9 @@ class ApiClientClass {
   private buildRequestKey(endpoint: string, options: RequestInit, requireAuth: boolean): string {
     const method = (options.method || 'GET').toUpperCase()
     const body = options.body ? String(options.body) : ''
-    return `${method}:${requireAuth ? 'auth' : 'anon'}:${endpoint}:${body}`
+    // Headers an answer depends on (`X-Country`) keep two answers apart, in flight and in the cache.
+    const headers = options.headers ? JSON.stringify(options.headers) : ''
+    return `${method}:${requireAuth ? 'auth' : 'anon'}:${endpoint}:${body}${headers}`
   }
 
   private getCached<T>(key: string): { data: ApiResponse<T>; isFresh: boolean; tooOld: boolean } | null {
@@ -1432,10 +1713,23 @@ class ApiClientClass {
    * `/events/:id?include=…`, not `/events/:id/checkins`.
    */
   forgetEvent(eventId: string): void {
-    const detail = `:/api/mobile/events/${eventId}`
-    for (const key of this.responseCache.keys()) {
-      if (key.includes(`${detail}:`) || key.includes(`${detail}?`)) this.responseCache.delete(key)
-    }
+    const detail = `:/api/mobile/events/${pathSegment(eventId)}`
+    // forgetMatching also bumps the epoch and drops reads on the wire: a getEvent sent before this write (the page just
+    // opened, "I'm going" tapped at once) must neither be joined by the next read nor refill the entry with the old status.
+    this.forgetMatching((key) => key.includes(`${detail}:`) || key.includes(`${detail}?`))
+  }
+
+  /**
+   * Your RSVP or Save on an event changed (SCRUM-876): the event page reads two caches that still say the old thing, so
+   * both are corrected here, once, for every caller (the page, the room's "I'm going", the Going tray). This one's 30 s
+   * entry is forgotten, as check-in does; the page's own 2-minute copy is patched with the new status so a reopen is right
+   * before the network answers.
+   */
+  private eventStatusChanged(eventId: string, status: { rsvpStatus?: string | null; isFavorited?: boolean }): void {
+    this.forgetEvent(eventId)
+    patchEventDetailStatus(eventId, status)
+    // The centre button's plan and fence are judged from your saves and RSVPs: judge again now, not at the next tick.
+    emitEventStatusChanged()
   }
 
   /**
@@ -1453,7 +1747,7 @@ class ApiClientClass {
    * 7 while the database said 4 (SCRUM-617).
    */
   forgetEventMatches(eventId: string): void {
-    const room = `:/api/mobile/events/${eventId}`
+    const room = `:/api/mobile/events/${pathSegment(eventId)}`
     // A read already on the wire was answered before the event: the next one
     // must not join it.
     this.forgetMatching((key) =>
@@ -1500,9 +1794,9 @@ class ApiClientClass {
     }
   }
 
-  private refreshCacheInBackground<T>(endpoint: string, key: string, ttl: number) {
+  private refreshCacheInBackground<T>(endpoint: string, key: string, ttl: number, headers?: Record<string, string>) {
     const epoch = this.cacheEpoch
-    this.queuedRequest<T>(endpoint).then((result) => {
+    this.queuedRequest<T>(endpoint, headers ? { headers } : {}).then((result) => {
       if (result.success && epoch === this.cacheEpoch) {
         this.setCache(key, result, ttl)
       }
@@ -1589,7 +1883,7 @@ class ApiClientClass {
         ...(typeof parsed.roomKind === 'string' ? { roomKind: parsed.roomKind } : {}),
         ...(typeof parsed.roomName === 'string' ? { roomName: parsed.roomName } : {}),
         error: this.buildErrorMessage(response, parsed, endpoint),
-        errors: parsed?.errors as Array<{ path: string; message: string }> | undefined,
+        errors: parsed?.errors as Array<{ field?: string; message: string }> | undefined,
       }
     }
 
@@ -1646,24 +1940,26 @@ class ApiClientClass {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       // Which build is asking, so the server can refuse one it no longer serves (Flow 15 15.14). Not from the web build, which has no native build number to judge (the server's CORS allow-list names this header and `X-Channel-Set`, so a preflight is no reason).
-      ...(Platform.OS !== 'web' ? { 'X-App-Version': appVersionNumber() } : {}),
+      ...(Platform.OS !== 'web' ? { 'X-App-Version': appVersionNumber(), ...buildHeaders() } : {}),
       ...CHANNEL_SET_HEADER,
       ...(options.headers as Record<string, string>),
     }
 
-    // The session this request was made in, and whether it carried a token at all (M1): see the 401 below.
+    // The session this request was made in: see the 401 below.
     const epoch = sessionEpoch
-    let sentToken = false
     if (requireAuth) {
       const accessToken = await this.freshAccessToken()
       // The keychain did not answer: a transport-shaped failure, tried again on the next call. Never sent unauthenticated.
       if (accessToken === TIMED_OUT) return { success: false, error: TIMEOUT_MESSAGE }
       // The session ended while the refresh was out (a sign-out, another sign-in): never sent with the next one's token (H1).
       if (epoch !== sessionEpoch) return { success: false, error: NOT_SIGNED_IN_MESSAGE }
-      if (accessToken) {
-        headers['Authorization'] = `Bearer ${accessToken}`
-        sentToken = true
-      }
+      /*
+       * Nobody is signed in (a session the server revoked has just been ended here, or none was ever started): a request that
+       * needs one is answered here, not sent to be refused. Sent, every screen still mounted over the entry screen's
+       * redirect asked again and drew a 401 each time, about 29 a minute until a relaunch (SCRUM-879).
+       */
+      if (!accessToken) return { success: false, error: NOT_SIGNED_IN_MESSAGE }
+      headers['Authorization'] = `Bearer ${accessToken}`
     }
 
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
@@ -1692,10 +1988,10 @@ class ApiClientClass {
         if (response.status === 401 && requireAuth) {
           /*
            * Not this request's session to refresh or to end (Opus review M1): it ended while the request was out (a sign-out
-           * the person chose, another sign-in), or the request carried no token because nobody is signed in. Either way a
-           * refusal here is not a session the server ended, and must never write "You were signed out".
+           * the person chose, another sign-in). A refusal here is not a session the server ended, and must never write
+           * "You were signed out". (A request with no token at all is never sent: see above.)
            */
-          if (epoch !== sessionEpoch || !sentToken) return { success: false, error: NOT_SIGNED_IN_MESSAGE }
+          if (epoch !== sessionEpoch) return { success: false, error: NOT_SIGNED_IN_MESSAGE }
           const refreshed = await this.refreshTokens()
           if (refreshed === 'ok') {
             const newAccessToken = await withinDeadline(TokenStorage.getAccessToken())
@@ -1711,10 +2007,7 @@ class ApiClientClass {
             // transport problem it is, and tried again on the next call.
             return { success: false, error: TIMEOUT_MESSAGE }
           }
-          await TokenStorage.clearAll()
-          markSessionExpired(rejectedReason, rejectedCode)
-          rejectedReason = undefined
-          rejectedCode = undefined
+          await this.endRejectedSession()
           return { success: false, error: 'Session expired. Please sign in again.' }
         }
 
@@ -1728,7 +2021,8 @@ class ApiClientClass {
         if (result.success) markOnline()
         return result
       } catch (error) {
-        const isNetworkError = error instanceof TypeError
+        // Not `instanceof TypeError`: expo/fetch rejects with a FetchError (SCRUM-898, lib/fetchTimeout.ts).
+        const isNetworkError = isNetworkFailure(error)
         if (isNetworkError && attempt < MAX_RETRIES) {
           Logger.warn('api', `Network error, retry ${attempt + 1}/${MAX_RETRIES}`, { endpoint })
           continue
@@ -1749,9 +2043,10 @@ class ApiClientClass {
          * went quiet. Telling someone to check their wifi when their wifi is
          * fine sends them to fix the wrong thing, and `markOffline()` would put
          * the whole app into an offline state on the strength of one slow
-         * endpoint.
+         * endpoint (so one timeout only counts: `markTimeout`).
          */
         if (isTimeoutError(error)) {
+          markTimeout() // one is a slow endpoint; two in a row with no answer is no network (lib/networkStatus.ts)
           return { success: false, error: TIMEOUT_MESSAGE }
         }
         /*
@@ -1768,6 +2063,21 @@ class ApiClientClass {
     return { success: false, error: GENERIC_FAILURE_MESSAGE }
   }
 
+  /**
+   * The server refused the refresh token: the session is over. The tokens go, the server's reason is stored for the entry
+   * screen, and `useAuth` resets the local session and routes there (`subscribeSessionExpired`). Run by the request whose 401
+   * found out, and by a refresh no request was waiting on when the server named the reason (SCRUM-879); the second to arrive
+   * finds the tokens gone and the reason already recorded.
+   */
+  private async endRejectedSession(): Promise<void> {
+    const reason = rejectedReason
+    const code = rejectedCode
+    rejectedReason = undefined
+    rejectedCode = undefined
+    await TokenStorage.clearAll()
+    markSessionExpired(reason, code)
+  }
+
   private async refreshTokens(): Promise<RefreshOutcome> {
     // If a refresh is already in flight, join it — don't start a second one.
     // We return the existing promise so all concurrent callers share one result.
@@ -1781,9 +2091,10 @@ class ApiClientClass {
     const epoch = sessionEpoch
     const work: Promise<RefreshOutcome> = (async () => {
       try {
-        const refreshToken = await withinDeadline(TokenStorage.getRefreshToken())
-        // A keychain that did not answer is not a missing token: 'failed', tried again, never the sign-out a 'rejected' is.
-        if (refreshToken === TIMED_OUT) return 'failed'
+        const refreshToken = await withinDeadline(TokenStorage.refreshTokenOrUnknown())
+        // A keychain that did not answer, or refused (locked, SCRUM-878), is not a missing token: 'failed', tried again,
+        // never the sign-out a 'rejected' is.
+        if (refreshToken === TIMED_OUT || refreshToken === undefined) return 'failed'
         if (!refreshToken || refreshToken === refusedRefreshToken) {
           return 'rejected'
         }
@@ -1848,6 +2159,8 @@ class ApiClientClass {
         return 'rejected'
       } catch (error) {
         Logger.error('api', 'Token refresh failed', { error })
+        // The refresh is a request too: a network that would not carry it is offline, whatever was being refreshed for.
+        if (isNetworkFailure(error)) markOffline()
         return 'failed'
       }
     })()
@@ -1870,6 +2183,12 @@ class ApiClientClass {
       if (ms > REFRESH_SLOW_MS) Logger.warn('api', 'refresh:slow', { ms, outcome })
     })
 
+    // A named reason (a password reset, a sign-out elsewhere, an account state) is the session's end whoever asked: the app
+    // open on a quiet screen must not wait for its next request to find out. Registered first, so it reads the reason
+    // before the request that joined this refresh does.
+    p.then((outcome) => {
+      if (outcome === 'rejected' && rejectedCode && epoch === sessionEpoch) void this.endRejectedSession()
+    })
     p.then((outcome) => {
       lastRefreshFailedAt = outcome === 'failed' ? Date.now() : 0
       if (outcome !== 'failed') {
@@ -1916,28 +2235,34 @@ class ApiClientClass {
 
     if (isGet) {
       this.inFlight.set(key, promise as Promise<ApiResponse<unknown>>)
-      promise.finally(() => {
-        // Only its own entry: a forget may have let a newer read take the key.
-        if (this.inFlight.get(key) === promise) this.inFlight.delete(key)
-      })
+      promise
+        .finally(() => {
+          // Only its own entry: a forget may have let a newer read take the key.
+          if (this.inFlight.get(key) === promise) this.inFlight.delete(key)
+        })
+        // `finally` returns a second promise that rejects with the first: the caller handles the first, nobody this one.
+        // Unhandled, every failed GET was also an unhandled rejection ("Request queue cleared", BLENDN-1Y/2J/2B).
+        .catch(() => {})
     }
 
     return promise
   }
 
   /** An authed GET, stale-while-revalidate: a stale entry is served while it refreshes. */
-  async cachedRequest<T>(endpoint: string, ttl: number): Promise<ApiResponse<T>> {
-    const key = this.buildRequestKey(endpoint, {}, true)
+  /** `headers` the answer depends on (the cities list on `X-Country`) are part of the key (`buildRequestKey`). */
+  async cachedRequest<T>(endpoint: string, ttl: number, headers?: Record<string, string>, staleOk: boolean = true): Promise<ApiResponse<T>> {
+    const key = this.buildRequestKey(endpoint, headers ? { headers } : {}, true)
     const cached = this.getCached<T>(key)
 
-    // Too old to show even for a moment: asked again and awaited, as if never cached (`SWR_STALE_LIMIT_MS`).
-    if (cached && !cached.tooOld) {
-      if (!cached.isFresh) this.refreshCacheInBackground<T>(endpoint, key, ttl)
+    // Too old to show even for a moment: asked again and awaited, as if never cached (`SWR_STALE_LIMIT_MS`). `staleOk` false:
+    // past its ttl it is awaited too, for a caller that draws its own copy meanwhile and must see the answer (getEvent).
+    if (cached && !cached.tooOld && (cached.isFresh || staleOk)) {
+      if (!cached.isFresh) this.refreshCacheInBackground<T>(endpoint, key, ttl, headers)
       return cached.data
     }
 
     const epoch = this.cacheEpoch
-    const result = await this.queuedRequest<T>(endpoint)
+    const result = await this.queuedRequest<T>(endpoint, headers ? { headers } : {})
     if (result.success && epoch === this.cacheEpoch) {
       this.setCache(key, result, ttl)
     }
@@ -1953,10 +2278,31 @@ class ApiClientClass {
       nextSession()
       // Nothing cached, or still in flight, from before this sign-in is served to it.
       this.clearResponseCache()
-      await TokenStorage.setTokens(result.data.accessToken, result.data.refreshToken)
-      await TokenStorage.setUser(result.data.user)
-      // Only once this session is in the keychain: dropped earlier, a kill before the writes land restored the last one (M2).
-      await TokenStorage.forgetSignedOut()
+      const epoch = sessionEpoch
+      const { accessToken, refreshToken, user } = result.data
+      // Memory is set before the keychain is asked (`secureSet`), so the session is live from here whatever the writes do.
+      const persisting = (async () => {
+        await TokenStorage.setTokens(accessToken, refreshToken)
+        // A sign-out (or another sign-in) while the queue was blocked: its session is not put back.
+        if (epoch !== sessionEpoch) return
+        await TokenStorage.setUser(user)
+        if (epoch !== sessionEpoch) return
+        // Only once this session is in the keychain: dropped earlier, a kill before the writes land restored the last one (M2).
+        await TokenStorage.forgetSignedOut()
+      })()
+      // The writes go on in the background past the wait; a failure there is a warning, never a lost sign-in.
+      const persisted = persisting.then(
+        () => true,
+        (error) => {
+          Logger.warn('auth', 'signIn:persistFailed', { error })
+          return true
+        }
+      )
+      if (!(await settleWithin(persisted, SIGN_IN_PERSIST_MS, false))) {
+        Logger.warn('auth', 'signIn:persistSlow', { ms: SIGN_IN_PERSIST_MS })
+        // `setTokens` marks the session started after its writes; the session is started now.
+        markSessionStarted()
+      }
     }
     return result
   }
@@ -2058,11 +2404,12 @@ class ApiClientClass {
     )
   }
 
-  /** `appleAuthorizationCode`: a fresh Sign in with Apple code, so the server can revoke the Apple grant (lib/appleRevocation). */
-  async deleteAccount(appleAuthorizationCode?: string): Promise<ApiResponse<{ deleted: boolean }>> {
+  /** `proof`: the password, or a fresh Google / Apple token (lib/deletionProof). Only the keys it has go on the wire. */
+  async deleteAccount(proof: DeletionProof = {}): Promise<ApiResponse<{ deleted: boolean }>> {
+    const body = Object.fromEntries(Object.entries(proof).filter(([, value]) => typeof value === 'string' && value.length > 0))
     const result = await this.request<{ deleted: boolean }>('/api/mobile/account', {
       method: 'DELETE',
-      ...(appleAuthorizationCode ? { body: JSON.stringify({ appleAuthorizationCode }) } : {}),
+      ...(Object.keys(body).length ? { body: JSON.stringify(body) } : {}),
     })
 
     if (result.success) {
@@ -2148,13 +2495,22 @@ class ApiClientClass {
      */
     requestQueue.clear()
     this.clearResponseCache()
-    const accessRead = withinDeadline(TokenStorage.getAccessToken())
-    const refreshRead = withinDeadline(TokenStorage.getRefreshToken())
-    const cleared = withinDeadline(TokenStorage.clearAll())
+    const rawAccess = TokenStorage.getAccessToken()
+    const rawRefresh = TokenStorage.getRefreshToken()
+    const accessRead = settleWithin<string | null | typeof TIMED_OUT>(rawAccess, SIGN_OUT_READ_MS, TIMED_OUT)
+    const refreshRead = settleWithin<string | null | typeof TIMED_OUT>(rawRefresh, SIGN_OUT_READ_MS, TIMED_OUT)
+    const cleared = settleWithin<unknown>(TokenStorage.clearAll(), SIGN_OUT_READ_MS, TIMED_OUT)
     const [accessToken, refreshToken] = await Promise.all([accessRead, refreshRead])
     let result: ApiResponse<void>
     if ((refreshToken === TIMED_OUT && !revokeAll) || accessToken === TIMED_OUT) {
       result = { success: false, error: TIMEOUT_MESSAGE }
+      /*
+       * The keychain is slow, not empty: this phone is signed out now, and the server is told (best effort) when the tokens
+       * arrive. The reads were queued ahead of the deletes, so they still return the session that is being left.
+       */
+      void Promise.all([rawAccess, rawRefresh])
+        .then(([access, refresh]) => (access ? this.postSignOut(access, refresh, !revokeAll, pushToken) : undefined))
+        .catch(() => {})
     } else if (!accessToken) {
       // Nothing stored: there is no session here for the server to end.
       result = { success: true }
@@ -2178,7 +2534,7 @@ class ApiClientClass {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(Platform.OS !== 'web' ? { 'X-App-Version': appVersionNumber() } : {}),
+          ...(Platform.OS !== 'web' ? { 'X-App-Version': appVersionNumber(), ...buildHeaders() } : {}),
           ...CHANNEL_SET_HEADER,
           Authorization: `Bearer ${access}`,
         },
@@ -2252,6 +2608,8 @@ class ApiClientClass {
      * without excluding anything, which is what a browse list wants.
      */
     radius?: number
+    /** The map's view, `[west, south, east, north]` (backend round 3): only events inside it, `pagination.totalCount` how many. Never with `radius`. */
+    bbox?: readonly [number, number, number, number]
     categoryId?: string
     categorySlug?: string
     startDate?: string
@@ -2263,8 +2621,8 @@ class ApiClientClass {
     interestedPreviewLimit?: number
     /** At most five published, public, age-gated, not-ended events, in the server's `featured.rank` order (BUILD-SPEC C1). */
     featured?: boolean
-  }, options?: { force?: boolean }): Promise<ApiResponse<EventsListResponse>> {
-    const endpoint = `/api/mobile/events${toQuery(params)}`
+  }, options?: { force?: boolean; viewport?: boolean }): Promise<ApiResponse<EventsListResponse>> {
+    const endpoint = `/api/mobile/events${toQuery(params, options?.viewport)}`
     const result = options?.force
       ? await this.queuedRequest<EventsListResponse>(endpoint)
       : await this.cachedRequest<EventsListResponse>(endpoint, EVENTS_LIST_SWR_TTL)
@@ -2282,10 +2640,10 @@ class ApiClientClass {
    * event's card names the venue instead.
    */
   async getVenues(
-    params: { page?: number; limit?: number; city?: string; lat?: number; lon?: number; sortBy?: 'name' | 'distance'; venueType?: string; order?: 'live'; search?: string; radius?: number },
-    options?: { force?: boolean }
+    params: { page?: number; limit?: number; city?: string; lat?: number; lon?: number; bbox?: readonly [number, number, number, number]; sortBy?: 'name' | 'distance'; venueType?: string; order?: 'live'; search?: string; radius?: number },
+    options?: { force?: boolean; viewport?: boolean }
   ): Promise<ApiResponse<VenuesListResponse>> {
-    const endpoint = `/api/mobile/venues${toQuery(params)}`
+    const endpoint = `/api/mobile/venues${toQuery(params, options?.viewport)}`
     if (options?.force) return this.queuedRequest<VenuesListResponse>(endpoint)
     return this.cachedRequest<VenuesListResponse>(endpoint, EVENTS_LIST_SWR_TTL)
   }
@@ -2329,12 +2687,16 @@ class ApiClientClass {
    *
    * Cached for longer than the event list — a city gaining its first event is
    * not something the picker has to notice within seconds.
+   *
+   * `travel1` says this build knows "coming soon", so the server lists preview cities rather than leaving them out
+   * for builds that would open them empty. `country` is the phone's reverse-geocoded ISO code, sent as `X-Country`
+   * and stored nowhere; the answer's `device` says what the server made of it (travel plan §3.1 A1).
    */
-  async getEventCities(): Promise<ApiResponse<{ cities: CityOption[] }>> {
-    return this.cachedRequest<{ cities: CityOption[] }>(
-      '/api/mobile/events/cities',
-      5 * 60 * 1000
-    )
+  async getEventCities(country?: string | null): Promise<ApiResponse<CityCatalogue>> {
+    return this.cachedRequest<CityCatalogue>('/api/mobile/events/cities', 5 * 60 * 1000, {
+      'X-Client-Features': 'travel1',
+      ...(country ? { 'X-Country': country } : {}),
+    })
   }
 
   /**
@@ -2364,26 +2726,30 @@ class ApiClientClass {
   ): Promise<ApiResponse<EventApiItem>> {
     const searchParams = new URLSearchParams()
     if (params) {
-      if (params.lat !== undefined) searchParams.append('lat', String(roundCoordinate(params.lat)))
-      if (params.lon !== undefined) searchParams.append('lon', String(roundCoordinate(params.lon)))
+      // Off: no position (`lib/shareLocation`).
+      if (params.lat !== undefined && locationSharingOn()) searchParams.append('lat', String(roundCoordinate(params.lat)))
+      if (params.lon !== undefined && locationSharingOn()) searchParams.append('lon', String(roundCoordinate(params.lon)))
       if (params.include) searchParams.append('include', params.include)
       if (params.interestedLimit !== undefined) {
         searchParams.append('interestedLimit', String(params.interestedLimit))
       }
     }
     const query = searchParams.toString()
-    return this.cachedRequest<EventApiItem>(
-      `/api/mobile/events/${eventId}${query ? `?${query}` : ''}`,
-      30 * 1000
-    )
+    /*
+     * Fresh for 30 s, then awaited, never served stale (SCRUM-1074): the event page draws its own 2-minute copy at once, and
+     * a stale answer here hid an RSVP made on another phone ("Free · I'm going") until the page was opened again, because
+     * the background refresh landed only in the cache.
+     */
+    return this.cachedRequest<EventApiItem>(`/api/mobile/events/${pathSegment(eventId)}${query ? `?${query}` : ''}`, 30 * 1000, undefined, false)
   }
 
   async checkIn(
     eventId: string,
-    data: { latitude: number; longitude: number; deviceInfo?: Record<string, unknown> }
+    /** `withCrewId`: "With {crew}" at the hold (crews 4-A2) — the server tells that crew you're in. Absent: on your own. */
+    data: { latitude: number; longitude: number; deviceInfo?: Record<string, unknown>; withCrewId?: string }
   ): Promise<ApiResponse<CheckInResult>> {
     return this.queuedRequest<CheckInResult>(
-      `/api/mobile/events/${eventId}/checkin`,
+      `/api/mobile/events/${pathSegment(eventId)}/checkin`,
       {
         method: 'POST',
         body: JSON.stringify(data),
@@ -2395,7 +2761,7 @@ class ApiClientClass {
 
   async checkOut(eventId: string): Promise<ApiResponse<Record<string, unknown>>> {
     return this.queuedRequest<Record<string, unknown>>(
-      `/api/mobile/events/${eventId}/checkout`,
+      `/api/mobile/events/${pathSegment(eventId)}/checkout`,
       {
         method: 'POST',
       },
@@ -2412,39 +2778,46 @@ class ApiClientClass {
    * remove, or `toggleInterest` to flip.
    */
   async addFavorite(eventId: string): Promise<ApiResponse<{ isFavorited: boolean; favoriteCount: number }>> {
-    return this.queuedRequest<{ isFavorited: boolean; favoriteCount: number }>(
-      `/api/mobile/events/${eventId}/favorite`,
+    const result = await this.queuedRequest<{ isFavorited: boolean; favoriteCount: number }>(
+      `/api/mobile/events/${pathSegment(eventId)}/favorite`,
       {
         method: 'POST',
       },
       true,
       3
     )
+    if (result.success && result.data) this.eventStatusChanged(eventId, { isFavorited: result.data.isFavorited })
+    return result
   }
 
   /** Never refused — not on age, not on status (API: SCRUM-176). */
   async removeFavorite(eventId: string): Promise<ApiResponse<{ isFavorited: boolean; favoriteCount: number }>> {
-    return this.queuedRequest<{ isFavorited: boolean; favoriteCount: number }>(
-      `/api/mobile/events/${eventId}/favorite`,
+    const result = await this.queuedRequest<{ isFavorited: boolean; favoriteCount: number }>(
+      `/api/mobile/events/${pathSegment(eventId)}/favorite`,
       {
         method: 'DELETE',
       },
       true,
       3
     )
+    if (result.success && result.data) this.eventStatusChanged(eventId, { isFavorited: result.data.isFavorited })
+    return result
   }
 
   async toggleInterest(
     eventId: string
   ): Promise<ApiResponse<{ interested: boolean; interestCount: number }>> {
-    return this.queuedRequest<{ interested: boolean; interestCount: number }>(
-      `/api/mobile/events/${eventId}/interest`,
+    const result = await this.queuedRequest<{ interested: boolean; interestCount: number }>(
+      `/api/mobile/events/${pathSegment(eventId)}/interest`,
       {
         method: 'POST',
       },
       true,
       3
     )
+    // The detail both caches hold says the old thing now (SCRUM-876).
+    if (result.success && result.data) this.eventStatusChanged(eventId, { isFavorited: result.data.interested })
+    return result
   }
 
   /**
@@ -2462,8 +2835,8 @@ class ApiClientClass {
     eventId: string,
     status: 'going' | 'maybe' | 'not_going'
   ): Promise<ApiResponse<{ rsvpStatus: RsvpStatus; rsvpCount: number }>> {
-    return this.queuedRequest<{ rsvpStatus: RsvpStatus; rsvpCount: number }>(
-      `/api/mobile/events/${eventId}/rsvp`,
+    const result = await this.queuedRequest<{ rsvpStatus: RsvpStatus; rsvpCount: number }>(
+      `/api/mobile/events/${pathSegment(eventId)}/rsvp`,
       {
         method: 'POST',
         body: JSON.stringify({ status }),
@@ -2471,19 +2844,24 @@ class ApiClientClass {
       true,
       2
     )
+    // What the server answered, which may be `waitlisted`, not what was asked.
+    if (result.success && result.data) this.eventStatusChanged(eventId, { rsvpStatus: result.data.rsvpStatus })
+    return result
   }
 
   async cancelRsvp(
     eventId: string
   ): Promise<ApiResponse<{ rsvpStatus: null; rsvpCount: number }>> {
-    return this.queuedRequest<{ rsvpStatus: null; rsvpCount: number }>(
-      `/api/mobile/events/${eventId}/rsvp`,
+    const result = await this.queuedRequest<{ rsvpStatus: null; rsvpCount: number }>(
+      `/api/mobile/events/${pathSegment(eventId)}/rsvp`,
       {
         method: 'DELETE',
       },
       true,
       2
     )
+    if (result.success) this.eventStatusChanged(eventId, { rsvpStatus: null })
+    return result
   }
 
   async rateEvent(
@@ -2492,7 +2870,7 @@ class ApiClientClass {
     review?: string
   ): Promise<ApiResponse<Record<string, unknown>>> {
     return this.queuedRequest<Record<string, unknown>>(
-      `/api/mobile/events/${eventId}/rating`,
+      `/api/mobile/events/${pathSegment(eventId)}/rating`,
       {
         method: 'POST',
         body: JSON.stringify({ rating, review }),
@@ -2517,7 +2895,7 @@ class ApiClientClass {
    * `cache: false` reads fresh and leaves the cache alone: the cache holds one profile, and reading somebody else's must not
    * replace your own.
    */
-  async getProfile(userId: string, options: { cache?: boolean } = {}): Promise<ApiResponse<UserProfileData>> {
+  async getProfile(userId: string, options: { cache?: boolean } = {}): Promise<ApiResponse<OwnProfileEnvelope>> {
     const useCache = options.cache !== false
     // Check cache first for instant response
     const cached = useCache ? ProfileCache.get(userId) : null
@@ -2525,7 +2903,7 @@ class ApiClientClass {
       return { success: true, data: cached }
     }
 
-    const result = await this.queuedRequest<UserProfileData>(`/api/mobile/profiles/${userId}`)
+    const result = await this.queuedRequest<OwnProfileEnvelope>(`/api/mobile/profiles/${pathSegment(userId)}`)
 
     // Cache successful responses
     if (useCache && result.success && result.data) {
@@ -2551,6 +2929,8 @@ class ApiClientClass {
       dateOfBirth?: string
 
       location?: string
+      /** The catalogue slug of home (travel P2); null clears it. A city the catalogue hides is a 400. */
+      homeCitySlug?: string | null
       bio?: string
       occupation?: string
       education?: string
@@ -2634,7 +3014,7 @@ class ApiClientClass {
     }
   ): Promise<ApiResponse<Record<string, unknown>>> {
     const result = await this.queuedRequest<Record<string, unknown>>(
-      `/api/mobile/profiles/${userId}`,
+      `/api/mobile/profiles/${pathSegment(userId)}`,
       {
         method: 'PUT',
         body: JSON.stringify(data),
@@ -2657,7 +3037,11 @@ class ApiClientClass {
      * leaves them showing the old value for up to a minute is the same bug
      * wearing a different screen.
      */
-    if (result.success) ProfileCache.clear()
+    if (result.success) {
+      ProfileCache.clear()
+      // The switch the person just saved is the one the distance reads obey from now on.
+      if (typeof data.share_location === 'boolean') setLocationSharing(data.share_location)
+    }
     return result
   }
 
@@ -2670,7 +3054,7 @@ class ApiClientClass {
     userId: string
   ): Promise<ApiResponse<{ interests: { id: string; name: string; slug: string }[] }>> {
     return this.queuedRequest<{ interests: { id: string; name: string; slug: string }[] }>(
-      `/api/mobile/profiles/${userId}/interests`
+      `/api/mobile/profiles/${pathSegment(userId)}/interests`
     )
   }
 
@@ -2693,7 +3077,7 @@ class ApiClientClass {
     categoryIds: string[]
   ): Promise<ApiResponse<Record<string, unknown>>> {
     return this.queuedRequest<Record<string, unknown>>(
-      `/api/mobile/profiles/${userId}/interests`,
+      `/api/mobile/profiles/${pathSegment(userId)}/interests`,
       {
         method: 'POST',
         body: JSON.stringify({ categoryIds }),
@@ -2705,7 +3089,7 @@ class ApiClientClass {
 
   async removeProfileInterests(userId: string, categoryIds: string[]): Promise<ApiResponse<void>> {
     return this.queuedRequest<void>(
-      `/api/mobile/profiles/${userId}/interests`,
+      `/api/mobile/profiles/${pathSegment(userId)}/interests`,
       {
         method: 'DELETE',
         body: JSON.stringify({ categoryIds }),
@@ -2717,8 +3101,22 @@ class ApiClientClass {
 
   // === USER ENDPOINTS ===
 
-  async getPublicProfile(userId: string): Promise<ApiResponse<UserProfileData>> {
-    return this.queuedRequest<UserProfileData>(`/api/mobile/users/${userId}`)
+  /** Your own card as a room reads it, before and after you show who you are (read through `mePreviewFrom`). */
+  async getMePreview(): Promise<ApiResponse<unknown>> {
+    return this.queuedRequest<unknown>('/api/mobile/me/preview')
+  }
+
+  async getPublicProfile(userId: string): Promise<ApiResponse<PublicProfile>> {
+    return this.queuedRequest<PublicProfile>(`/api/mobile/users/${pathSegment(userId)}`)
+  }
+
+  /**
+   * "You've both been to" (SCRUM-1042 state 2 C): past events you were both at, where they were not a pseudonym to you,
+   * newest first. The server decides all of it; a ref that does not name them answers an empty list.
+   */
+  async getSharedEvents(ref: string, limit: number, cursor?: string | null): Promise<ApiResponse<SharedEventsPayload>> {
+    const after = cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''
+    return this.queuedRequest<SharedEventsPayload>(`/api/mobile/users/${encodeURIComponent(ref)}/shared-events?limit=${limit}${after}`)
   }
 
   /**
@@ -2727,7 +3125,7 @@ class ApiClientClass {
    * Going tab mapped over the envelope (SCRUM-175).
    */
   async getUserFavorites(userId: string, page = 1, limit = 20, cursor?: string | null): Promise<ApiResponse<SavedEventsPayload>> {
-    return this.queuedRequest<SavedEventsPayload>(`/api/mobile/users/${userId}/favorites?${pageQuery(page, cursor)}&limit=${limit}`)
+    return this.queuedRequest<SavedEventsPayload>(`/api/mobile/users/${pathSegment(userId)}/favorites?${pageQuery(page, cursor)}&limit=${limit}`)
   }
 
   /**
@@ -2770,8 +3168,10 @@ class ApiClientClass {
     return this.cachedRequest<Array<Record<string, unknown>>>(endpoint, CHAT_LIST_SWR_TTL)
   }
 
-  async getEventChat(eventId: string): Promise<ApiResponse<EventChatData>> {
-    return this.queuedRequest<EventChatData>(`/api/mobile/events/${eventId}/chat`)
+  /** `limit: 1` when only `write` / `status` is wanted (the composer's lock): the room's history is not. */
+  async getEventChat(eventId: string, options?: { limit?: number }): Promise<ApiResponse<EventChatData>> {
+    const query = options?.limit ? `?limit=${options.limit}` : ''
+    return this.queuedRequest<EventChatData>(`/api/mobile/events/${pathSegment(eventId)}/chat${query}`)
   }
 
   async sendChatMessage(
@@ -2789,7 +3189,7 @@ class ApiClientClass {
     clientId?: string
   ): Promise<ApiResponse<ChatMessageData>> {
     return this.queuedRequest<ChatMessageData>(
-      `/api/mobile/chat/groups/${chatGroupId}/messages`,
+      `/api/mobile/chat/groups/${pathSegment(chatGroupId)}/messages`,
       {
         method: 'POST',
         body: JSON.stringify({ content, type, metadata, ...(parentId && { parentId }), ...(clientId && { clientId }) }),
@@ -2802,13 +3202,13 @@ class ApiClientClass {
   async getChatMessages(
     chatGroupId: string,
     params?: { limit?: number; before?: string }
-  ): Promise<ApiResponse<Array<Record<string, unknown>>>> {
+  ): Promise<ApiResponse<ChatHistoryData>> {
     const searchParams = new URLSearchParams()
     if (params?.limit) searchParams.append('limit', String(params.limit))
     if (params?.before) searchParams.append('before', params.before)
     const query = searchParams.toString()
-    return this.queuedRequest<Array<Record<string, unknown>>>(
-      `/api/mobile/chat/groups/${chatGroupId}/messages${query ? `?${query}` : ''}`
+    return this.queuedRequest<ChatHistoryData>(
+      `/api/mobile/chat/groups/${pathSegment(chatGroupId)}/messages${query ? `?${query}` : ''}`
     )
   }
 
@@ -2850,12 +3250,12 @@ class ApiClientClass {
   async getEventMatches(
     eventId: string,
     options?: { limit?: number; force?: boolean }
-  ): Promise<ApiResponse<{ matches: MatchCard[] }>> {
+  ): Promise<ApiResponse<MatchDeck>> {
     const query = options?.limit ? `?limit=${options.limit}` : ''
-    const endpoint = `/api/mobile/events/${eventId}/matches${query}`
+    const endpoint = `/api/mobile/events/${pathSegment(eventId)}/matches${query}`
     // force bypasses the cache rather than being passed into it.
-    if (options?.force) return this.queuedRequest<{ matches: MatchCard[] }>(endpoint)
-    return this.cachedRequest<{ matches: MatchCard[] }>(endpoint, 30_000)
+    if (options?.force) return this.queuedRequest<MatchDeck>(endpoint)
+    return this.cachedRequest<MatchDeck>(endpoint, 30_000)
   }
 
   /**
@@ -2876,20 +3276,6 @@ class ApiClientClass {
     return this.queuedRequest(`/api/mobile/events/${encodeURIComponent(eventId)}/friends-here${query ? `?${query}` : ''}`)
   }
 
-  /**
-   * Like someone you were in a room with. Mutual opens a conversation.
-   *
-   * Nothing in the response reveals who liked you first -- that asymmetry is
-   * the whole point of the mutual gate.
-   */
-  async likeAtEvent(eventId: string, userId: string): Promise<ApiResponse<LikeOutcome>> {
-    return this.queuedRequest<LikeOutcome>(
-      `/api/mobile/events/${eventId}/matches/likes`,
-      { method: 'POST', body: JSON.stringify({ userId }) },
-      true,
-      3
-    )
-  }
 
   /**
    * How many are here, and how many share your taste — for the room you are
@@ -2903,22 +3289,30 @@ class ApiClientClass {
     eventId: string,
     options?: { force?: boolean }
   ): Promise<ApiResponse<RoomPreview>> {
-    const endpoint = `/api/mobile/events/${eventId}/room-preview`
+    const endpoint = `/api/mobile/events/${pathSegment(eventId)}/room-preview`
     if (options?.force) return this.queuedRequest<RoomPreview>(endpoint)
     return this.cachedRequest<RoomPreview>(endpoint, 15_000)
   }
 
   /**
-   * Wave at somebody in the same room.
-   *
-   * Lighter than a like and deliberately not private: they are told who waved.
-   * One per pair every ten minutes — the server answers `WAVE_TOO_SOON` (429)
-   * inside that window, which the caller shows as "already waved" rather than
-   * as a failure.
+   * Wave at somebody in the same room, or wave back (SCRUM-1042). Recorded and shown to them; a wave back makes it
+   * mutual and opens the anonymous conversation. Idempotent on the server (one wave per pair per room), so the
+   * queue's retries can never send two. Refusals: `lib/waves.ts` `waveRefusal`.
    */
-  async sendWave(eventId: string, toUserId: string): Promise<ApiResponse<{ sent: true }>> {
-    return this.queuedRequest<{ sent: true }>(
-      `/api/mobile/events/${eventId}/waves`,
+  /** Waves to you in a room, paged 20, newest first (S-A strip, See all). Never cached: a wave back changes it. */
+  async getReceivedWaves(eventId: string, cursor?: string | null): Promise<ApiResponse<ReceivedWavesPage>> {
+    const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''
+    return this.queuedRequest<ReceivedWavesPage>(`/api/mobile/events/${pathSegment(eventId)}/waves${query}`)
+  }
+
+  /** B-A: the open rooms with waves you have not answered, one entry per room. */
+  async getWavesWaiting(): Promise<ApiResponse<{ rooms: WavesWaitingRoom[]; crewRooms?: CrewWavesWaitingRoom[] }>> {
+    return this.queuedRequest<{ rooms: WavesWaitingRoom[]; crewRooms?: CrewWavesWaitingRoom[] }>('/api/mobile/waves')
+  }
+
+  async sendWave(eventId: string, toUserId: string): Promise<ApiResponse<WaveOutcome>> {
+    return this.queuedRequest<WaveOutcome>(
+      `/api/mobile/events/${pathSegment(eventId)}/waves`,
       { method: 'POST', body: JSON.stringify({ toUserId }) },
       true,
       3
@@ -2936,7 +3330,7 @@ class ApiClientClass {
     emoji: ChatReaction
   ): Promise<ApiResponse<{ messageId: string; added: boolean; reactions: ReactionTally[] }>> {
     return this.queuedRequest(
-      `/api/mobile/chat/groups/${chatGroupId}/messages/${messageId}/reactions`,
+      `/api/mobile/chat/groups/${pathSegment(chatGroupId)}/messages/${pathSegment(messageId)}/reactions`,
       { method: 'POST', body: JSON.stringify({ emoji }) },
       true,
       2
@@ -3055,14 +3449,23 @@ class ApiClientClass {
        */
       rememberIntent?: boolean
       rememberReveal?: boolean
+      /** Flow 5 P-A: your answer to tonight's question (≤ 140 after the server's trim); null or "" clears it. Omit to leave it. */
+      tonightAnswer?: string | null
+      /** Flow 5 P-A: why you are here, in a work-lens room only (the server refuses it elsewhere); null clears it. Omit to leave it. */
+      workIntent?: 'hire' | 'find_work' | 'build' | 'learn' | null
     }
-  ): Promise<ApiResponse<{ intent: string[]; revealed: boolean }>> {
-    return this.queuedRequest<{ intent: string[]; revealed: boolean }>(
-      `/api/mobile/events/${eventId}/matches/preferences`,
+  ): Promise<ApiResponse<MatchPreferences>> {
+    return this.queuedRequest<MatchPreferences>(
+      `/api/mobile/events/${pathSegment(eventId)}/matches/preferences`,
       { method: 'PUT', body: JSON.stringify(prefs) },
       true,
       3
     )
+  }
+
+  /** Yours for this room, and the room's lens (Flow 5 P-A). In-room only: the server answers 403 to anyone not checked in. */
+  async getMatchPreferences(eventId: string): Promise<ApiResponse<MatchPreferences>> {
+    return this.queuedRequest<MatchPreferences>(`/api/mobile/events/${pathSegment(eventId)}/matches/preferences`)
   }
 
   // === PEER RATINGS ===
@@ -3079,7 +3482,7 @@ class ApiClientClass {
    */
   async getRatablePeers(eventId: string): Promise<ApiResponse<{ userIds: string[] }>> {
     return this.queuedRequest<{ userIds: string[] }>(
-      `/api/mobile/events/${eventId}/peer-ratings`
+      `/api/mobile/events/${pathSegment(eventId)}/peer-ratings`
     )
   }
 
@@ -3102,7 +3505,7 @@ class ApiClientClass {
     input: { userId: string; rating: number; issue?: PeerRatingIssue; note?: string }
   ): Promise<ApiResponse<{ recorded: boolean }>> {
     return this.queuedRequest<{ recorded: boolean }>(
-      `/api/mobile/events/${eventId}/peer-ratings`,
+      `/api/mobile/events/${pathSegment(eventId)}/peer-ratings`,
       { method: 'POST', body: JSON.stringify(input) },
       true,
       3
@@ -3133,7 +3536,7 @@ class ApiClientClass {
     coords: { latitude: number; longitude: number; accuracy?: number | null }
   ): Promise<ApiResponse<PresencePing>> {
     return this.request<PresencePing>(
-      `/api/mobile/events/${eventId}/presence`,
+      `/api/mobile/events/${pathSegment(eventId)}/presence`,
       { method: 'POST', body: JSON.stringify(coords) },
       true
     )
@@ -3159,9 +3562,12 @@ class ApiClientClass {
    * differently and never match on. Same cache treatment as categories — it is
    * eighteen strings, identical for everybody, and changes about once a year.
    */
-  /** Matching v2's vocabulary: languages, home states, signs, this-or-that. Static; cached like work fields. */
-  async getProfileOptions(): Promise<ApiResponse<ProfileOptions>> {
-    return this.cachedRequest<ProfileOptions>('/api/mobile/profile-options', CATEGORIES_SWR_TTL)
+  /**
+   * Matching v2's vocabulary as one country has it (languages, its regions and their word, signs, this-or-that): the account's
+   * home-city country, or null for the neutral lists, never India's by default (SCRUM-711). Static per country; cached like work fields.
+   */
+  async getProfileOptions(country: string | null): Promise<ApiResponse<ProfileOptions>> {
+    return this.cachedRequest<ProfileOptions>(`/api/mobile/profile-options?country=${encodeURIComponent(country ?? '')}`, CATEGORIES_SWR_TTL)
   }
 
   /** Your this-or-that answers, question slug → "a" | "b". */
@@ -3295,11 +3701,12 @@ class ApiClientClass {
   async getConversation(conversationId: string): Promise<ApiResponse<{
     id: string
     /**
-     * Already resolved by the server: a pseudonym until they reveal, and
-     * `image` null until then too. Never re-derive this on the client -- the
-     * whole rule lives in one place server-side so it cannot drift.
+     * Already resolved by the server: a pseudonym until you have both swapped names, then their first name; `image` null
+     * until then. `id` is the chat's `rh_` handle always. Never re-derive this on the client.
      */
     otherUser: { id: string; name: string | null; image: string | null }
+    /** Your own room pseudonym in this conversation (your side of the strip). Null for a message request. */
+    yourPseudonym?: string | null
     /**
      * Opened from a mutual like rather than an accepted message request.
      *
@@ -3314,56 +3721,43 @@ class ApiClientClass {
      * the reveal fields being absent drew the match header on a request.
      */
     pseudonymous?: boolean
-    /** Whether you have shown them who you are. */
+    /** You tapped Swap names. */
     youRevealed?: boolean
-    /** Whether they have shown you. */
+    /** You may see their name and photo: true only once you have BOTH tapped. */
     theyRevealed?: boolean
-    /** Whether they asked you to. There is no "declined". */
+    /** They tapped Swap names and you have not. There is no "declined". */
     revealRequested?: boolean
     /**
      * Whether to offer "Add friend" (SCRUM-750). Read it through `parseFriendOffer`; absent from a server that does not
-     * send it. `otherUser.id` is a handle until they reveal: only an offer with `canAdd` makes it a real id.
+     * send it. `otherUser.id` is the chat's handle; the friend request sends it as is (the server resolves it).
      */
     friend?: unknown
     createdAt: string
     lastMessageAt: string | null
   }>> {
-    return this.queuedRequest(`/api/mobile/conversations/${conversationId}`)
+    return this.queuedRequest(`/api/mobile/conversations/${pathSegment(conversationId)}`)
   }
 
   /**
-   * Show them who you are. One way -- the server has no path back to false.
-   *
-   * Refused with `reveal_incomplete` when there is no name or no photo:
-   * revealing shows exactly those two things, so without them the switch turns
-   * on and their screen is unchanged.
+   * Swap names (identity model): your tap, which is also the ask. Nothing shows until both have tapped; `mutual` is true
+   * once they have. A repeat tap is a no-op. Refused with `reveal_incomplete` without a name and a photo, and 400 on a
+   * conversation that was never pseudonymous.
    */
   async revealInConversation(conversationId: string): Promise<ApiResponse<{
     revealed: boolean
     mutual: boolean
   }>> {
     return this.queuedRequest(
-      `/api/mobile/conversations/${conversationId}/reveal`,
+      `/api/mobile/conversations/${pathSegment(conversationId)}/reveal`,
       { method: 'POST', body: JSON.stringify({}) },
       true,
       3
     )
   }
 
-  /**
-   * Ask them to reveal.
-   *
-   * Idempotent by construction -- it sets one boolean on their side, so asking
-   * twice changes nothing and sends nothing. There is deliberately no decline
-   * to receive back.
-   */
-  async requestReveal(conversationId: string): Promise<ApiResponse<{ requested: boolean }>> {
-    return this.queuedRequest(
-      `/api/mobile/conversations/${conversationId}/reveal`,
-      { method: 'POST', body: JSON.stringify({ ask: true }) },
-      true,
-      3
-    )
+  /** Take your Swap names tap back while they have not tapped. `CONFLICT` (409) once you have both swapped: it is kept. */
+  async cancelReveal(conversationId: string): Promise<ApiResponse<{ revealed: false }>> {
+    return this.queuedRequest(`/api/mobile/conversations/${pathSegment(conversationId)}/reveal`, { method: 'DELETE' }, true, 3)
   }
 
   /**
@@ -3381,12 +3775,13 @@ class ApiClientClass {
     } = {}
   ): Promise<ApiResponse<{ closed: boolean; blocked: boolean; reported: boolean }>> {
     const result = await this.queuedRequest<{ closed: boolean; blocked: boolean; reported: boolean }>(
-      `/api/mobile/conversations/${conversationId}/leave`,
+      `/api/mobile/conversations/${pathSegment(conversationId)}/leave`,
       { method: 'POST', body: JSON.stringify({ action: options.action ?? 'unmatch', ...options }) },
       true,
       3
     )
     if (options.action === 'block') noteBlockedOn(result)
+    else if (result.success) notePeopleClosed()
     return result
   }
 
@@ -3419,7 +3814,7 @@ class ApiClientClass {
     if (options?.limit) params.set('limit', String(options.limit))
     if (options?.before) params.set('before', options.before)
     const query = params.toString() ? `?${params.toString()}` : ''
-    return this.queuedRequest(`/api/mobile/conversations/${conversationId}/messages${query}`)
+    return this.queuedRequest(`/api/mobile/conversations/${pathSegment(conversationId)}/messages${query}`)
   }
 
   async sendPrivateMessage(
@@ -3447,7 +3842,7 @@ class ApiClientClass {
     createdAt: string
   }>> {
     return this.queuedRequest(
-      `/api/mobile/conversations/${conversationId}/messages`,
+      `/api/mobile/conversations/${pathSegment(conversationId)}/messages`,
       {
         method: 'POST',
         body: JSON.stringify(data),
@@ -3531,7 +3926,7 @@ class ApiClientClass {
     if (params?.offset) searchParams.append('offset', String(params.offset))
     const query = searchParams.toString()
     return this.cachedRequest(
-      `/api/mobile/chat/groups/${chatGroupId}/participants${query ? `?${query}` : ''}`,
+      `/api/mobile/chat/groups/${pathSegment(chatGroupId)}/participants${query ? `?${query}` : ''}`,
       PARTICIPANTS_SWR_TTL
     )
   }
@@ -3612,7 +4007,7 @@ class ApiClientClass {
       conversationId: string | null
       sender: { id: string; name: string | null; avatar: string | null }
     }>(
-      `/api/mobile/message-requests/${requestId}/respond`,
+      `/api/mobile/message-requests/${pathSegment(requestId)}/respond`,
       {
         method: 'POST',
         body: JSON.stringify({ action }),
@@ -3633,8 +4028,9 @@ class ApiClientClass {
    * list. `q` (1-40 characters) keeps the friends a word of whose name starts with it, and `count` is then the filtered total; a
    * server that does not know `q` ignores it (`localSearch`).
    */
-  async getFriends(cursor?: string | null, q?: string | null): Promise<ApiResponse<FriendsPayload>> {
-    const more = `${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}${q ? `&q=${encodeURIComponent(q)}` : ''}`
+  /** `order: 'name'` is the A–Z (admin #998): the server's name order with `letters`, the whole list's heads, on every page. */
+  async getFriends(cursor?: string | null, q?: string | null, order?: 'name'): Promise<ApiResponse<FriendsPayload>> {
+    const more = `${order ? `&order=${order}` : ''}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}${q ? `&q=${encodeURIComponent(q)}` : ''}`
     return this.queuedRequest(`/api/mobile/friends?limit=${LIST_PAGE.friends}${more}`)
   }
 
@@ -3727,14 +4123,46 @@ class ApiClientClass {
   // decide, and a stale one offers a seat that has gone. Every refusal on these
   // routes is a sentence for the person (`boardMessage`).
 
-  async getBoard(eventId: string): Promise<ApiResponse<{ posts: BoardPost[] }>> {
-    return this.queuedRequest(`/api/mobile/events/${encodeURIComponent(eventId)}/board`)
+  /** The first page, with the meta every page carries; `query` is a chip's filter (`filterQuery`) and a page size. */
+  async getBoard(eventId: string, query: Record<string, string> = {}): Promise<ApiResponse<Partial<LobbyMeta> & { posts: BoardPost[] }>> {
+    const qs = new URLSearchParams(query).toString()
+    return this.queuedRequest(`/api/mobile/events/${encodeURIComponent(eventId)}/board${qs ? `?${qs}` : ''}`)
   }
 
+  /** One post, for a post link: the Lobby's own gate. */
+  async getBoardPost(eventId: string, postId: string): Promise<ApiResponse<{ state: LobbyState; phase: LobbyPhase; closesAt: string; post: BoardPost }>> {
+    return this.queuedRequest(`/api/mobile/events/${encodeURIComponent(eventId)}/board/${encodeURIComponent(postId)}`)
+  }
+
+  /** The event page's card: counts, and the latest two for a reader. */
+  async getBoardPreview(eventId: string): Promise<ApiResponse<LobbyPreview>> {
+    return this.queuedRequest(`/api/mobile/events/${encodeURIComponent(eventId)}/board/preview`)
+  }
+
+  /** "From the Lobby", for the room. `hasContent: false` is no card. */
+  async getBoardSummary(eventId: string): Promise<ApiResponse<LobbySummary>> {
+    return this.queuedRequest(`/api/mobile/events/${encodeURIComponent(eventId)}/board/summary`)
+  }
+
+  async getBoardAlerts(eventId: string): Promise<ApiResponse<LobbyAlerts>> {
+    return this.queuedRequest(`/api/mobile/events/${encodeURIComponent(eventId)}/board/alerts`)
+  }
+
+  /** Only the keys sent change. */
+  async setBoardAlerts(eventId: string, alerts: Partial<LobbyAlerts>): Promise<ApiResponse<LobbyAlerts>> {
+    return this.queuedRequest(
+      `/api/mobile/events/${encodeURIComponent(eventId)}/board/alerts`,
+      { method: 'PUT', body: JSON.stringify(alerts) },
+      true,
+      3
+    )
+  }
+
+  /** A photo is the `publicUrl` of a `folder: 'chat'` upload (`uploadChatPhoto`); the server strips and seals it. */
   async postToBoard(
     eventId: string,
-    post: { kind: 'offer' | 'seeking'; body: string; spacesLeft?: number }
-  ): Promise<ApiResponse<Pick<BoardPost, 'id' | 'kind' | 'body' | 'spacesLeft' | 'createdAt'>>> {
+    post: { kind: BoardPost['kind']; subKind?: LobbySubKind; body: string; spacesLeft?: number; photo?: { url: string; alt?: string } }
+  ): Promise<ApiResponse<Pick<BoardPost, 'id' | 'kind' | 'body' | 'spacesLeft' | 'createdAt'> & Partial<BoardPost>>> {
     return this.queuedRequest(
       `/api/mobile/events/${encodeURIComponent(eventId)}/board`,
       { method: 'POST', body: JSON.stringify(post) },
@@ -3752,11 +4180,14 @@ class ApiClientClass {
     )
   }
 
-  /** No message: asking is one tap, and "can I join?" needs no essay. */
-  async askOnBoard(eventId: string, postId: string): Promise<ApiResponse<{ id: string; status: 'pending' }>> {
+  /**
+   * No message: asking is one tap, and "can I join?" needs no essay. `namesOnAccept`: the card showed "If they say yes,
+   * you'll both see each other's first name and photo." With the accepter's own, the chat opens swapped.
+   */
+  async askOnBoard(eventId: string, postId: string, namesOnAccept: boolean): Promise<ApiResponse<{ id: string; status: 'pending' }>> {
     return this.queuedRequest(
       `/api/mobile/events/${encodeURIComponent(eventId)}/board/${encodeURIComponent(postId)}/requests`,
-      { method: 'POST', body: JSON.stringify({}) },
+      { method: 'POST', body: JSON.stringify(namesOnAccept ? { namesOnAccept: true } : {}) },
       true,
       2
     )
@@ -3766,14 +4197,18 @@ class ApiClientClass {
     return this.queuedRequest('/api/mobile/board/requests')
   }
 
-  /** `conversationId` comes back on accept: the pseudonymous DM it opened. */
+  /**
+   * `conversationId` comes back on accept: the DM it opened. `namesOnAccept` (accept only): the row showed "If you say yes,
+   * you'll both see each other's first name and photo." With the asker's own, that DM opens swapped.
+   */
   async answerBoardRequest(
     requestId: string,
-    action: 'accept' | 'decline' | 'withdraw'
+    action: 'accept' | 'decline' | 'withdraw',
+    namesOnAccept = false
   ): Promise<ApiResponse<{ id: string; status: BoardRequestStatus; conversationId?: string }>> {
     return this.queuedRequest(
       `/api/mobile/board/requests/${encodeURIComponent(requestId)}`,
-      { method: 'PATCH', body: JSON.stringify({ action }) },
+      { method: 'PATCH', body: JSON.stringify(action === 'accept' && namesOnAccept ? { action, namesOnAccept: true } : { action }) },
       true,
       2
     )
@@ -3836,7 +4271,7 @@ class ApiClientClass {
   async blockUser(userId: string): Promise<ApiResponse<{ blocked: boolean }>> {
     const result = noteBlockedOn(
       await this.queuedRequest<{ blocked: boolean }>(
-        `/api/mobile/users/${userId}/block`,
+        `/api/mobile/users/${pathSegment(userId)}/block`,
         { method: 'POST' },
         true,
         2
@@ -3849,7 +4284,7 @@ class ApiClientClass {
 
   async unblockUser(userId: string): Promise<ApiResponse<{ blocked: boolean }>> {
     return this.queuedRequest(
-      `/api/mobile/users/${userId}/block`,
+      `/api/mobile/users/${pathSegment(userId)}/block`,
       { method: 'DELETE' },
       true,
       2
@@ -3874,7 +4309,7 @@ class ApiClientClass {
     description?: string
   ): Promise<ApiResponse<{ reported: boolean }>> {
     return this.queuedRequest(
-      `/api/mobile/users/${userId}/report`,
+      `/api/mobile/users/${pathSegment(userId)}/report`,
       {
         method: 'POST',
         body: JSON.stringify({ reason, description }),
@@ -3901,7 +4336,7 @@ class ApiClientClass {
     description?: string
   ): Promise<ApiResponse<{ reported: boolean }>> {
     return this.queuedRequest(
-      `/api/mobile/events/${eventId}/report`,
+      `/api/mobile/events/${pathSegment(eventId)}/report`,
       {
         method: 'POST',
         body: JSON.stringify({ reason, description }),
@@ -3918,7 +4353,7 @@ class ApiClientClass {
     description?: string
   ): Promise<ApiResponse<{ reported: boolean }>> {
     return this.queuedRequest(
-      `/api/mobile/messages/${messageId}/report`,
+      `/api/mobile/messages/${pathSegment(messageId)}/report`,
       {
         method: 'POST',
         body: JSON.stringify({ messageType, reason, description }),

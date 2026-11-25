@@ -1,13 +1,14 @@
 import { useState, type ReactNode } from 'react'
-import { Platform, StyleSheet, Text, View } from 'react-native'
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 
 import Animated from 'react-native-reanimated'
 
 import ScalePress from '../motion/ScalePress'
 import { Glyph } from '../ui/Glyph'
 import { type IconName } from '../ui/Icon'
-import { COLOR, ICON, MATERIAL, PRESS, RADIUS, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
+import { COLOR, ICON, MATERIAL, PRESS, RADIUS, SIZE, SPACE, TYPE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
+import { tint } from '../../lib/theme'
 import { GlyphWell } from './StateScreen'
 import { focusRing, font, quickTransition, useBoldText, useIncreaseContrast, useSelection } from './shared'
 
@@ -17,7 +18,14 @@ const BLOCKED_OPACITY = 0.6
 /** The check disc in a selected card's corner: 24 pt, 10 pt in (RadioCard, LookingForCard). */
 const CHECK_DISC = 24
 const CHECK_INSET = SPACE.sm + SPACE.xxs
+const ROW_RADIUS = RADIUS.tile
+/** A row's text stops short of the check disc in its corner. */
+const ROW_CLEAR = SPACE.md + CHECK_DISC + SPACE.sm
+/** The lead card's sentence on the selected fill: white at 80% (Flow 4 `.rc.on span`). */
+const ON_FILL_HINT = 0.8
 
+/** The action link's line grown to the 48 pt target, as the DS's other text links (TonightSheet). */
+const LINK_SLOP = (SIZE.targetAndroid - TYPE.control.lineHeight) / 2
 const FILL = quickTransition('background-color', 'opacity')
 const RING_FADE = quickTransition('opacity')
 
@@ -26,14 +34,14 @@ const RING_FADE = quickTransition('opacity')
  * draws itself when the card is picked. Always mounted, so the draw can play: it fades in as the check strokes in, and
  * never plays on mount (a card that opens picked is already marked).
  */
-export function CheckDisc({ selected, testID }: { selected: boolean; testID?: string }) {
+export function CheckDisc({ selected, inset = CHECK_INSET, testID }: { selected: boolean; inset?: number; testID?: string }) {
   const sel = useSelection()
   return (
     <Animated.View
       testID={testID}
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"
-      style={[styles.check, { backgroundColor: sel.glyph, opacity: selected ? 1 : 0 }, RING_FADE]}
+      style={[styles.check, { top: inset, right: inset, backgroundColor: sel.glyph, opacity: selected ? 1 : 0 }, RING_FADE]}
     >
       <Glyph name="check" size={ICON.inline} color={COLOR.selectionInk} active play={selected} testID={testID && `${testID}-glyph`} />
     </Animated.View>
@@ -42,6 +50,19 @@ export function CheckDisc({ selected, testID }: { selected: boolean; testID?: st
 
 export type RadioCardProps = {
   title: string
+  /**
+   * `start`: a choice that acts at once instead of being held (the Lobby's two starts, "I have spots" / "I'm looking"): read
+   * as a button with no checked state, never selected, and every tap acts. `radio` (the default): one of a group, held.
+   */
+  kind?: 'radio' | 'start'
+  /**
+   * `lead`: the face, title, a value and the sentence down the left edge (Flow 4 `.rc`), for options that show what you
+   * would look like. `row`: no face, the title and sentence left in a short row (Flow 4 `.jr`), for the plain answer under
+   * a grid of pictures. `center` (the default): the RadioCard page's stack.
+   */
+  layout?: 'center' | 'lead' | 'row'
+  /** A variable value under the title in its own slot, one line, ellipsized: a pseudonym, a first name. Read with the title. */
+  detail?: string
   /** The consequence: what happens if you pick it. Read with the title. */
   hint?: string
   /** The glyph form (a 56 pt well) when the option has no face. */
@@ -52,6 +73,11 @@ export type RadioCardProps = {
   onPress?: () => void
   /** Blocked, with the reason as `hint`. */
   disabled?: boolean
+  /**
+   * The way out of a blocked `lead` card (Flow 4 audit D-1: "Add a photo"): a link under the sentence, in the hue's
+   * glyph colour. Its own element to a screen reader; the card is still read as the blocked radio it is.
+   */
+  action?: { label: string; onPress: () => void }
   /**
    * A tap on the selected card is a change too (it clears the choice): the caller holds a set, not exactly
    * one. It then reads as a checkbox, since "exactly one" no longer holds, and plays `H.select` both ways.
@@ -75,15 +101,50 @@ export type RadioCardProps = {
  * feedback, §13). The card grows with its text. Increase Contrast: the
  * unselected card takes the 50% hairline and the consequence goes white.
  */
-export function RadioCard({ title, hint, icon, avatar, selected = false, onPress, disabled = false, deselectable = false, previewState, testID }: RadioCardProps) {
+export function RadioCard({ title, kind = 'radio', layout = 'center', detail, hint, icon, avatar, selected = false, onPress, disabled = false, deselectable = false, action, previewState, testID }: RadioCardProps) {
   const android = Platform.OS === 'android'
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const [focused, setFocused] = useState(false)
   const sel = useSelection()
+  const lead = layout === 'lead'
+  const row = layout === 'row'
+  const hintColor = contrast ? COLOR.textPrimary : !row && lead && selected ? tint(COLOR.textPrimary, ON_FILL_HINT) : COLOR.textSecondary
   // One ring layer, always drawn: the hue's 2 pt ring fades in with the fill; Increase Contrast keeps the 50% hairline when off.
   const ring = selected ? { borderWidth: SPACE.xxs, borderColor: sel.edge, opacity: 1 } : contrast ? { ...styles.contrast, opacity: 1 } : { borderWidth: SPACE.xxs, borderColor: sel.edge, opacity: 0 }
 
+  const start = kind === 'start'
+  const choice = {
+    accessibilityRole: start ? ('button' as const) : deselectable ? ('checkbox' as const) : ('radio' as const),
+    accessibilityLabel: [title, detail, hint].filter(Boolean).join(', '),
+    accessibilityState: start ? { disabled } : { checked: selected, disabled },
+  }
+  const body = (
+    <>
+      {icon ? <GlyphWell icon={icon} /> : avatar}
+      {row ? (
+        <>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.rowTitle} style={[font('rowTitle', bold), styles.ink]}>{title}</Text>
+          {hint ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: hintColor }]}>{hint}</Text> : null}
+        </>
+      ) : lead ? (
+        <>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.group} style={[font('group', bold), styles.ink, styles.leadTitle]}>{title}</Text>
+          {detail ? (
+            <Text testID={testID && `${testID}-detail`} numberOfLines={1} ellipsizeMode="tail" maxFontSizeMultiplier={MAX_FONT_SCALE.control} style={[font('control', bold), styles.ink, styles.detail]}>
+              {detail}
+            </Text>
+          ) : null}
+          {hint ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: hintColor }]}>{hint}</Text> : null}
+        </>
+      ) : (
+        <>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.title]}>{title}</Text>
+          {hint ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} style={[font('caption', bold), styles.center, { color: hintColor }]}>{hint}</Text> : null}
+        </>
+      )}
+    </>
+  )
   return (
     <View style={[styles.slot, previewState === 'pressed' && !android ? styles.pressedIos : null]}>
       <ScalePress
@@ -100,16 +161,25 @@ export function RadioCard({ title, hint, icon, avatar, selected = false, onPress
         pressedScale={android ? 1 : PRESS.scale}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
-        accessibilityRole={deselectable ? 'checkbox' : 'radio'}
-        accessibilityLabel={hint ? `${title}, ${hint}` : title}
-        accessibilityState={{ checked: selected, disabled }}
-        style={[styles.card, { backgroundColor: selected ? sel.fill : COLOR.surface, opacity: disabled ? BLOCKED_OPACITY : 1 }, FILL]}
+        // With an action the card holds two elements, the choice and its link; without, it is the one element.
+        accessible={!action}
+        {...(action ? null : choice)}
+        style={[styles.card, lead && styles.lead, row && styles.row, { backgroundColor: selected ? sel.fill : COLOR.surface, opacity: disabled ? BLOCKED_OPACITY : 1 }, FILL]}
       >
-        {icon ? <GlyphWell icon={icon} /> : avatar}
-        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.title]}>{title}</Text>
-        {hint ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} style={[font('caption', bold), styles.center, { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>{hint}</Text> : null}
-        <CheckDisc selected={selected} testID={testID && `${testID}-check`} />
-        <Animated.View testID={testID && `${testID}-ring`} pointerEvents="none" style={[StyleSheet.absoluteFill, styles.edge, ring, RING_FADE]} />
+        {action ? (
+          <>
+            <View accessible {...choice} style={styles.choice}>
+              {body}
+            </View>
+            <Pressable testID={testID && `${testID}-action`} onPress={action.onPress} hitSlop={LINK_SLOP} accessibilityRole="link" style={styles.action}>
+              <Text maxFontSizeMultiplier={MAX_FONT_SCALE.button} style={[font('control', bold), { color: sel.glyph }]}>{action.label}</Text>
+            </Pressable>
+          </>
+        ) : (
+          body
+        )}
+        <CheckDisc selected={selected} inset={lead || row ? SPACE.md : CHECK_INSET} testID={testID && `${testID}-check`} />
+        <Animated.View testID={testID && `${testID}-ring`} pointerEvents="none" style={[StyleSheet.absoluteFill, row ? styles.rowEdge : styles.edge, ring, RING_FADE]} />
       </ScalePress>
       {focused || previewState === 'focused'
         ? focusRing(RADIUS.sheet).map((r, i) => <View key={i} testID={i ? undefined : testID && `${testID}-focus`} pointerEvents="none" style={r} />)
@@ -130,14 +200,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: SPACE.sm,
   },
+  // Flow 4 `.rc`: 4 between the lines, 12 under the face (the gap and 8 more).
+  lead: { alignItems: 'flex-start', gap: SPACE.xs },
+  // The choice's part of a card with an action: the lead card's own column, the card's width.
+  choice: { alignSelf: 'stretch', alignItems: 'flex-start', gap: SPACE.xs },
+  // `.addp`: 8 under the sentence (the card's gap and 4 more).
+  action: { marginTop: SPACE.xs },
+  leadTitle: { marginTop: SPACE.sm },
+  // The slot is the card's width (Flow 4 `.rc .ps`), so a long value ellipsizes at the card's edge, not at its own.
+  detail: { alignSelf: 'stretch' },
+  // Flow 4 `.jr`: 12 by 16 in, radius 20; the right keeps clear of the check disc.
+  row: { alignItems: 'flex-start', gap: 0, borderRadius: ROW_RADIUS, paddingVertical: SPACE.md, paddingLeft: SPACE.lg, paddingRight: ROW_CLEAR },
+  rowEdge: { borderRadius: ROW_RADIUS },
+  ink: { color: COLOR.textPrimary },
   title: { color: COLOR.textPrimary, textAlign: 'center' },
   center: { textAlign: 'center' },
   edge: { borderRadius: RADIUS.sheet },
   contrast: { borderWidth: 1, borderColor: MATERIAL.hairlineIncreaseContrast },
   check: {
     position: 'absolute',
-    top: CHECK_INSET,
-    right: CHECK_INSET,
     width: CHECK_DISC,
     height: CHECK_DISC,
     borderRadius: RADIUS.capsule,

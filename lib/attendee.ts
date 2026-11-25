@@ -9,6 +9,8 @@ import type { Badge, Overlap } from './aboutYou'
 export interface AttendeeProfile {
   user_id: string
   name?: string
+  /** `name` is theirs, not the room pseudonym (admin SCRUM-1067): the face is their photo or initial, never a creature. */
+  revealed?: boolean
   /**
    * Whole years, derived server-side. Never a birth date.
    *
@@ -47,12 +49,22 @@ export interface AttendeeProfile {
    * looking. The REST roster does not carry it — `MatchCard` has no such field.
    */
   last_seen?: string
+  /** When they checked in here, from the deck (`MatchCard.checkInTime`, SCRUM-1042); null to a host. */
+  checkInTime?: string | null
   /** Still physically in the room, per presence. */
   insideNow?: boolean
-  /** You already liked them. The reverse is never disclosed. */
-  youLiked?: boolean
+  /** You waved at them in this room (the deck's `youWaved`). */
+  youWaved?: boolean
+  /** They waved at you in this room, yours to answer (the deck's `wavedAtYou`). */
+  wavedAtYou?: boolean
+  /** The conversation your mutual here opened (the deck's `conversationId`): Say hi after a restart. */
+  conversationId?: string | null
   /** Matching v2's shared lines, sign chip and badges — as the server budgeted them. */
   overlaps?: Overlap[]
   sign?: string | null
   badges?: Badge[]
+  /** Flow 5 P-A: their answer to tonight's question, as the deck sent it. Never typed by this phone. */
+  tonightAnswer?: string | null
+  /** Flow 5 P-A: why they are here at a work-lens event, as the deck sent it. */
+  workIntent?: string | null
 }

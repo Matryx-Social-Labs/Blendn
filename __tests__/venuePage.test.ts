@@ -1,4 +1,5 @@
 import type { VenueDetail } from '../lib/apiClient'
+import { refreshPhoneZone } from '../lib/time'
 import {
   againLabel,
   apiChoice,
@@ -9,7 +10,7 @@ import {
   dockMode,
   goodToKnow,
   kmParam,
-  liveWords,
+  liveDockLine,
   nextTickMs,
   ringWords,
   sessionTime,
@@ -19,11 +20,9 @@ import {
   UPCOMING_MAX,
   UPCOMING_SHOWN,
   venueGate,
-  venueHero,
-  venueTiles,
+  hoursLine,
   sheetRefusal,
   liveToast,
-  washColor,
   ZERO_RETRY_MS,
 } from '../lib/venuePage'
 
@@ -39,7 +38,6 @@ const iso = (ms: number) => new Date(ms).toISOString()
  * NOW is a Saturday, 21:00 (day 6).
  */
 const SAT = 6
-const hoursOf = (...rows: { day: number; open: string; close: string }[]) => rows
 
 const detail = (over: { venue?: Partial<VenueDetail['venue']>; live?: Partial<VenueDetail['live']>; tonight?: VenueDetail['tonight'] } = {}): VenueDetail => ({
   venue: { id: 'v1', name: 'Toit', address: '100 Feet Road', city: 'Bengaluru', latitude: 12.97, longitude: 77.64, venueTypeLabel: 'Brewery', claimed: false, ...over.venue },
@@ -48,86 +46,79 @@ const detail = (over: { venue?: Partial<VenueDetail['venue']>; live?: Partial<Ve
   tonight: over.tonight ?? null,
 })
 
-describe('the hero', () => {
-  it('tonight’s cover when there is one — the only artwork a venue has — else the type’s plate', () => {
-    const tonight = { id: 'e1', title: 'Vinyl Night', startTime: iso(min(60)), endTime: iso(min(240)), coverImageUrl: 'https://cdn.example/c.jpg' }
-    expect(venueHero(detail({ tonight }))).toEqual({ kind: 'cover', uri: 'https://cdn.example/c.jpg' })
-    expect(venueHero(detail({ venue: { venueType: 'brewery' }, tonight: { ...tonight, coverImageUrl: null } }))).toEqual({ kind: 'plate', plate: 'brewery' })
-    expect(venueHero(detail({ venue: { venueType: 'restaurant' } }))).toEqual({ kind: 'plate', plate: 'restaurant' })
-    // A server that does not send the type yet: the bar’s plate, never a grey box.
-    expect(venueHero(detail())).toEqual({ kind: 'plate', plate: 'bar' })
-  })
-})
-
-describe('the tiles', () => {
-  it('draws only the fields the server sent, in the design’s order', () => {
-    expect(venueTiles(detail({ live: { liveNow: null } }), NOW)).toEqual([])
-    expect(venueTiles(detail(), NOW)).toEqual([{ label: 'LIVE', value: '5–9 so far', mono: false }])
-    const full = detail({ venue: { hours: hoursOf({ day: SAT, open: '16:00', close: '01:00' }), dayResetHour: 6, capacity: 300 } })
-    expect(venueTiles(full, NOW)).toEqual([
-      { label: 'OPEN', value: 'Till 1 AM', mono: true },
-      { label: 'LIVE', value: '5–9 so far', mono: false },
-      // No RESET (D6): OPEN already answers the guest's question. SIZE is words, in the sans (B-T5).
-      { label: 'SIZE', value: '300 people', mono: false },
-    ])
-  })
-
+describe('the hours line (Flow 4 V-A: its own slot, only when known)', () => {
   it('Open: before it opens, while it is open past midnight, after it closes', () => {
     const open = (...rows: { day: number; open: string; close: string }[]) =>
-      venueTiles(detail({ venue: { hours: rows }, live: { liveNow: null } }), NOW)[0]
-    expect(open({ day: SAT, open: '23:00', close: '02:00' }).value).toBe('Opens 11 PM')
-    expect(open({ day: SAT, open: '18:00', close: '01:00' }).value).toBe('Till 1 AM')
-    expect(open({ day: SAT, open: '12:00', close: '15:00' }).value).toBe('Closed')
+      hoursLine(detail({ venue: { hours: rows }, live: { liveNow: null } }).venue, NOW)?.text
+    expect(open({ day: SAT, open: '23:00', close: '02:00' })).toBe('Opens 11 PM')
+    expect(open({ day: SAT, open: '18:00', close: '01:00' })).toBe('Open till 1 AM')
+    expect(open({ day: SAT, open: '12:00', close: '15:00' })).toBe('Closed today')
   })
 
   it('Open: hours given for other days only is Closed today; a split day answers with its evening opening', () => {
     const open = (...rows: { day: number; open: string; close: string }[]) =>
-      venueTiles(detail({ venue: { hours: rows }, live: { liveNow: null } }), NOW)[0]
-    expect(open({ day: 1, open: '12:00', close: '23:00' }).value).toBe('Closed')
-    expect(open({ day: SAT, open: '12:00', close: '15:00' }, { day: SAT, open: '19:00', close: '23:30' }).value).toBe('Till 11:30 PM')
+      hoursLine(detail({ venue: { hours: rows }, live: { liveNow: null } }).venue, NOW)?.text
+    expect(open({ day: 1, open: '12:00', close: '23:00' })).toBe('Closed today')
+    expect(open({ day: SAT, open: '12:00', close: '15:00' }, { day: SAT, open: '19:00', close: '23:30' })).toBe('Open till 11:30 PM')
   })
 
   it('Open: the venue day starts at its reset hour, so 01:00 Sunday is still Saturday’s row', () => {
     const sunday1am = new Date(2026, 9, 18, 1, 0, 0).getTime()
     const at = (hours: { day: number; open: string; close: string }[], reset: number) =>
-      venueTiles(detail({ venue: { hours, dayResetHour: reset }, live: { liveNow: null } }), sunday1am)[0]
-    expect(at([{ day: SAT, open: '18:00', close: '02:00' }], 6).value).toBe('Till 2 AM')
+      hoursLine(detail({ venue: { hours, dayResetHour: reset }, live: { liveNow: null } }).venue, sunday1am)?.text
+    expect(at([{ day: SAT, open: '18:00', close: '02:00' }], 6)).toBe('Open till 2 AM')
     // With a midnight reset it is already Sunday, which has no row.
-    expect(at([{ day: SAT, open: '18:00', close: '02:00' }], 0).value).toBe('Closed')
+    expect(at([{ day: SAT, open: '18:00', close: '02:00' }], 0)).toBe('Closed today')
+  })
+
+  describe('Open is judged on the venue\'s clock, not the phone\'s (OUT-03)', () => {
+    const phone = process.env.TZ
+    // A Toronto phone looking at a Bengaluru venue (Asia/Kolkata, Saturday 18:00 to 04:00, day resets at 06:00).
+    beforeAll(() => {
+      process.env.TZ = 'America/Toronto'
+      refreshPhoneZone()
+    })
+    afterAll(() => {
+      if (phone === undefined) delete process.env.TZ
+      else process.env.TZ = phone
+      refreshPhoneZone()
+    })
+    const hours = [{ day: SAT, open: '18:00', close: '04:00' }]
+    const tile = (now: number, timezone?: string | null) =>
+      hoursLine(detail({ venue: { hours, dayResetHour: 6, ...(timezone ? { timezone } : {}) } as never, live: { liveNow: null } }).venue, now)?.text
+
+    it('23:00 IST Saturday is "Till 4 AM", though it is 13:30 on the Toronto phone', () => {
+      const at2300Ist = Date.UTC(2026, 9, 17, 17, 30)
+      expect(tile(at2300Ist, 'Asia/Kolkata')).toBe('Open till 4 AM')
+      // Without the zone it falls back to the phone, which reads a different day and clock: the bug.
+      expect(tile(at2300Ist)).toBe('Opens 6 PM')
+    })
+
+    it('the weekday is the venue\'s: 01:00 IST Sunday is still Saturday\'s night', () => {
+      expect(tile(Date.UTC(2026, 9, 17, 19, 30), 'Asia/Kolkata')).toBe('Open till 4 AM')
+    })
   })
 
   it('Open: between the close and the reset hour it is Closed, not Opens (SCRUM-743 review M1)', () => {
     const at = (day: number, hour: number, hours: { day: number; open: string; close: string }[]) =>
-      venueTiles(detail({ venue: { hours, dayResetHour: 6 }, live: { liveNow: null } }), new Date(2026, 9, day, hour, 0).getTime())[0].value
+      hoursLine(detail({ venue: { hours, dayResetHour: 6 }, live: { liveNow: null } }).venue, new Date(2026, 9, day, hour, 0).getTime())?.text
     // Sunday 03:00 is still Saturday's day, whose 18:00 to 02:00 night closed an hour ago.
-    expect(at(18, 3, [{ day: SAT, open: '18:00', close: '02:00' }])).toBe('Closed')
+    expect(at(18, 3, [{ day: SAT, open: '18:00', close: '02:00' }])).toBe('Closed today')
     // Sunday 05:00, Saturday 10:00 to 22:00: long closed, and the day has not turned over yet.
-    expect(at(18, 5, [{ day: SAT, open: '10:00', close: '22:00' }])).toBe('Closed')
+    expect(at(18, 5, [{ day: SAT, open: '10:00', close: '22:00' }])).toBe('Closed today')
     // After the reset it is Sunday's day, whose own row answers.
     expect(at(18, 7, [{ day: 0, open: '10:00', close: '22:00' }])).toBe('Opens 10 AM')
     // Still inside Saturday's night at 01:00.
-    expect(at(18, 1, [{ day: SAT, open: '18:00', close: '02:00' }])).toBe('Till 2 AM')
+    expect(at(18, 1, [{ day: SAT, open: '18:00', close: '02:00' }])).toBe('Open till 2 AM')
   })
 
-  it('no hours, an empty list, or rows that are not the server’s shape draw no Open tile', () => {
-    const tiles = (hours: unknown) => venueTiles(detail({ venue: { hours: hours as never }, live: { liveNow: null } }), NOW)
-    expect(tiles(null)).toEqual([])
-    expect(tiles([])).toEqual([])
-    expect(tiles({ opensAt: iso(min(-60)), closesAt: iso(min(60)) })).toEqual([])
-    expect(tiles([{ day: SAT, open: 18, close: null }])[0].value).toBe('Closed')
-    expect(tiles([{ day: SAT, open: 'late', close: 'later' }])[0].value).toBe('Closed')
-  })
-
-  it('the live tile is a bucket, and under five there is no live tile at all', () => {
-    expect(venueTiles(detail({ live: { liveNow: 'quiet' } }), NOW)).toEqual([])
-    expect(venueTiles(detail({ live: { liveNow: '20+' } }), NOW)).toEqual([{ label: 'LIVE', value: '20+ so far', mono: false }])
-  })
-
-  it('a reset hour that is not an hour, or an empty capacity, is not a tile', () => {
-    expect(venueTiles(detail({ venue: { dayResetHour: 30, capacity: 0 }, live: { liveNow: null } }), NOW)).toEqual([])
-    expect(venueTiles(detail({ venue: { capacity: 1 }, live: { liveNow: null } }), NOW)).toEqual([{ label: 'SIZE', value: '1 person', mono: false }])
-    // A reset hour alone draws nothing: it is staff's clock, not a guest's question (D6).
-    expect(venueTiles(detail({ venue: { dayResetHour: 6 }, live: { liveNow: null } }), NOW)).toEqual([])
+  it('no hours, an empty list, or rows that are not the server’s shape draw no hours line', () => {
+    const line = (hours: unknown) => hoursLine(detail({ venue: { hours: hours as never } }).venue, NOW)
+    expect(line(null)).toBeNull()
+    expect(line([])).toBeNull()
+    expect(line({ opensAt: iso(min(-60)), closesAt: iso(min(60)) })).toBeNull()
+    expect(line([{ day: SAT, open: 18, close: null }])?.text).toBe('Closed today')
+    expect(line([{ day: SAT, open: 'late', close: 'later' }])?.text).toBe('Closed today')
   })
 })
 
@@ -159,7 +150,9 @@ describe('good to know, coming up, the board', () => {
     ])
     // All four are rows; the page shows UPCOMING_SHOWN of them and keeps the rest behind See all.
     expect(rows).toHaveLength(4)
-    expect(rows[0]).toEqual({ id: 'a', title: 'Bass Thursday', day: 'Thu 22 Oct', time: '10 PM' })
+    expect(rows[0]).toMatchObject({ id: 'a', title: 'Bass Thursday', day: 'Thu 22 Oct', time: '10 PM' })
+    // The start and its zone go with it, for the row's date stamp (Flow 4 V-A).
+    expect(rows[0].start).toBe(new Date(2026, 9, 22, 22).toISOString())
     expect(upcomingRows(undefined)).toEqual([])
   })
 
@@ -222,7 +215,13 @@ describe('the dock', () => {
 
 describe('where your window stands', () => {
   it('minutes with the end clock; the last five minutes as mm:ss with the new end an Extend gives; stay', () => {
-    expect(sessionTime({ expiresAt: iso(min(32)) }, NOW)).toEqual({ kind: 'minutes', left: 32, until: clock24(min(32)) })
+    // Under 45 minutes an Extend (45) moves the end, so the window carries the end it would give.
+    expect(sessionTime({ expiresAt: iso(min(32)) }, NOW)).toEqual({ kind: 'minutes', left: 32, until: clock24(min(32)), extendUntil: clock24(min(45)) })
+    // From 45 up it would not (going live again never shortens): no Extend to offer.
+    expect(sessionTime({ expiresAt: iso(min(45)) }, NOW)).toEqual({ kind: 'minutes', left: 45, until: clock24(min(45)) })
+    // Just extended (44:59 left, read as 45): another Extend would add seconds, so none is offered (drive, 2026-11-17).
+    expect(sessionTime({ expiresAt: iso(min(45) - 1000) }, NOW)).not.toHaveProperty('extendUntil')
+    expect(sessionTime({ expiresAt: iso(min(44)) }, NOW)).toHaveProperty('extendUntil', clock24(min(45)))
     // Partial minutes round up: 31:01 left reads 32.
     expect(sessionTime({ expiresAt: iso(min(31) + 1000) }, NOW)).toMatchObject({ kind: 'minutes', left: 32 })
     expect(sessionTime({ expiresAt: iso(min(5)) }, NOW)).toEqual({ kind: 'ending', clock: '5:00', extendUntil: clock24(min(45)) })
@@ -243,18 +242,55 @@ describe('where your window stands', () => {
     expect(nextTickMs({ expiresAt: null }, NOW)).toBeNull()
   })
 
-  it('the words on the pill, the ring and for a screen reader', () => {
+  it('the words on the ring and for a screen reader', () => {
     const t = sessionTime({ expiresAt: iso(min(42)) }, NOW)
-    expect(liveWords(t)).toBe('You’re live · 42 min')
     expect(ringWords(t)).toBe('Live · 42 min left')
     expect(spokenLeft(t!)).toBe('42 minutes left')
+    expect(ringWords(sessionTime({ expiresAt: iso(min(165)) }, NOW))).toBe('Live · 2h 45m left')
+    expect(spokenLeft(sessionTime({ expiresAt: iso(min(165)) }, NOW)!)).toBe('2 hours 45 minutes left')
+    expect(spokenLeft(sessionTime({ expiresAt: iso(min(60)) }, NOW)!)).toBe('1 hour left')
     const ending = sessionTime({ expiresAt: iso(NOW + 4 * 60_000 + 59_000) }, NOW)!
-    expect(liveWords(ending)).toBe('You’re live · 4:59')
     expect(spokenLeft(ending)).toBe('4:59 left, ending soon')
     const stay = sessionTime({ expiresAt: null, stay: true }, NOW)!
-    expect(liveWords(stay)).toBe('You’re live · staying')
     expect(ringWords(stay)).toBe('Live · staying')
-    expect(liveWords(null)).toBe('You’re live')
+  })
+
+  it('the recap’s one formatter for the minutes: “42 min” under an hour, “2h 45m” over, “1h” on the hour', () => {
+    const left = (m: number) => liveDockLine(sessionTime({ expiresAt: iso(min(m)) }, NOW), 'Toit').clock?.text
+    expect(left(42)).toBe('42 min')
+    expect(left(60)).toBe('1h')
+    expect(left(165)).toBe('2h 45m')
+    expect(left(61)).toBe('1h 1m')
+  })
+})
+
+describe('the live dock’s line (venue live pill B, owner 2026-11-17)', () => {
+  const at = (ms: number) => sessionTime({ expiresAt: iso(NOW + ms) }, NOW)
+  it('live: “Live ·” and its time in their own slot, over what the sheet holds', () => {
+    expect(liveDockLine(at(20 * 60_000), 'Toit')).toEqual({
+      dot: 'live',
+      state: 'Live',
+      clock: { text: '20 min', mono: false },
+      link: 'Extend or stop',
+      label: 'Live at Toit, 20 minutes left. Extend or stop',
+    })
+    // An Extend would not move a later end: the line offers what the sheet has, Stop.
+    expect(liveDockLine(at(165 * 60_000), 'Toit')).toMatchObject({ clock: { text: '2h 45m', mono: false }, link: 'Stop' })
+  })
+
+  it('the last five minutes: the warning dot, “Ending ·” and the mono clock, over “Extend”', () => {
+    expect(liveDockLine(at(4 * 60_000 + 59_000), 'Toit')).toEqual({
+      dot: 'ending',
+      state: 'Ending',
+      clock: { text: '4:59', mono: true },
+      link: 'Extend',
+      label: 'Live at Toit, 4:59 left, ending soon. Extend',
+    })
+  })
+
+  it('a stay, and a window with no end, have no clock and offer Stop', () => {
+    expect(liveDockLine(sessionTime({ expiresAt: null, stay: true }, NOW), 'Toit')).toEqual({ dot: 'live', state: 'Live · staying', clock: undefined, link: 'Stop', label: 'Live at Toit, staying. Stop' })
+    expect(liveDockLine(null, 'Toit')).toEqual({ dot: 'live', state: 'Live', clock: undefined, link: 'Stop', label: 'Live at Toit. Stop' })
   })
 })
 
@@ -281,11 +317,6 @@ describe('a refusal of Go Live, as the sheet draws it', () => {
     expect(liveToast({ expiresAt: 'nonsense' })).toBe('You’re live')
   })
 
-  it('the wash under the hero takes the plate’s second colour; a cover uses the brewery’s, the design’s own', () => {
-    expect(washColor({ kind: 'plate', plate: 'bar' })).toBe('#4A3A2E')
-    expect(washColor({ kind: 'plate', plate: 'restaurant' })).toBe('#3A2A24')
-    expect(washColor({ kind: 'cover', uri: 'x' })).toBe('#5A3328')
-  })
 })
 
 describe('a read that did not come back', () => {

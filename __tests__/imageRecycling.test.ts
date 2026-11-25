@@ -21,7 +21,6 @@ const read = (...p: string[]) => readFileSync(join(__dirname, '..', ...p), 'utf8
 
 /** Files that render `OptimizedImage` inside a virtualised list. */
 const LIST_SURFACES = [
-  ['components', 'pulse', 'FeedMedia.tsx'],
   // Every Pulse, Nearby and Going card and row draws its cover through the DS EventCard.
   ['components', 'ds', 'EventCard.tsx'],
   // Every Going and Pulse row's thumb draws through it (SCRUM-480).
@@ -29,7 +28,7 @@ const LIST_SURFACES = [
   ['components', 'blendn', 'TonightView.tsx'],
   ['app', '(tabs)', 'events.tsx'],
   ['app', '(tabs)', 'chat.tsx'],
-  ['app', 'chat', '[id].tsx'],
+  ['components', 'chat', 'RoomChat.tsx'],
   ['app', 'private-chat', '[conversationId].tsx'],
 ]
 
@@ -58,9 +57,10 @@ describe('image recycling', () => {
     expect(missing).toEqual([])
   })
 
-  it('the hero keeps the one it always had', () => {
-    // `SceneHeroMedia` uses expo-image directly and was the only surface that
-    // ever set this. It is the reference, not an exception.
-    expect(read('components', 'scene', 'SceneHeroMedia.tsx')).toContain('recyclingKey=')
+  it('the hero keeps the one it always had, through fit rule B’s ContainedCover', () => {
+    // `SceneHeroMedia` was the only surface that ever set this. Its pages now draw through `ContainedCover` (fit rule B,
+    // owner 2026-11-17), which keys the sharp picture by its uri for every surface that uses it.
+    expect(read('components', 'scene', 'SceneHeroMedia.tsx')).toContain('<ContainedCover')
+    expect(read('components', 'ds', 'LinkPreviewCard.tsx')).toContain('recyclingKey={uri}')
   })
 })

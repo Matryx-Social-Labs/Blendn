@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
-import { AccessibilityInfo, Platform, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
+import { AccessibilityInfo, Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 
 import { Icon, type IconName } from '../ui/Icon'
-import { COLOR, FONT_FAMILY, ICON, RADIUS, SPACE, TYPE, MAX_FONT_SCALE } from '../../lib/design/tokens'
+import { Material, useMapInk } from '../ui/Material'
+import { COLOR, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE, TYPE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { Button } from './Button'
 import { MonoRun } from './MonoFamily'
-import { CONTROL_FONT_CAP, font, IC_HAIRLINE, useBoldText, useIncreaseContrast, useMinMeasure } from './shared'
+import { OPACITY } from '../../lib/theme'
+import { CONTROL_FONT_CAP, font, IC_HAIRLINE, minTarget, PRESSED_WASH, useBoldText, useIncreaseContrast, useMinMeasure } from './shared'
 
 export type BannerKind = 'offline' | 'paused' | 'info' | 'visibility' | 'error'
 
@@ -19,7 +21,7 @@ const LOOK: Record<BannerKind, { fill: string; icon: IconName }> = {
 }
 
 /**
- * Whose action is lit: an offer inside the screen's world (Turn on, Show who I am). Offline, paused and error are a problem
+ * Whose action is lit: an offer inside the screen's world (Turn on, Show who you are). Offline, paused and error are a problem
  * being reported on a tinted strip: their action (Retry, Resume) is the quiet `secondary`, so the hue never cheers a failure.
  */
 const LIT_KINDS: ReadonlySet<BannerKind> = new Set(['info', 'visibility'])
@@ -35,6 +37,13 @@ export type BannerProps = {
   action?: { label: string; onPress: () => void; icon?: IconName }
   /** The action is in flight: the button holds its flare and, after 300 ms, shows its spinner. */
   busy?: boolean
+  /** A closing ×, for a banner said once (the travel banner): the person may put it away; nothing else is undone. */
+  onDismiss?: () => void
+  /**
+   * Floating on the map (the Pulse's where-you-are banners, board `.mbn`): the floating controls' glass (`Material`
+   * `control`, as the wordmark and the bell) instead of the solid strip. Only an `info` banner rides there.
+   */
+  onMap?: boolean
   testID?: string
 }
 
@@ -49,10 +58,16 @@ export type BannerProps = {
  * VisibilityBanner is read in place. On `info` and `visibility` the action is a `lit` Button in the screen's hue; on offline, paused
  * and error it is `secondary` (`LIT_KINDS`). Text scales freely; past 1.3× the action
  * wraps under the sentence, and below it too whenever the sentence beside it would be narrower than its measure
- * (`useMinMeasure`: 360 dp at 1.3 drew "You're / anony / mous" beside Show who I am, RC drive 3). Increase Contrast adds the
+ * (`useMinMeasure`: 360 dp at 1.3 drew "You're / anony / mous" beside Show who you are, RC drive 3). Increase Contrast adds the
  * 50% hairline.
  */
-export function Banner({ kind, text, mono, icon, action, busy = false, testID }: BannerProps) {
+/** The floating controls' glass under a banner on the map, with the map's ink where glass cannot show (`useMapInk`). */
+export function MapGlass({ testID, radius = RADIUS.rowInCard }: { testID?: string; radius?: number }) {
+  const mapInk = useMapInk()
+  return <Material role="control" testID={testID} pointerEvents="none" style={[StyleSheet.absoluteFill, { borderRadius: radius }, mapInk]} />
+}
+
+export function Banner({ kind, text, mono, icon, action, busy = false, onDismiss, onMap = false, testID }: BannerProps) {
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const { fontScale } = useWindowDimensions()
@@ -68,6 +83,8 @@ export function Banner({ kind, text, mono, icon, action, busy = false, testID }:
   const [slotTop, setSlotTop] = useState(0)
   const under = !!action && (wrapped || (textHeight > 0 && slotTop >= textHeight))
   const line = TYPE.meta.lineHeight * fontScale
+  // The glyph and the × share one slot: on the first line when the action is under, centred in the row beside it.
+  const lineSlot = under ? [styles.glyph, { height: line }] : undefined
 
   // The mono part is read with the sentence the first time; a count that ticks beneath it (a wait: 0:52) never re-announces.
   const monoNow = useRef(mono)
@@ -82,9 +99,10 @@ export function Banner({ kind, text, mono, icon, action, busy = false, testID }:
     <View
       testID={testID}
       accessibilityRole={kind === 'error' ? 'alert' : undefined}
-      style={[styles.banner, { backgroundColor: LOOK[kind].fill }, under && styles.top, contrast && IC_HAIRLINE]}
+      style={[styles.banner, onMap && styles.onMap, { backgroundColor: onMap ? 'transparent' : LOOK[kind].fill }, under && styles.top, contrast && IC_HAIRLINE]}
     >
-      <View testID={testID && `${testID}-glyph`} style={under ? [styles.glyph, { height: line }] : undefined}>
+      {onMap ? <MapGlass testID={testID && `${testID}-material`} /> : null}
+      <View testID={testID && `${testID}-glyph`} style={lineSlot}>
         <Icon name={icon ?? LOOK[kind].icon} size={ICON.control} />
       </View>
       {/* The sentence and its action in a row that wraps: the action goes under the sentence rather than squeeze it. */}
@@ -109,12 +127,36 @@ export function Banner({ kind, text, mono, icon, action, busy = false, testID }:
         </Text>
         {action ? (
           <View testID={testID && `${testID}-slot`} onLayout={(e) => setSlotTop(e.nativeEvent.layout.y)} style={wrapped ? styles.under : undefined}>
-            <Button kind={LIT_KINDS.has(kind) ? 'lit' : 'secondary'} size="sm" icon={action.icon} label={action.label} loading={busy} onPress={action.onPress} testID={testID && `${testID}-action`} />
+            <Button kind={onMap ? 'tertiary' : LIT_KINDS.has(kind) ? 'lit' : 'secondary'} size="sm" icon={action.icon} label={action.label} loading={busy} onPress={action.onPress} testID={testID && `${testID}-action`} />
           </View>
         ) : null}
       </View>
+      {/* A bare glyph, as SearchField's clear: a banner is solid, and glass on it has nothing to refract (C20). */}
+      {onDismiss ? (
+        <View testID={testID && `${testID}-dismiss-slot`} style={lineSlot}>
+          <Pressable
+            onPress={onDismiss}
+            accessibilityRole="button"
+            accessibilityLabel="Dismiss"
+            android_ripple={{ color: PRESSED_WASH.android, borderless: true, radius: minTarget() / 2 }}
+            style={({ pressed }) => [dismissTarget(), pressed && Platform.OS === 'ios' && { opacity: OPACITY.pressed }]}
+            testID={testID && `${testID}-dismiss`}
+          >
+            <Icon name="x" size={ICON.control} color={COLOR.textSecondary} />
+          </Pressable>
+        </View>
+      ) : null}
     </View>
   )
+}
+
+/**
+ * The 20 pt × in a real full target (44 pt iOS, 48 dp Android: its bounds, not a slop, so the accessibility node is that
+ * size), drawn at the glyph's size by a negative margin: it neither grows the banner nor reaches over the action beside it.
+ */
+const dismissTarget = () => {
+  const size = minTarget()
+  return { width: size, height: size, margin: -(size - ICON.control) / 2, alignItems: 'center', justifyContent: 'center' } as const
 }
 
 export type Visibility = 'named' | 'anon' | 'hidden' | 'blocked'
@@ -129,7 +171,7 @@ const VISIBILITY: Record<Visibility, { icon: IconName; text: (name: string | und
     text: (name) => `You’re in this room as ${name}, with your photo. People here can see you.`,
     action: () => 'Go anonymous',
   },
-  anon: { icon: 'eye-off', text: (name) => `You’re ${asName(name)}. Nobody here sees your name or photo.`, action: () => 'Show who I am' },
+  anon: { icon: 'eye-off', text: (name) => `You’re ${asName(name)}. Nobody here sees your name or photo.`, action: () => 'Show who you are' },
   hidden: { icon: 'cloud-off', text: () => 'You’re not listed here. Show online status is off.', action: () => 'Turn it on' },
   blocked: {
     icon: 'eye-off',
@@ -173,6 +215,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: SPACE.md,
   },
+  // Board `.mbn`: 48 tall, 14 before the glyph, 8 after the ×, 8 between; the action is words. 6 above and below (the
+  // board's 8 holds a line of words; ours holds the DS's 36 pt text button, so the bar stays the board's 48).
+  onMap: { minHeight: SIZE.targetIos + SPACE.xs, paddingVertical: SPACE.xs + SPACE.xxs, paddingLeft: SPACE.md + SPACE.xxs, paddingRight: SPACE.sm, gap: SPACE.sm },
   /** The action is under the sentence: hang from its first line. */
   top: { alignItems: 'flex-start' },
   glyph: { justifyContent: 'center' },

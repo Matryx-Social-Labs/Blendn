@@ -1,23 +1,28 @@
 import { barHeight, barTop } from '../../lib/barGeometry'
 import { Image } from 'expo-image'
 import { router, useLocalSearchParams } from 'expo-router'
-import React, { memo, useCallback, useEffect, useState } from 'react'
+import React, { memo, useCallback, useEffect, useRef, useState } from 'react'
 import { Animated, Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
+import Reanimated from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { BrokenLink } from '../../components/chat/BrokenLink'
 import { PageFooter } from '../../components/chat/PageFooter'
-import { LeaveRoomSheet, leavePlaceLine, MuteSheet } from '../../components/chat/RoomSheets'
+import { CheckOutSheet, MuteSheet } from '../../components/chat/RoomSheets'
+import { HostMark, useEventDetail } from '../../components/blendn/RoomInfoSheet'
 import { SenderCard, type Sender } from '../../components/chat/SenderCard'
 import { Avatar } from '../../components/ds/Avatar'
+import { Button } from '../../components/ds/Button'
 import { IconButton } from '../../components/ds/IconButton'
 import { ScrimPill, TimeBadge } from '../../components/ds/MonoFamily'
 import { SectionHeader } from '../../components/ds/SectionHeader'
 import { SettingsGroup, SettingsRow } from '../../components/ds/SettingsRow'
+import { Title } from '../../components/ds/Title'
 import { CONTROL_FONT_CAP, font, HueProvider, useBoldText } from '../../components/ds/shared'
 import { StateScreen } from '../../components/ds/StateScreen'
 import { CategoryPlate } from '../../components/ds/EventCard'
 import { Icon } from '../../components/ui/Icon'
+import { useSkeletonCrossfade } from '../../components/motion/useSkeletonCrossfade'
 import { PhotoScrim, StatusScrim } from '../../components/ui/GradientFill'
 import { apiClient } from '../../lib/apiClient'
 import { COMMUNITY_GUIDELINES_URL } from '../../lib/communityGuidelines'
@@ -25,18 +30,20 @@ import { COLOR, FONT_FAMILY, ICON, MAX_FONT_SCALE, RADIUS, SPACE, TYPE } from '.
 import { liveNowWord } from '../../lib/home'
 import { openInApp } from '../../lib/links'
 import { printable } from '../../lib/pulseSections'
+import { roomHost } from '../../lib/roomInfo'
 import { Logger } from '../../lib/logger'
-import { markSeed } from '../../lib/pseudonymAvatar'
+import { markSeed } from '../../lib/creatureSeed'
 import { isMuted, muteLabel, useRoomMute } from '../../lib/roomMembership'
+import { opensRoomCard, roomCardRoute } from '../../lib/roomCard'
+import { roomPhotosAllowed } from '../../lib/roomMessages'
 import { useHereCount, useRoomRow } from '../../lib/roomRow'
 import { idParam, nameParam } from '../../lib/routeParams'
 import { showRoomReportOptions } from '../../lib/safetyUtils'
 import { subscribeToChatMemberLeft } from '../../lib/socketClient'
 import { useAuth } from '../../lib/useAuth'
 import { useOnBlock } from '../../lib/useOnBlock'
-import { OPACITY } from '../../lib/theme'
 
-type Member = { userId: string; name: string | null; role: string }
+type Member = { userId: string; name: string | null; role: string; avatar?: string | null }
 
 const PAGE = 100
 /** The hero: the cover, 300 tall (Room info frame). */
@@ -49,21 +56,24 @@ const CELL_GAP = SPACE.md
 const FACE_INSET = SPACE.sm
 /** A name and a role badge grow with the text size only this far, so a row's height holds. */
 const NAME_SCALE_CAP = 1.3
-/** The danger zone's row: 64 tall, a hint under its title. */
-const LEAVE_HEIGHT = 64
+/** Under Check out: the words C6's Room info sheet says. */
+const CHECK_OUT_HINT = 'You leave the room and its chat.'
 
-/** Only the two roles that change what someone can do here get a badge. */
-const roleLabel = (role: string) => (role === 'admin' ? 'Organizer' : role === 'moderator' ? 'Moderator' : null)
+/**
+ * A moderator's badge. The host is never a badge on somebody's creature: it is the org, in its own row (I-A, as Room info's
+ * sheet draws it), so an `admin` member is drawn as everyone else is.
+ */
+const roleLabel = (role: string) => (role === 'moderator' ? 'Moderator' : null)
 
 /**
  * The room's info (Flow 5 Room info frames, R3-D5 5.12): the cover as a
  * scrimmed hero with the title, a still Live badge and the bell-slash chip
  * when you muted it; Mute · Guidelines · Report; the room's people as a crowd
- * of creatures with their role badges, each opening their card; Leave apart,
- * in the danger zone.
+ * of creatures with their role badges, each opening their card; Check out
+ * apart, in the danger zone, while you are checked in.
  *
  * - **Mute** silences the room's pushes to you and nothing else; nobody is told.
- * - **Leave** is the one removal that is yours to undo, and the confirm says so.
+ * - **Check out** is the one exit (I-A); the shared question confirms it.
  * - **Report this room** is for what no single message shows.
  *
  * Members are drawn exactly as their bubbles: the creature seeded on their
@@ -111,13 +121,17 @@ function ChatInfoInner() {
   const muted = isMuted(mute)
 
   const [members, setMembers] = useState<Member[]>([])
+  const membersRef = useRef(members)
+  useEffect(() => {
+    membersRef.current = members
+  }, [members])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
   const [failed, setFailed] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
   /* A later page that did not come: the rest stays where it was, with its own retry. */
   const [moreFailed, setMoreFailed] = useState(false)
-  const [sheet, setSheet] = useState<'mute' | 'leave' | null>(null)
+  const [sheet, setSheet] = useState<'mute' | 'checkout' | null>(null)
   const [cardFor, setCardFor] = useState<Sender | null>(null)
   // One value for the screen's life; a lazy state, so nothing reads a ref while rendering.
   const [scrollY] = useState(() => new Animated.Value(0))
@@ -134,7 +148,7 @@ function ChatInfoInner() {
             else setMoreFailed(true)
             return
           }
-          const page = result.data.participants.map((p) => ({ userId: p.userId, name: p.name, role: p.role }))
+          const page = result.data.participants.map((p) => ({ userId: p.userId, name: p.name, role: p.role, avatar: p.avatar }))
           setFailed(false)
           setMoreFailed(false)
           setTotal(result.data.totalCount)
@@ -149,7 +163,7 @@ function ChatInfoInner() {
   )
 
   /* The next page as the end comes into view; one at a time, and not while a page is failing (its retry is the way on). */
-  /* Blocking somebody from their card takes them off the list at once; the server's next pages leave them out too. `total` is the list's length, for paging — the count the screen prints is the room's (`people`). */
+  /* Blocking somebody from their card takes them off the list at once; the server's next pages leave them out too. `total` is the list's length: the heading counts it; the hero line above prints the room's (`people`). */
   const removeMember = (userId: string) => {
     setMembers((prev) => prev.filter((m) => m.userId !== userId))
     setTotal((t) => Math.max(0, t - 1))
@@ -175,13 +189,15 @@ function ChatInfoInner() {
   useEffect(
     () =>
       subscribeToChatMemberLeft(chatGroupId, ({ userId }) => {
+        // Only somebody this list holds: the heading counts its cards, and a leaver it never listed is not one.
+        if (!membersRef.current.some((m) => m.userId === userId)) return
         setMembers((prev) => prev.filter((m) => m.userId !== userId))
         setTotal((t) => Math.max(0, t - 1))
       }),
     [chatGroupId]
   )
 
-  // The server's row wins; the route's names are a first paint and never an image (see app/chat/[id].tsx).
+  // The server's row wins; the route's names are a first paint and never an image (see components/chat/RoomChat.tsx).
   /*
    * A place's room (R4-D5 5-2): titled "‹place› · tonight", its size a bucket
    * from the place ("5–9"), never the exact total the event room shows — a
@@ -189,7 +205,7 @@ function ChatInfoInner() {
    */
   const place = row?.venueId ? row.title : undefined
   const bucket = usePlaceBucket(row?.venueId)
-  const title = place ? `${place} · tonight` : row?.title || nameParam(params.roomName) || nameParam(params.eventTitle) || 'Event chat'
+  const title = place ? `${place} · tonight` : row?.title || nameParam(params.roomName) || nameParam(params.eventTitle) || 'The room'
   const eventTitle = place ? undefined : row?.eventTitle || nameParam(params.eventTitle)
   const cover = row?.image || null
   /*
@@ -204,7 +220,14 @@ function ChatInfoInner() {
   const people = printable(row?.kind ? total || null : here)
   const count = row?.venueId ? bucket : people === null ? null : people.toLocaleString('en-US')
 
-  const leaveHint = place ? leavePlaceLine(place) : 'Rejoin by checking in at the event again.'
+  /*
+   * One exit, Check out (I-A), and only while you are checked in here: an event's or a place's room. Leaving the chat but
+   * staying checked in is Mute this room. A Lobby post's room is not in your rooms list (no row), so it has no exit.
+   */
+  const checkOutOf = row?.eventId && row.live ? row.eventId : null
+  const checkOutName = place ?? eventTitle ?? row?.title ?? null
+  // The host is the org (C6's row): none for a room no org owns.
+  const host = roomHost(useEventDetail(row?.eventId ?? null)?.organizer)
 
   const openGuidelines = () => {
     openInApp(COMMUNITY_GUIDELINES_URL).catch((error) => Logger.warn('chat', 'Could not open the community guidelines', { error }))
@@ -215,6 +238,8 @@ function ChatInfoInner() {
   /* One height for every row at every text size: the face, the gap and a name capped at 1.3x on one line. */
   const rowHeight = face + SPACE.sm + Math.ceil(TYPE.caption.lineHeight * NAME_SCALE_CAP)
   const showPeople = !loading && !failed
+  /* The skeleton is the header's grid, so the people that replace it fade in as cells: the first ones only (the hook's window). */
+  const arrive = useSkeletonCrossfade(loading)
   /*
    * Fixed rows, so the list can place any of them without measuring: a row is its height and the gap under it, and the header (the
    * hero, the rows, the heading) is measured once. Until it is, the list measures as it always did.
@@ -223,8 +248,12 @@ function ChatInfoInner() {
   const rowStride = rowHeight + SPACE.md
   const getItemLayout = headerHeight > 0 ? (_: unknown, index: number) => ({ length: rowStride, offset: headerHeight + index * rowStride, index }) : undefined
 
+  /* A crew's member opens the room card (first name only); an event's opens the sender card over this page. */
+  const openMember = (member: Sender) => (opensRoomCard(row?.kind) ? router.push(roomCardRoute(member, chatGroupId) as never) : setCardFor(member))
   const renderMember = ({ item: m }: { item: Member }) => (
-    <MemberCell member={m} you={m.userId === user?.id} chatGroupId={chatGroupId} cell={cell} face={face} height={rowHeight} onOpen={setCardFor} />
+    <Reanimated.View entering={arrive}>
+      <MemberCell member={m} photos={roomPhotosAllowed(row?.kind)} you={m.userId === user?.id} chatGroupId={chatGroupId} cell={cell} face={face} height={rowHeight} onOpen={openMember} />
+    </Reanimated.View>
   )
 
   const header = (
@@ -250,9 +279,9 @@ function ChatInfoInner() {
               ) : null}
             </View>
           ) : null}
-          <Text accessibilityRole="header" numberOfLines={2} maxFontSizeMultiplier={MAX_FONT_SCALE.title} style={[font('title', bold), styles.ink]}>
+          <Title accessibilityRole="header" numberOfLines={2} style={styles.ink}>
             {title}
-          </Text>
+          </Title>
           {count || (eventTitle && eventTitle !== title) ? (
             <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.ink]}>
               {count ? (
@@ -272,7 +301,7 @@ function ChatInfoInner() {
           <SettingsGroup>
             <SettingsRow
               icon={muted ? 'bell-off' : 'bell'}
-              title={muted ? `Notifications · ${muteLabel(mute)?.replace(/^Muted/, 'muted')}` : 'Mute notifications'}
+              title={(muted && muteLabel(mute)) || 'Mute this room'}
               hint="Only your pushes. Nobody is told."
               trail="chevron"
               onPress={() => setSheet('mute')}
@@ -292,10 +321,15 @@ function ChatInfoInner() {
               testID="info-report"
             />
           </SettingsGroup>
+          {host ? (
+            <SettingsGroup>
+              <SettingsRow leading={<HostMark testID="info-host-mark" />} title={host.name} hint="Host" label={`Host, ${host.name}`} testID="info-host" />
+            </SettingsGroup>
+          ) : null}
         </View>
 
-        {/* The room's number, as the line above says it (five and up), never the number loaded so far; a place says no count at all. */}
-        <SectionHeader title="In the room" count={loading || failed || place ? undefined : (people ?? undefined)} testID="info-members" />
+        {/* The cards this list holds (the server's total for it, paged), not the room's number in the line above: a hidden friend is counted there, not listed. Five and up; nothing until the row says whether this is a place, and a place says no count at all. */}
+        <SectionHeader title="In the room" count={loading || failed || !row || place ? undefined : (printable(total || null) ?? undefined)} testID="info-members" />
         {loading ? (
           <View style={styles.grid}>
             {Array.from({ length: COLUMNS * 2 }, (_, i) => (
@@ -329,22 +363,15 @@ function ChatInfoInner() {
     <View style={styles.body}>
       {showPeople ? <PageFooter loading={loadingMore} failed={moreFailed} onRetry={() => { setMoreFailed(false); fetchMore() }} what="people" testID="info-members-more-failed" /> : null}
 
-      {/* The danger zone: apart, after a hairline, in the destructive tint. */}
-      <View style={styles.hairline} />
-      <Pressable
-        testID="info-leave"
-        onPress={() => setSheet('leave')}
-        accessibilityRole="button"
-        accessibilityLabel="Leave room"
-        accessibilityHint={leaveHint}
-        style={({ pressed }) => [styles.leave, pressed && styles.pressed]}
-      >
-        <Icon name="log-out" size={ICON.control} />
-        <View style={styles.leaveText}>
-          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink]}>Leave room</Text>
-          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>{leaveHint}</Text>
-        </View>
-      </Pressable>
+      {/* The way out: apart, after a hairline. */}
+      {checkOutOf ? (
+        <>
+          <View style={styles.hairline} />
+          {/* Leaving is not a yes (buttons board C): the neutral Button, and its sheet commits with the event page's neutral hold. */}
+          <Button kind="secondary" size="md" icon="log-out" label="Check out" accessibilityHint={CHECK_OUT_HINT} onPress={() => setSheet('checkout')} testID="info-check-out" />
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary, styles.leaveHint]}>{CHECK_OUT_HINT}</Text>
+        </>
+      ) : null}
     </View>
   )
 
@@ -358,7 +385,7 @@ function ChatInfoInner() {
       {/*
        * The people are a virtualised list, four across, a page of 100 at a time as the end comes near: a concert
        * room's thousands never mount at once. Everything above them is the list's header, so the hero still scrolls
-       * away under the shield, and the leave zone is its footer.
+       * away under the shield, and the exit is its footer.
        */}
       <Animated.FlatList
         testID="info-list"
@@ -394,7 +421,7 @@ function ChatInfoInner() {
       />
 
       <MuteSheet chatGroupId={sheet === 'mute' ? chatGroupId : null} onClose={() => setSheet(null)} />
-      <LeaveRoomSheet chatGroupId={sheet === 'leave' ? chatGroupId : null} place={place} onClose={() => setSheet(null)} onLeft={() => router.dismissTo('/(tabs)/chat')} />
+      <CheckOutSheet eventId={sheet === 'checkout' ? checkOutOf : null} name={checkOutName} onClose={() => setSheet(null)} onCheckedOut={() => router.dismissTo('/(tabs)/chat')} />
 
       <SenderCard sender={cardFor} eventId={row?.eventId ?? null} chatGroupId={chatGroupId} onClose={() => setCardFor(null)} onBlocked={removeMember} />
     </View>
@@ -408,6 +435,7 @@ function ChatInfoInner() {
  */
 const MemberCell = memo(function MemberCell({
   member,
+  photos,
   you,
   chatGroupId,
   cell,
@@ -416,6 +444,8 @@ const MemberCell = memo(function MemberCell({
   onOpen,
 }: {
   member: Member
+  /** A crew's room only; everywhere else a creature, whatever the server sent. */
+  photos: boolean
   you: boolean
   chatGroupId: string
   cell: number
@@ -437,7 +467,11 @@ const MemberCell = memo(function MemberCell({
       style={[styles.member, { width: cell, height }]}
     >
       <View>
-        <Avatar size={face} kind="creature" pseudonym={markSeed(member.name, `${chatGroupId}:${member.userId}`)} />
+        {photos && member.avatar ? (
+          <Avatar size={face} kind="photo" uri={member.avatar} name={member.name ?? ''} />
+        ) : (
+          <Avatar size={face} kind="creature" pseudonym={markSeed(member.name, `${chatGroupId}:${member.userId}`)} />
+        )}
         {role ? (
           <View style={styles.roleBadgePlace} pointerEvents="none">
             <View style={styles.roleBadge}>
@@ -485,18 +519,7 @@ const styles = StyleSheet.create({
   onWhite: { color: COLOR.ink },
   more: { alignSelf: 'flex-start', paddingVertical: SPACE.sm },
   hairline: { height: StyleSheet.hairlineWidth, backgroundColor: COLOR.hairline, marginTop: SPACE.sm },
-  leave: {
-    minHeight: LEAVE_HEIGHT,
-    flexDirection: 'row',
-    alignItems: 'center',
-    // SettingsRow's glyph-to-text gap, so "Leave room" starts on the rows' text edge above it (r7 L1).
-    gap: SPACE.lg,
-    paddingHorizontal: SPACE.lg,
-    borderRadius: RADIUS.rowInCard,
-    backgroundColor: COLOR.destructiveTint,
-  },
-  pressed: { opacity: OPACITY.pressed },
-  leaveText: { flex: 1, paddingVertical: SPACE.md },
+  leaveHint: { textAlign: 'center' },
   back: { position: 'absolute', left: SPACE.lg, zIndex: 2 },
   shield: { position: 'absolute', left: 0, right: 0, top: 0, zIndex: 1, backgroundColor: COLOR.ink },
   headScrim: { position: 'absolute', left: 0, right: 0, top: 0, height: STATUS_SCRIM_HEIGHT },

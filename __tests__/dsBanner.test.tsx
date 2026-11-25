@@ -13,6 +13,7 @@ import { HueProvider, SELECTION } from '../components/ds/shared'
 import { COLOR, FONT_FAMILY, MATERIAL, RADIUS } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 import { monoRunSpaces } from './helpers/ax'
+import { isLitControl } from './helpers/lit'
 
 const flat = (id: string) => StyleSheet.flatten(screen.getByTestId(id).props.style)
 
@@ -63,16 +64,15 @@ describe('<Banner>', () => {
     expect(onPress).toHaveBeenCalledTimes(1)
   })
 
-  it.each(['ember', 'rose', 'violet'] as const)('the action is a lit Button under %s: the hue’s fill and rim, a white label, the named glyph', async (hue) => {
+  it.each(['ember', 'rose', 'violet'] as const)('the action is a lit Button under %s: the positive look (no hue, board C), a white label, the named glyph', async (hue) => {
     await render(
       <HueProvider value={hue}>
         <Banner kind="info" text="Push is off." action={{ label: 'Turn on', icon: 'bell', onPress: jest.fn() }} testID="b" />
       </HueProvider>
     )
-    expect(flat('b-action').backgroundColor).toBe(SELECTION[hue].fill)
-    expect(flat('b-action-rim').borderColor).toBe(SELECTION[hue].edge)
+    expect(isLitControl(screen.getByTestId('b-action'))).toBe(true)
     expect(StyleSheet.flatten(screen.getByText('Turn on').props.style).color).toBe(COLOR.textPrimary)
-    expect(JSON.stringify(screen.toJSON())).toContain(SELECTION[hue].glyph)
+    expect(JSON.stringify(screen.toJSON())).not.toContain(SELECTION[hue].fill)
   })
 
   it.each(['offline', 'paused', 'error'] as const)('%s: a problem being reported, so its action is the quiet secondary, never lit', async (kind) => {
@@ -82,7 +82,7 @@ describe('<Banner>', () => {
       </HueProvider>
     )
     expect(flat('b-action').backgroundColor).toBe(COLOR.surfaceRaised)
-    expect(screen.queryByTestId('b-action-rim', { includeHiddenElements: true })).toBeNull()
+    expect(isLitControl(screen.getByTestId('b-action'))).toBe(false)
   })
 
   it.each(['info', 'visibility'] as const)('%s: an offer in the world, so its action is lit', async (kind) => {
@@ -91,7 +91,7 @@ describe('<Banner>', () => {
         <Banner kind={kind} text="Push is off." action={{ label: 'Turn on', onPress: jest.fn() }} testID="b" />
       </HueProvider>
     )
-    expect(flat('b-action').backgroundColor).toBe(COLOR.selectionRoseFill)
+    expect(isLitControl(screen.getByTestId('b-action'))).toBe(true)
   })
 
   it('a banner without an action draws no button', async () => {
@@ -122,7 +122,7 @@ describe('<Banner>', () => {
 describe('<VisibilityBanner>', () => {
   it.each([
     ['named', 'You’re in this room as Sam, with your photo. People here can see you.', 'Go anonymous'],
-    ['anon', 'You’re in this room as Sam. Nobody here sees your name or photo.', 'Show who I am'],
+    ['anon', 'You’re in this room as Sam. Nobody here sees your name or photo.', 'Show who you are'],
     ['hidden', 'You’re not listed here. Show online status is off.', 'Turn it on'],
     ['blocked', 'You’re in this room as Sam. Add a photo to your profile first; that’s what other people would see.', 'Add a photo'],
   ] as const)('%s: its own sentence and action', async (state, sentence, action) => {

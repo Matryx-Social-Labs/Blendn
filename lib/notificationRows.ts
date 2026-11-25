@@ -1,7 +1,10 @@
 import type { NotificationVisualSpec, StackPerson } from '../components/ds/NotificationRow'
 import type { IconName } from '../components/ui/Icon'
+import type { CrewInvite } from './crews'
+import type { FriendRequest } from './friends'
 import type { NotificationItem, NotificationKind } from './notificationFormat'
-import { calendarDate, weekdayIn, WEEKDAYS } from './time'
+import { personFace } from './personFace'
+import { calendarDate, calendarDaysBetween, dayKeyIn, eventClock, weekdayIn, WEEKDAYS } from './time'
 
 /**
  * What a notification becomes on the Notifications screen (Flow 9 · 9.2, 9.3).
@@ -15,8 +18,8 @@ import { calendarDate, weekdayIn, WEEKDAYS } from './time'
  * row with no `display` draws a glyph tile or the event tile, never a wrong face.
  */
 
-/** Accept and Join are `lit` (with their glyph); Decline and View are `secondary`. */
-export type RowAction = { key: 'accept' | 'decline' | 'join' | 'view'; label: string; kind: 'lit' | 'secondary'; icon?: IconName }
+/** Accept and Join are `lit` (with their glyph); Decline is `secondary`. */
+export type RowAction = { key: 'accept' | 'decline' | 'join'; label: string; kind: 'lit' | 'secondary'; icon?: IconName }
 
 export type FeedRow = {
   id: string
@@ -27,18 +30,23 @@ export type FeedRow = {
   actions: RowAction[]
   /** Still the reader's to answer: it sits in Waiting on you. */
   waiting: boolean
+  /** A talk-ask's history line: no pills, a chevron to where it is answered (Banter's Message requests, the chat). */
+  chevron: boolean
+  /** Repeats folded into this row (`foldRepeats`), newest first: its own id is the newest's. Absent on a row of one. */
+  folded?: readonly string[]
 }
 
 export type FeedGroups = { waiting: FeedRow[]; fresh: FeedRow[]; earlier: FeedRow[] }
 
-/** A request older than this has lapsed (a crew invite's 14 days, the longest); it reads as history, with no pills. */
-export const WAITING_DAYS = 14
 /** Waiting on you shows this many before "See all N". */
 export const WAITING_SHOWN = 3
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
-/** The kinds that ask the reader something. */
+/**
+ * The kinds that ask the reader something, answered in place in Waiting on you: the asks that join you to a person or a
+ * group (requests placement A, owner 2026-11-15). Every pill here answers.
+ */
 const REQUEST_ACTIONS: Partial<Record<NotificationKind, RowAction[]>> = {
   friend_request: [
     { key: 'accept', label: 'Accept', kind: 'lit', icon: 'user-check' },
@@ -48,12 +56,22 @@ const REQUEST_ACTIONS: Partial<Record<NotificationKind, RowAction[]>> = {
     { key: 'join', label: 'Join', kind: 'lit', icon: 'users' },
     { key: 'decline', label: 'Decline', kind: 'secondary' },
   ],
-  reveal_request: [{ key: 'view', label: 'View', kind: 'secondary' }],
-  board_request: [{ key: 'view', label: 'View', kind: 'secondary' }],
-  message_request: [{ key: 'view', label: 'View', kind: 'secondary' }],
 }
 
 export const isRequestKind = (kind: string): boolean => kind in REQUEST_ACTIONS
+
+/**
+ * The asks that open a chat: they live in Banter, where they are answered (its Message requests, the Lobby section, the reveal
+ * chip on the DM). Never in Waiting on you and never on the bell; in the history they are a plain line with a chevron, and
+ * their context says where they wait.
+ */
+const TALK_ASK_WHERE: Readonly<Record<string, string>> = {
+  message_request: 'Message requests',
+  board_request: 'The Lobby',
+  reveal_request: 'In your chat',
+}
+
+export const isTalkAskKind = (kind: string): boolean => kind in TALK_ASK_WHERE
 
 /** The glyph tile for a kind that is about somebody, or nobody by design. */
 export const GLYPH: Record<string, IconName> = {
@@ -64,6 +82,8 @@ export const GLYPH: Record<string, IconName> = {
   reveal: 'eye',
   board_request: 'hand-heart',
   board_request_accepted: 'circle-check',
+  board_match: 'users',
+  board_host_post: 'megaphone',
   message_request: 'message-circle',
   message_request_response: 'message-circle',
   crew_invite: 'users',
@@ -74,6 +94,8 @@ export const GLYPH: Record<string, IconName> = {
   group_message: 'message-circle',
   // A post of yours a moderator or the automatic check took down (C34): the moderation shield, never the generic bell.
   board_post_removed: 'shield',
+  // The outcome of a report you made (SYS-06): the same shield, not the generic bell.
+  report_actioned: 'shield',
 }
 
 const EVENT_BADGES = ['clock', 'map-pin', 'megaphone', 'star'] as const
@@ -93,17 +115,23 @@ const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'obj
 const text = (v: unknown): string | null => (typeof v === 'string' && v.trim() ? v.trim() : null)
 const MAX_STACK = 6
 
-/** Anything the server sends for a visual is checked here; a shape that is not exactly one of the six reads as absent. */
+/** Anything the server sends for a visual is checked here; a shape that is not exactly one of the seven reads as absent. */
 export function parseVisual(raw: unknown): NotificationVisualSpec | null {
   if (!isRecord(raw)) return null
   switch (raw.type) {
     case 'photo': {
+      // The name, when the server sends it, is drawn under the photo while it loads (SCRUM-1088).
       const uri = text(raw.uri)
-      return uri ? { type: 'photo', uri } : null
+      const name = text(raw.name)
+      return uri ? { type: 'photo', uri, ...(name && { name }) } : null
     }
     case 'creature': {
       const pseudonym = text(raw.pseudonym)
       return pseudonym ? { type: 'creature', pseudonym } : null
+    }
+    case 'initial': {
+      const name = text(raw.name)
+      return name ? { type: 'initial', name } : null
     }
     case 'emblem': {
       const seed = text(raw.seed)
@@ -177,10 +205,57 @@ function fallbackVisual(item: NotificationItem): NotificationVisualSpec {
   return { type: 'glyph', icon: GLYPH[item.kind] ?? 'bell' }
 }
 
+/** A move this many days or more names the dates: weekdays a week apart would read the same. */
+const WEEK_DAYS = 7
+
+/** The two ends of a time move as the row says them, in the event's zone (no zone named): the clock, and the day when it moved. */
+function timeMove(from: string | null, to: string, timeZone: string | undefined): [string, string | null] {
+  const at = new Date(to)
+  const was = from === null ? null : new Date(from)
+  const clock = (d: Date) => eventClock(d, timeZone)
+  if (!was || Number.isNaN(was.getTime())) return [clock(at), null]
+  const days = Math.abs(calendarDaysBetween(was, at, timeZone))
+  if (days === 0) return [clock(at), clock(was)]
+  const day = (d: Date) =>
+    days < WEEK_DAYS ? calendarDate(d, { weekday: 'only', timeZone }) : `${calendarDate(d, { year: false, timeZone })},`
+  return [`${day(at)} ${clock(at)}`, `${day(was)} ${clock(was)}`]
+}
+
+/**
+ * What an event change says (Flow 9 A, advisor 2026-11-21): the new value from the server's `{field, from, to}` (task 12):
+ * "New time: 9:30 PM, was 8 PM", the weekdays when it moved day ("Sat 9:30 PM, was Fri 8 PM"), the dates past a week; "New
+ * place: {to}", never "was" (two long names do not fit two lines). An older row has no `field`: the honest words for what moved
+ * (`changed`, the server's `time` / `venue`); null where neither is honest (cancelled, or nothing said), and the row keeps the
+ * push's own words.
+ */
+function changeTitle(data: NotificationItem['data']): string | null {
+  const to = text(data?.to)
+  if (data?.field === 'time') {
+    const at = to ? new Date(to) : null
+    if (!at || Number.isNaN(at.getTime())) return 'Time changed'
+    const [now, was] = timeMove(text(data.from), to!, text(data.timeZone) ?? undefined)
+    return was && was !== now ? `New time: ${now}, was ${was}` : `New time: ${now}`
+  }
+  if (data?.field === 'venue') return to ? `New place: ${to}` : 'Place changed'
+  const moved = new Set((data?.changed ?? '').split(',').map((f) => f.trim()).filter(Boolean))
+  if (!moved.size || [...moved].some((f) => f !== 'time' && f !== 'venue')) return null
+  return moved.size === 2 ? 'Time and place changed' : moved.has('time') ? 'Time changed' : 'Place changed'
+}
+
+/**
+ * A crewmate's "We're here" push says "Asha is in." (blendn-admin `crewInBody`); a plan's says "… wants to go together". Both
+ * are `crew_here`, and the server titles both as an arrival (SCRUM-1098): only an arrival takes its title.
+ */
+const isArrival = (item: NotificationItem) => item.kind === 'crew_here' && /\b(?:is|are) in\.(?:\s|$)/.test(item.body)
+
+/** No emoji in a title ("Message request accepted 🎉", research §0.7). */
+const withoutEmoji = (title: string) => title.replace(/\s*\p{Extended_Pictographic}[\p{Extended_Pictographic}\u{FE0F}\u{200D}]*\s*$/u, '')
+
 function fallbackCopy(item: NotificationItem, when: string): { title: string; context: string } {
   switch (item.kind) {
     case 'event_update':
     case 'event_changed':
+      return { title: changeTitle(item.data) ?? (item.body || item.title), context: joinLine(item.title, when) }
     case 'event_cancelled':
       return { title: item.body || item.title, context: joinLine(item.title, when) }
     case 'announcement':
@@ -190,13 +265,15 @@ function fallbackCopy(item: NotificationItem, when: string): { title: string; co
     case 'rating_request':
       return { title: `How was ${item.title}?`, context: when }
     default:
-      return { title: item.title, context: when }
+      return { title: withoutEmoji(item.title), context: when }
   }
 }
 
-/** Whether a request is still the reader's to answer. */
-const stillWaiting = (item: NotificationItem, now: number) =>
-  isRequestKind(item.kind) && item.open !== false && now - new Date(item.createdAt).getTime() < WAITING_DAYS * DAY_MS
+/**
+ * Whether a request is still the reader's to answer: the server's word (`open`), never its age. A friend request does not
+ * lapse, and a crew invite's lapse is the server's; aged out here at 14 days, Waiting on you said 8 where Friends said 14 (SCRUM-1062).
+ */
+const stillWaiting = (item: NotificationItem) => isRequestKind(item.kind) && item.open !== false
 
 /**
  * A friend request comes through your invite link (`app/f/[token]`) or, since SCRUM-750, from a match where you both
@@ -212,27 +289,41 @@ const FROM_YOUR_MATCH = 'From your match'
 const personOnlyContext = (item: NotificationItem, when: string) =>
   item.kind === 'friend_request' && item.data?.via === 'match' ? joinLine(FROM_YOUR_MATCH, when) : when
 
+function contextOf(item: NotificationItem, when: string, fallback: string): string {
+  if (PERSON_ONLY.has(item.kind)) return personOnlyContext(item, when)
+  const where = TALK_ASK_WHERE[item.kind]
+  return where ? joinLine(where, when) : (text(item.display?.context) ?? fallback)
+}
+
 /** One notification as a row: the server's `display` where it sent one, else the kind's own. */
 export function rowFor(item: NotificationItem, now: number = Date.now()): FeedRow {
   const when = notificationWhen(item.createdAt, now)
-  const waiting = stillWaiting(item, now)
+  const waiting = stillWaiting(item)
   const fallback = fallbackCopy(item, when)
   return {
     id: item.id,
     item,
     visual: parseVisual(item.display?.visual) ?? fallbackVisual(item),
-    title: text(item.display?.title) ?? fallback.title,
-    context: PERSON_ONLY.has(item.kind) ? personOnlyContext(item, when) : (text(item.display?.context) ?? fallback.context),
+    title: (item.kind !== 'crew_here' || isArrival(item) ? text(item.display?.title) : null) ?? fallback.title,
+    context: contextOf(item, when, fallback.context),
     actions: waiting ? (REQUEST_ACTIONS[item.kind] ?? []) : [],
     waiting,
+    chevron: isTalkAskKind(item.kind),
   }
 }
+
+/**
+ * A friend request or crew invite that is no longer open (accepted, joined, not now, declined, withdrawn: the server's
+ * `open: false`, or `closeAnsweredElsewhere`) has nothing left to say: its only words are the unanswered ask's (SCRUM-1036).
+ * It leaves the feed, as one answered here does once its outcome has shown.
+ */
+const answeredAsk = (item: NotificationItem) => (item.kind === 'friend_request' || item.kind === 'crew_invite') && item.open === false
 
 /**
  * Waiting on you · New · Earlier. A request still open is Waiting on you
  * whatever its age on the screen; the rest is New if it was unseen when the
  * screen opened (or landed since) and Earlier otherwise. `resolved` rows (an
- * answered request, once its outcome has shown) are not in any of them.
+ * answered request, once its outcome has shown) and answered friend requests are not in any of them.
  */
 export function groupFeed(
   items: readonly NotificationItem[],
@@ -240,13 +331,79 @@ export function groupFeed(
 ): FeedGroups {
   const groups: FeedGroups = { waiting: [], fresh: [], earlier: [] }
   for (const item of items) {
-    if (resolved.has(item.id)) continue
+    if (resolved.has(item.id) || answeredAsk(item)) continue
     const row = rowFor(item, now)
     if (row.waiting) groups.waiting.push(row)
     else if (fresh.has(item.id)) groups.fresh.push(row)
     else groups.earlier.push(row)
   }
-  return groups
+  // Two lists meet here (friend requests, crew invites), each newest first: so is the one they make.
+  const at = (r: FeedRow) => new Date(r.item.createdAt).getTime()
+  return {
+    waiting: [...groups.waiting].sort((a, b) => at(b) - at(a)),
+    fresh: foldRepeats(groups.fresh, now),
+    earlier: foldRepeats(groups.earlier, now),
+  }
+}
+
+/** A night runs until 6 AM: a wave at 2 AM is the night before's. */
+const NIGHT_ROLLOVER_MS = 6 * 60 * 60 * 1000
+const nightOf = (ms: number) => dayKeyIn(new Date(ms - NIGHT_ROLLOVER_MS))
+/** A folded wave row draws two faces and "+N" for the rest (board 01 A). */
+const FOLD_FACES = 2
+
+/**
+ * The repeats that fold into one row (research §8.3, Flow 9 A): waves per night, an event's reminders (the latest only). A
+ * crew's arrivals are one row a night on the server already (task 12). Null for a row that stands alone: requests, changes, everything else.
+ */
+function foldKey(item: NotificationItem): string | null {
+  const ms = new Date(item.createdAt).getTime()
+  if (item.kind === 'match') return `match:${nightOf(ms)}`
+  // A reminder is the event update with no `reason` and no `changed` (blendn-admin `notifyEventUpdate`).
+  if (item.kind === 'event_update' && item.data?.eventId && !item.data.reason && !item.data.changed) return `reminder:${item.data.eventId}`
+  return null
+}
+
+/** "Tonight · latest 5 min ago" for a fold of this night or the last; otherwise the latest's time alone. */
+function nightContext(latest: NotificationItem, now: number): string {
+  const when = notificationWhen(latest.createdAt, now)
+  const night = nightOf(new Date(latest.createdAt).getTime())
+  if (night === nightOf(now)) return `Tonight · latest ${when}`
+  if (night === nightOf(now - DAY_MS)) return `Last night · latest ${when}`
+  return when
+}
+
+/** The newest of a fold, saying how many it holds. A title the server wrote for the reader is never replaced. */
+function foldedRow(rows: readonly FeedRow[], now: number): FeedRow {
+  const [latest] = rows
+  const base = { ...latest, folded: rows.map((r) => r.id) }
+  if (text(latest.item.display?.title)) return base
+  if (latest.item.kind === 'match') {
+    const people = rows.flatMap((r): StackPerson[] => (r.visual.type === 'creature' ? [{ pseudonym: r.visual.pseudonym }] : r.visual.type === 'photo' ? [{ uri: r.visual.uri }] : []))
+    const shown = people.slice(0, FOLD_FACES)
+    return {
+      ...base,
+      title: `${rows.length} people waved back`,
+      context: nightContext(latest.item, now),
+      visual: shown.length ? { type: 'stack', people: shown, extra: rows.length - shown.length || undefined } : latest.visual,
+    }
+  }
+  return base
+}
+
+/** Repeats as one row each, in the place of the newest; rows are newest first, and so is what comes back. */
+export function foldRepeats(rows: readonly FeedRow[], now: number = Date.now()): FeedRow[] {
+  const byKey = new Map<string, FeedRow[]>()
+  for (const row of rows) {
+    const key = foldKey(row.item)
+    if (key) byKey.set(key, [...(byKey.get(key) ?? []), row])
+  }
+  return rows.flatMap((row) => {
+    const key = foldKey(row.item)
+    const fold = key ? byKey.get(key)! : null
+    if (!fold || fold.length < 2) return [row]
+    return fold[0] === row ? [foldedRow(fold, now)] : []
+  })
 }
 
 /** The payload ids that say which thing a notification is about. */
@@ -282,13 +439,89 @@ export function arrivedUnread(loaded: readonly NotificationItem[], page: readonl
 }
 
 /**
- * A friend request whose id is not among the ones still waiting on you (`incoming`) was answered somewhere else: its row
- * is history, not Waiting on you. `null` (the list did not load) closes nothing.
+ * The asks still waiting on you, as the one shared list for each kind has them (`useFriendRequestsState`, `useCrewInvites`):
+ * `open` is every id still waiting when the whole list is read, else null (one missing from a partial list may be on a later
+ * page); `left` is what was answered this session, wherever, and is closed whatever was read.
  */
-export function closeAnsweredElsewhere(items: readonly NotificationItem[], incoming: ReadonlySet<string> | null): NotificationItem[] {
-  if (!incoming) return [...items]
+export type OpenAsks = { open: ReadonlySet<string> | null; left: ReadonlySet<string> }
+const ASK_ID: Readonly<Record<string, 'requestId' | 'crewId'>> = { friend_request: 'requestId', crew_invite: 'crewId' }
+
+/** A friend request or crew invite answered somewhere else is history, not Waiting on you. */
+export function closeAnsweredElsewhere(
+  items: readonly NotificationItem[],
+  asks: { friend_request: OpenAsks; crew_invite: OpenAsks }
+): NotificationItem[] {
   return items.map((n) => {
-    const id = n.data?.requestId
-    return n.kind === 'friend_request' && typeof id === 'string' && !incoming.has(id) ? { ...n, open: false } : n
+    const key = ASK_ID[n.kind]
+    if (!key) return n
+    const id = n.data?.[key]
+    const { open, left } = asks[n.kind as keyof typeof asks]
+    if (typeof id !== 'string') return n
+    return left.has(id) || (open && !open.has(id)) ? { ...n, open: false } : n
   })
+}
+
+/** The ask a request row is about, whichever way it came (a notification, or the shared list): `friend_request:<id>`. */
+const askKeyOf = (n: NotificationItem): string | null => {
+  const key = ASK_ID[n.kind]
+  const id = key ? n.data?.[key] : undefined
+  return typeof id === 'string' ? `${n.kind}:${id}` : null
+}
+
+/**
+ * The asks waiting on you as rows, from the one shared list for each kind (SCRUM-1062): Waiting on you lists and counts what
+ * Friends and Crews do, not what the notification feed happens to hold (its first page, what Clear all and retention left). Each
+ * says what the server's `display` would: the person and their photo, the crew's name and emblem; a name the list lacks is the
+ * push's own words. Read already, so none is New.
+ */
+export function askItems(requests: readonly FriendRequest[], invites: readonly CrewInvite[]): NotificationItem[] {
+  const friendRows = requests.map((r): NotificationItem => {
+    const name = text(r.person?.name)
+    return {
+      id: `friend_request:${r.id}`,
+      kind: 'friend_request',
+      title: 'New friend request',
+      body: '',
+      data: { type: 'friend_request', requestId: r.id },
+      readAt: r.createdAt,
+      createdAt: r.createdAt,
+      display: name ? { title: `${name} wants to be friends`, visual: faceVisual(name, r.person?.photo) } : {},
+      open: true,
+    }
+  })
+  const crewRows = invites.map(
+    (i): NotificationItem => ({
+      id: `crew_invite:${i.crewId}`,
+      kind: 'crew_invite',
+      title: 'You’re invited to a crew',
+      body: '',
+      data: { type: 'crew_invite', crewId: i.crewId },
+      readAt: i.invitedAt,
+      createdAt: i.invitedAt,
+      display: { ...(text(i.name) && { context: i.name }), ...(text(i.emblemSeed) && { visual: { type: 'emblem', seed: i.emblemSeed } }) },
+      open: true,
+    })
+  )
+  return [...friendRows, ...crewRows]
+}
+
+/** A named person as `personFace` draws them: their photo, else their initial (Flow 5 C5, #570). */
+function faceVisual(name: string, photo: string | null | undefined): NotificationVisualSpec {
+  const face = personFace({ named: true, name, photo })
+  return face.kind === 'photo' ? { type: 'photo', uri: face.uri, name } : { type: 'initial', name }
+}
+
+/**
+ * The feed with the asks it has no row for, each once: a notification for the same ask is kept as the server wrote it (its id is
+ * what a push lands on; its `display` names the whole person and their face, task 12).
+ */
+export function withAsks(items: readonly NotificationItem[], asks: readonly NotificationItem[]): NotificationItem[] {
+  const seen = new Set(items.map(askKeyOf).filter((k): k is string => k !== null))
+  const added = asks.filter((a) => {
+    const key = askKeyOf(a)
+    if (key === null || seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+  return [...items, ...added]
 }

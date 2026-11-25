@@ -1,5 +1,6 @@
 import { apiClient, type ApiResponse } from './apiClient'
-import { calendarDate, clockTime, weekdayIn, WEEKDAYS_LONG } from './time'
+import { dayWord } from './pulse'
+import { calendarDate, calendarDaysBetween, clockTime, eventClock, unbroken } from './time'
 
 /*
  * Offers from the places you keep going back to, and the door pass (step 12;
@@ -18,7 +19,11 @@ export type OfferState = 'live' | 'redeemed' | 'used_tonight' | 'ended'
 
 export type Offer = {
   id: string
-  venue: { id: string; name: string }
+  /**
+   * `venueType`: the venue_type key ("pub_bar"), for the pass's tile; null when the venue has none, absent from an older server.
+   * `timezone`: the venue's IANA zone, for the pass's day and clock; absent from an older server (the phone's then).
+   */
+  venue: { id: string; name: string; venueType?: string | null; timezone?: string | null }
   text: string
   sentAt: string
   endsAt: string
@@ -80,20 +85,35 @@ export const offersApi = {
     return apiClient.queuedRequest(`/api/mobile/offers/${enc(offerId)}/report`, { method: 'POST', body: JSON.stringify(body) }, true, 2)
   },
 
-  /** "Offers from places": one switch for every place. */
-  offersFromPlaces(): Promise<ApiResponse<{ enabled: boolean }>> {
+  /** "Offers from places": one switch for every place. `pushes` is the server's record of a yes to offer notifications. */
+  offersFromPlaces(): Promise<ApiResponse<{ enabled: boolean; pushes?: boolean }>> {
     return apiClient.queuedRequest('/api/mobile/me/offers')
   },
 
-  setOffersFromPlaces(enabled: boolean): Promise<ApiResponse<{ enabled: boolean }>> {
-    return apiClient.queuedRequest('/api/mobile/me/offers', { method: 'PUT', body: JSON.stringify({ enabled }) }, true, 2)
+  /**
+   * On is two yeses, off is two nos: the audience, and the notification (a venue's offer is a promotion, and App Store 4.5.4
+   * allows its push only after a yes given in the app, SCRUM-628). The switch's words ask for the notification.
+   */
+  setOffersFromPlaces(on: boolean): Promise<ApiResponse<{ enabled: boolean; pushes?: boolean }>> {
+    return apiClient.queuedRequest('/api/mobile/me/offers', { method: 'PUT', body: JSON.stringify({ enabled: on, pushes: on }) }, true, 2)
   },
 }
+
+/**
+ * What a yes shows the people who run a place, in the app's words -- one source for the venue page and the offer pass.
+ * A host sees "A regular · N nights" and never who (SCRUM-887: hosts meet people by pseudonym only), so no line here
+ * may promise a name.
+ */
+export const REGULAR_COPY = {
+  sees: 'that a regular was here, and how many nights in the last 30 days',
+  wontSee: 'who you are, your chats, who you met, or anywhere else you go',
+  why: 'so the staff know when a regular is in',
+} as const
 
 /** Who sees a yes, in the app's words: the organisation, and the place it runs. */
 export function knownLine(prefs: Pick<RegularPrefs, 'ownerName'>, venueName: string): string {
   const who = prefs.ownerName ? `${prefs.ownerName}, who runs ${venueName} on Blendn,` : venueName
-  return `${who} will see your first name and how many nights you’ve come in the last 30 — nothing else.`
+  return `${who} will see ${REGULAR_COPY.sees}.`
 }
 
 /** The code on the pass is shown only while it is fresh: two seconds past its turn with no new one, it is hidden (L2). */
@@ -113,7 +133,7 @@ export function offerStateLine(state: OfferState, venueName: string): string | n
     case 'redeemed':
       return 'Redeemed. Enjoy it.'
     case 'used_tonight':
-      return `You’ve used a pass at ${venueName} tonight — one a night. This one works another night.`
+      return `You’ve used an offer at ${venueName} tonight — one a night. This one works another night.`
     case 'ended':
       return 'This offer has ended.'
   }
@@ -148,8 +168,8 @@ export const OFFER_REPORT_REASONS: readonly { value: OfferReportReason; label: s
 /** How full the disc is while the pass is live (Flow 13 pass.js: 0.62); a spent one is full, an ended one empty. */
 export const LIVE_LEVEL = 0.62
 
-export const LIVE_FOOT = 'Show this at the door. Staff type the code and tap Redeemed.'
-export const OFFLINE_FOOT = 'This pass needs a connection to show its code.'
+export const LIVE_FOOT = 'Works once, today. Staff type the code and tap Redeemed.'
+export const OFFLINE_FOOT = 'This offer code needs a connection to show.'
 export const FRESH_CODE_FOOT = 'Getting a fresh code…'
 
 /** Which face the door code wears: `offline` is "no fresh code to show", whatever the reason. */
@@ -218,8 +238,27 @@ export function passView(
   }
 }
 
-/** "ENDED SUNDAY": the day the offer ran out, for an ended pass. */
-export const endedLabel = (endsAt: string) => `ENDED ${WEEKDAYS_LONG[weekdayIn(new Date(endsAt))]?.toUpperCase() ?? ''}`.trim()
-
 /** "until Wed 15 Oct": how long the offer runs (the pass itself is for today). */
-export const validUntil = (endsAt: string) => `until ${calendarDate(endsAt, { weekday: true })}`
+export const validUntil = (endsAt: string, timeZone?: string | null) => `until ${calendarDate(endsAt, { weekday: true, timeZone: timeZone ?? undefined })}`
+
+/** The pass's validity in its own slot (Flow 4 polish): "Valid today, till 11 PM" when it ends today, else its day. The venue's day and clock. */
+export function validityLine(endsAt: string, now: number = Date.now(), timeZone?: string | null): string {
+  const zone = timeZone ?? undefined
+  return calendarDaysBetween(new Date(now), new Date(endsAt), zone) === 0 ? `Valid today, till ${eventClock(endsAt, zone)}` : `Valid ${validUntil(endsAt, zone)}`
+}
+
+/**
+ * The same slot once the offer has ended (Flow 4 audit B-1): "Ended today at 9:52 AM" ("tonight" from 5 PM, the one
+ * grammar's `dayWord`), "Ended yesterday at 9:52 AM", else "Ended Sun 8 Nov". The venue's day and clock, no zone named.
+ * Null for an offer that ended before its end (its venue retired or changed hands): no time is known, so none is said.
+ */
+export function endedLine(endsAt: string, now: number = Date.now(), timeZone?: string | null): string | null {
+  const end = new Date(endsAt)
+  if (Number.isNaN(end.getTime()) || end.getTime() > now) return null
+  const zone = timeZone ?? undefined
+  const at = unbroken(eventClock(end, zone))
+  const word = dayWord(end, new Date(now), zone)
+  if (word) return `Ended ${word.toLowerCase()} at ${at}`
+  if (calendarDaysBetween(new Date(now), end, zone) === -1) return `Ended yesterday at ${at}`
+  return `Ended ${calendarDate(end, { weekday: true, now, timeZone: zone })}`
+}

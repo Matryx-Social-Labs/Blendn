@@ -9,6 +9,8 @@ const mockEnded: Array<(d: { eventId: string; reason: string }) => void> = []
 const mockChanged = new Set<() => void>()
 const mockBanned: Array<(d: { userId: string; banned: boolean }) => void> = []
 const mockRejoin = jest.fn()
+/** The room's message listeners: a test speaks as the socket. */
+const mockMessage: ((d: { message: Record<string, unknown> }) => void)[] = []
 let mockParams: Record<string, string> = { id: 'g1' }
 
 jest.mock('@react-native-async-storage/async-storage', () =>
@@ -36,7 +38,9 @@ jest.mock('../lib/useAuth', () => ({ useAuth: () => mockAuth }))
 jest.mock('../lib/apiClient', () => ({
   apiClient: {
     getChatMessages: jest.fn(),
-    getChatGroups: jest.fn(),
+    getChatGroups: jest.fn(), getRoomPreview: jest.fn(async () => ({ success: false })),
+    getBoardSummary: jest.fn(async () => ({ success: true, data: { hasContent: false } })),
+    getEventChat: jest.fn(),
     sendChatMessage: jest.fn(),
     reactToChatMessage: jest.fn(),
     rejoinChatGroup: jest.fn(),
@@ -58,7 +62,10 @@ jest.mock('../lib/socketClient', () => {
       mockEnded.push(cb)
       return () => {}
     },
-    subscribeToChatMessage: noop,
+    subscribeToChatMessage: (_room: string, cb: never) => {
+      mockMessage.push(cb)
+      return () => {}
+    },
     subscribeToChatTyping: noop,
     subscribeToChatReaction: noop,
     subscribeToChatMessageDeleted: noop,
@@ -85,6 +92,9 @@ jest.mock('../components/RealtimeStatusBanner', () => ({ __esModule: true, defau
 jest.mock('../components/chat/RoomGuidelinesBanner', () => ({ RoomGuidelinesBanner: () => null }))
 jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: jest.fn() }) }))
 jest.mock('../lib/notifications', () => ({ useActiveThread: jest.fn() }))
+/* Every jump to the newest goes through here: a reader's offset moves only if this is called. */
+const mockToEnd = jest.fn()
+jest.mock('../lib/useFollowEnd', () => ({ ...jest.requireActual('../lib/useFollowEnd'), scrollListToEnd: (...a: unknown[]) => mockToEnd(...a) }))
 
 /* eslint-disable import/first */
 import { router } from 'expo-router'
@@ -99,7 +109,8 @@ const HOUR = 60 * 60 * 1000
 const eventRow = (over: Record<string, unknown> = {}, event: Record<string, unknown> = {}) => ({
   id: 'g1',
   memberCount: 18,
-  event: { id: 'e1', kind: 'event', title: 'Neon Nights', startTime: new Date(Date.now() + 27 * HOUR + 20 * 60 * 1000).toISOString(), ...event },
+  event: { id: 'e1', kind: 'event', title: 'Neon Nights', startTime: new Date(Date.now() + 4 * HOUR + 50 * 60 * 1000).toISOString(), ...event },
+  // Doors, and the room, at start − 90 min: 3 h 20 m from now.
   ...over,
 })
 
@@ -111,6 +122,7 @@ const flush = async () => {
 
 beforeEach(() => {
   mockEnded.length = 0
+  mockMessage.length = 0
   mockBanned.length = 0
   mockChanged.clear()
   mockParams = { id: 'g1' }
@@ -137,7 +149,7 @@ describe('the pre-event room (C1, Flow 15 #8)', () => {
   it('is an ordinary room once it is open: the live count, the field', async () => {
     ;(apiClient.getChatGroups as jest.Mock).mockResolvedValue({
       success: true,
-      data: { groups: [eventRow({}, { startTime: new Date(Date.now() + 2 * HOUR).toISOString() })] },
+      data: { groups: [eventRow({}, { startTime: new Date(Date.now() + HOUR).toISOString() })] },
     })
     await render(<GroupChat />)
     await flush()
@@ -177,7 +189,7 @@ describe('a warning before contact details (C2, 5.10)', () => {
   beforeEach(() => {
     ;(apiClient.getChatGroups as jest.Mock).mockResolvedValue({
       success: true,
-      data: { groups: [eventRow({}, { startTime: new Date(Date.now() + 2 * HOUR).toISOString() })] },
+      data: { groups: [eventRow({}, { startTime: new Date(Date.now() + HOUR).toISOString() })] },
     })
   })
 
@@ -213,7 +225,7 @@ describe('a warning before contact details (C2, 5.10)', () => {
   })
 })
 
-describe('closed and removed rooms of a crew or a Blend (C3, C4)', () => {
+describe('closed and removed rooms of a crew or a Mix (C3, C4)', () => {
   const crewRow = { rooms: [{ id: 'g1', name: 'Nebula', kind: 'crew', crewId: 'c1' }], groups: [] }
   beforeEach(() => {
     mockParams = { id: 'g1', kind: 'crew', crewId: 'c1' }
@@ -229,12 +241,12 @@ describe('closed and removed rooms of a crew or a Blend (C3, C4)', () => {
     expect(screen.queryByLabelText('Message')).toBeNull()
   })
 
-  it('a closed Blend is the "This Blend closed" card', async () => {
+  it('a closed Mix is the "This Mix closed" card', async () => {
     mockParams = { id: 'g1', kind: 'blend', blendId: 'b1' }
     ;(apiClient.getChatMessages as jest.Mock).mockResolvedValue(refuse('CHAT_CLOSED'))
     await render(<GroupChat />)
     await flush()
-    expect(screen.getByText('This Blend closed')).toBeTruthy()
+    expect(screen.getByText('This Mix closed')).toBeTruthy()
   })
 
   it('being removed from a crew’s chat is its own line, not the card', async () => {
@@ -260,6 +272,22 @@ describe('closed and removed rooms of a crew or a Blend (C3, C4)', () => {
     await flush()
     await act(async () => mockBanned.forEach((f) => f({ userId: 'u1', banned: true })))
     expect(screen.getByText('You were removed from this room')).toBeTruthy()
+  })
+
+  it('an unban brings the room back without reopening it (SCRUM-949)', async () => {
+    mockParams = { id: 'g1' }
+    ;(apiClient.getChatGroups as jest.Mock).mockResolvedValue({ success: true, data: { groups: [eventRow({}, { startTime: new Date(Date.now() + HOUR).toISOString() })] } })
+    await render(<GroupChat />)
+    await flush()
+    await act(async () => mockBanned.forEach((f) => f({ userId: 'u1', banned: true })))
+    expect(screen.getByText('You were removed from this room')).toBeTruthy()
+    ;(apiClient.getChatMessages as jest.Mock).mockClear()
+
+    await act(async () => mockBanned.forEach((f) => f({ userId: 'u1', banned: false })))
+    await flush()
+
+    expect(apiClient.getChatMessages).toHaveBeenCalled()
+    expect(screen.queryByText('You were removed from this room')).toBeNull()
   })
 
   it('a crew room you are not in does not tell you to check in at an event', async () => {
@@ -309,7 +337,7 @@ describe('every live:ended reason has its own calm state (C6, 11.5)', () => {
 
   it('switching to another place goes back, with no way to "go live again" here', async () => {
     await ended('switched_event')
-    expect(screen.getByText('You went live somewhere else')).toBeTruthy()
+    expect(screen.getByText('You checked in somewhere else')).toBeTruthy()
     expect(screen.queryByLabelText('Go live again')).toBeNull()
     await act(async () => fireEvent.press(screen.getByLabelText('Back to Banter')))
     expect(router.back).toHaveBeenCalled()
@@ -369,5 +397,250 @@ describe('polls in the feed are read only once seen (M6)', () => {
     await flush()
     expect(queued).toHaveBeenCalledWith('/api/mobile/events/e1/polls/p1')
     jest.restoreAllMocks()
+  })
+})
+
+describe('a room opens already muted, locked or closed (ROOM-05)', () => {
+  const open = { startTime: new Date(Date.now() - HOUR).toISOString() }
+  const door = (data: Record<string, unknown>) => ({ success: true, data: { chatGroupId: 'g1', status: 'active', ...data } })
+  beforeEach(() => {
+    ;(apiClient.getChatGroups as jest.Mock).mockResolvedValue({ success: true, data: { groups: [eventRow({}, open)] } })
+  })
+
+  it('muted: read-only before anybody types, with the server\'s sentence', async () => {
+    ;(apiClient.getEventChat as jest.Mock).mockResolvedValue(door({ write: { allowed: false, reason: 'muted', message: null } }))
+    await render(<GroupChat />)
+    await flush()
+    expect(screen.getByText('Muted')).toBeTruthy()
+    expect(screen.queryByLabelText('Message')).toBeNull()
+  })
+
+  it('a `locked` status (nothing writes it, SCRUM-893) opens as a closed room, never "locked by the organizer"', async () => {
+    ;(apiClient.getEventChat as jest.Mock).mockResolvedValue(door({ status: 'locked', write: { allowed: false, reason: 'muted', message: null } }))
+    await render(<GroupChat />)
+    await flush()
+    expect(screen.getByText('This chat has closed')).toBeTruthy()
+    expect(screen.queryByText('Read only')).toBeNull()
+  })
+
+  it('window closed: the closed state in the server\'s words', async () => {
+    ;(apiClient.getEventChat as jest.Mock).mockResolvedValue(door({ write: { allowed: false, reason: 'window_closed', message: 'This chat has closed. Event chats stay open for 24 hours after the event ends.' } }))
+    await render(<GroupChat />)
+    await flush()
+    expect(screen.getByText('This chat has closed')).toBeTruthy()
+  })
+
+  it('allowed: a live composer', async () => {
+    ;(apiClient.getEventChat as jest.Mock).mockResolvedValue(door({ write: { allowed: true, reason: null, message: null } }))
+    await render(<GroupChat />)
+    await flush()
+    expect(screen.getByLabelText('Message')).toBeTruthy()
+  })
+
+  it('a door that cannot be read leaves the composer as it was', async () => {
+    ;(apiClient.getEventChat as jest.Mock).mockRejectedValue(new Error('offline'))
+    await render(<GroupChat />)
+    await flush()
+    expect(screen.getByLabelText('Message')).toBeTruthy()
+  })
+})
+
+describe('a room that is not on the Banter’s first page opens read-only too (ROOM-05, H1)', () => {
+  const MUTED = { allowed: false, reason: 'muted', message: null }
+  const served = (extra: Record<string, unknown>) => ({ success: true, data: { messages: [], pagination: { hasMore: false, nextCursor: null }, ...extra } })
+  beforeEach(() => {
+    // Opened from a push or a link: the Banter's list does not hold it.
+    ;(apiClient.getChatGroups as jest.Mock).mockResolvedValue({ success: true, data: { groups: [] } })
+    ;(apiClient.getEventChat as jest.Mock).mockReset()
+  })
+
+  it('new server: the messages read carries write + status, so Muted shows before typing and no second read is made', async () => {
+    mockParams = { id: 'g1', eventId: 'e1' }
+    ;(apiClient.getChatMessages as jest.Mock).mockResolvedValue(served({ status: 'active', write: MUTED }))
+    await render(<GroupChat />)
+    await flush()
+    expect(screen.getByText('Muted')).toBeTruthy()
+    expect(screen.queryByLabelText('Message')).toBeNull()
+    expect(apiClient.getEventChat).not.toHaveBeenCalled()
+  })
+
+  it('new server: the room’s own status closes it, whatever the viewer’s reason', async () => {
+    mockParams = { id: 'g1', eventId: 'e1' }
+    ;(apiClient.getChatMessages as jest.Mock).mockResolvedValue(served({ status: 'locked', write: { allowed: false, reason: 'muted', message: null } }))
+    await render(<GroupChat />)
+    await flush()
+    expect(screen.getByText('This chat has closed')).toBeTruthy()
+  })
+
+  it('old server (no write in the messages): falls back to the event’s door, asked with limit 1 from the opener’s event id', async () => {
+    mockParams = { id: 'g1', eventId: 'e1' }
+    ;(apiClient.getChatMessages as jest.Mock).mockResolvedValue(served({}))
+    ;(apiClient.getEventChat as jest.Mock).mockResolvedValue({ success: true, data: { chatGroupId: 'g1', status: 'active', write: MUTED } })
+    await render(<GroupChat />)
+    await flush()
+    expect(apiClient.getEventChat).toHaveBeenCalledWith('e1', { limit: 1 })
+    expect(screen.getByText('Muted')).toBeTruthy()
+    expect(screen.queryByLabelText('Message')).toBeNull()
+  })
+
+  it('old server, the door read fails: the room stays as it was, and the failure is logged', async () => {
+    mockParams = { id: 'g1', eventId: 'e1' }
+    ;(apiClient.getChatMessages as jest.Mock).mockResolvedValue(served({}))
+    ;(apiClient.getEventChat as jest.Mock).mockRejectedValue(new Error('offline'))
+    const { Logger } = require('../lib/logger') as { Logger: { warn: jest.Mock } }
+    await render(<GroupChat />)
+    await flush()
+    expect(screen.getByLabelText('Message')).toBeTruthy()
+    expect(Logger.warn).toHaveBeenCalledWith('chat', expect.stringContaining('lock'), expect.anything())
+  })
+
+})
+
+describe('From the Lobby in the room (SCRUM-1026, H-A)', () => {
+  const PIN = { id: 'h1', body: 'Music starts at 6.', host: 'Nightshift', createdAt: '2026-11-06T06:00:00Z', updatedAt: '2026-11-06T06:00:00Z' }
+  const openRoom = () =>
+    (apiClient.getChatGroups as jest.Mock).mockResolvedValue({ success: true, data: { groups: [eventRow({}, { startTime: new Date(Date.now() + HOUR).toISOString() })] } })
+  const withNote = () =>
+    (apiClient.getBoardSummary as jest.Mock).mockResolvedValue({ success: true, data: { state: 'read_only', phase: 'live', readUntil: new Date().toISOString(), hasContent: true, pinned: PIN, joined: [] } })
+
+  it('sits above the stream of an open event room, and folds when you drag the room', async () => {
+    openRoom()
+    withNote()
+    await render(<GroupChat />)
+    await flush()
+    expect(apiClient.getBoardSummary).toHaveBeenCalledWith('e1')
+    expect(screen.getByTestId('from-lobby-row-host')).toBeTruthy()
+    // Folded: the line is what a screen reader reaches, the card is not.
+    expect(screen.queryByLabelText('From the Lobby: From the host')).toBeNull()
+    await fireEvent(screen.getByTestId('room-feed'), 'scrollBeginDrag')
+    expect(screen.getByLabelText('From the Lobby: From the host')).toBeTruthy()
+    await fireEvent.press(screen.getByTestId('from-lobby-bar'))
+    expect(screen.queryByLabelText('From the Lobby: From the host')).toBeNull()
+  })
+
+  it('reads the event from the room the server lists, never from a link’s eventId', async () => {
+    withNote()
+    // A room the server does not list as an event's, opened by a link naming some other event.
+    mockParams = { id: 'g9', eventId: 'e-other' }
+    ;(apiClient.getChatGroups as jest.Mock).mockResolvedValue({ success: true, data: { groups: [] } })
+    await render(<GroupChat />)
+    await flush()
+    expect(screen.queryByTestId('from-lobby')).toBeNull()
+    expect(apiClient.getBoardSummary).not.toHaveBeenCalledWith('e-other')
+  })
+
+  it('is not there while the room counts down to its doors, nor in a crew’s room', async () => {
+    withNote()
+    await render(<GroupChat />)
+    await flush()
+    expect(screen.getByText('Not open yet')).toBeTruthy()
+    expect(screen.queryByTestId('from-lobby')).toBeNull()
+    mockParams = { id: 'g1', kind: 'crew', crewId: 'c1' }
+    openRoom()
+    await render(<GroupChat />)
+    await flush()
+    expect(screen.queryByTestId('from-lobby')).toBeNull()
+    expect(apiClient.getBoardSummary).not.toHaveBeenCalled()
+  })
+})
+
+describe('arrivals while you read back (Flow 5 F-A, "48 new messages")', () => {
+  const open = () => eventRow({}, { startTime: new Date(Date.now() - HOUR).toISOString() })
+  const history = {
+    success: true,
+    data: {
+      messages: [{ id: 'm0', content: 'Doors are open.', user_id: 'u2', user: { name: 'Night Owl' }, type: 'text', created_at: new Date().toISOString() }],
+      pagination: { hasMore: false, nextCursor: null },
+    },
+  }
+  const at = (y: number) => ({ nativeEvent: { contentSize: { height: 2000 }, contentOffset: { y }, layoutMeasurement: { height: 600 } } })
+  /* A reader's drag from the end: its first events are still within reach of the end (driven 2026-11-10). */
+  const scrollTo = async (y: number) => {
+    const list = screen.getByTestId('room-feed')
+    await fireEvent(list, 'scrollBeginDrag', at(1400))
+    await fireEvent.scroll(list, at(1380))
+    await fireEvent.scroll(list, at(y))
+    await fireEvent(list, 'scrollEndDrag', at(y))
+    await fireEvent(list, 'momentumScrollEnd', at(y))
+  }
+  const arrive = async (id: string) =>
+    act(async () => {
+      for (const cb of mockMessage) cb({ message: { id, userId: 'u3', userName: 'Lunar Fox', content: `hello ${id}`, type: 'text', createdAt: new Date().toISOString() } })
+      // The list lays the new row out: its content grows.
+      fireEvent(screen.getByTestId('room-feed'), 'contentSizeChange', 393, 2100)
+      await new Promise((r) => setTimeout(r, 120))
+    })
+
+  beforeEach(() => {
+    ;(apiClient.getChatGroups as jest.Mock).mockResolvedValue({ success: true, data: { groups: [open()] } })
+    ;(apiClient.getChatMessages as jest.Mock).mockResolvedValue(history)
+  })
+
+  it('read back: the pill counts them, says "new messages", and the list never moves', async () => {
+    await render(<GroupChat />)
+    await flush()
+    await scrollTo(0)
+    mockToEnd.mockClear()
+    await arrive('m1')
+    await arrive('m2')
+    expect(screen.getByRole('button', { name: '2 new messages, jump to the newest' })).toBeTruthy()
+    expect(screen.getByText(/^2 new messages$/)).toBeTruthy()
+    expect(mockToEnd).not.toHaveBeenCalled()
+    // The pill is the one way down: a tap goes to the newest and clears the count.
+    await fireEvent.press(screen.getByTestId('chat-newest'))
+    expect(mockToEnd).toHaveBeenCalled()
+  })
+
+  it('one is "1 new message"', async () => {
+    await render(<GroupChat />)
+    await flush()
+    await scrollTo(0)
+    await arrive('m1')
+    expect(screen.getByRole('button', { name: '1 new message, jump to the newest' })).toBeTruthy()
+  })
+
+  // Driven 2026-11-11, Android: after the pill's jump the reader was at the newest, yet the arrow stayed and the next
+  // arrival raised "1 new message". The jump is an animated scroll with momentum events, and its last onScroll (the
+  // one at the end) can be throttled away: where it came to rest is in its momentum end.
+  it('after the pill, where the jump came to rest is the end: the arrow goes and an arrival follows', async () => {
+    await render(<GroupChat />)
+    await flush()
+    await scrollTo(0)
+    await arrive('m1')
+    await fireEvent.press(screen.getByTestId('chat-newest'))
+    const list = screen.getByTestId('room-feed')
+    await fireEvent(list, 'momentumScrollBegin', at(0))
+    await fireEvent.scroll(list, at(900))
+    await fireEvent(list, 'momentumScrollEnd', at(1400))
+    expect(screen.queryByTestId('chat-newest')).toBeNull()
+    mockToEnd.mockClear()
+    await arrive('m2')
+    expect(mockToEnd).toHaveBeenCalled()
+    expect(screen.queryByRole('button', { name: /new message/ })).toBeNull()
+  })
+
+  // Control: a reader who drags up again during the jump is reading back again.
+  it('a drag during the jump ends it: the next arrival raises the pill', async () => {
+    await render(<GroupChat />)
+    await flush()
+    await scrollTo(0)
+    await arrive('m1')
+    await fireEvent.press(screen.getByTestId('chat-newest'))
+    await scrollTo(300)
+    mockToEnd.mockClear()
+    await arrive('m2')
+    expect(mockToEnd).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: '1 new message, jump to the newest' })).toBeTruthy()
+  })
+
+  // Control: at the bottom the same arrival follows the end and raises no count.
+  it('at the bottom: the feed follows the arrival, and no count is raised', async () => {
+    await render(<GroupChat />)
+    await flush()
+    await scrollTo(1400)
+    mockToEnd.mockClear()
+    await arrive('m1')
+    expect(mockToEnd).toHaveBeenCalled()
+    expect(screen.queryByRole('button', { name: /new message/ })).toBeNull()
   })
 })

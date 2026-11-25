@@ -4,58 +4,21 @@ import { apiClient } from './apiClient'
 import type { FriendHere } from './friendsHere'
 import { Logger } from './logger'
 
-/** The server pages by name in 50s (plans/friends-in-room.md 4.3 / 9.1): never the full list. */
-export const FRIENDS_PAGE = 50
+/** Pages of 20 behind "Show 20 more" (Flow 5 C6, I-A); the server allows up to 50 (plans/friends-in-room.md 4.3). */
+export const FRIENDS_PAGE = 20
+/** Search comes first only above this many: 20 friends are all on the first page. */
+export const SEARCH_ABOVE = 20
 /** Typing waits this long before it asks (a search per keystroke is a request per keystroke). */
 export const SEARCH_DEBOUNCE_MS = 250
 /** The server filters on 1 to 40 characters. */
 export const SEARCH_MAX = 40
-/** Fixed heights, so `getItemLayout` is exact and a fast scroll never shows a blank cell. */
-export const LETTER_HEIGHT = 32
+/** A fixed row height, so `getItemLayout` is exact and a fast scroll never shows a blank cell. */
 export const FRIEND_ROW_HEIGHT = 64
-
-export type FriendsListItem = { kind: 'letter'; key: string; letter: string } | { kind: 'friend'; key: string; friend: FriendHere }
-
-/** A..Z under their own letter, a non-Latin initial under its own, digits, symbols and emoji under "#". */
-export function letterOf(name: string): string {
-  const first = Array.from(name.trim())[0] ?? ''
-  return /^\p{L}$/u.test(first) ? first.toLocaleUpperCase() : '#'
-}
-
-/**
- * The page as rows with a letter before each run of one initial. The server's order is by
- * lower-cased name, so a letter can only come round again if its collation disagrees with the
- * letters here; that draws a second header, never a wrong row. ponytail: no client re-sort.
- */
-export function withLetters(friends: readonly FriendHere[]): FriendsListItem[] {
-  const out: FriendsListItem[] = []
-  let current = ''
-  for (const friend of friends) {
-    const letter = letterOf(friend.name)
-    if (letter !== current) {
-      current = letter
-      out.push({ kind: 'letter', key: `letter-${out.length}-${letter}`, letter })
-    }
-    out.push({ kind: 'friend', key: friend.userId, friend })
-  }
-  return out
-}
-
-/** `getItemLayout` for the rows above: headers 32, friends 64, and each offset is the sum before it. */
-export function layoutOf(items: readonly FriendsListItem[]): { length: number; offset: number; index: number }[] {
-  let offset = 0
-  return items.map((item, index) => {
-    const length = item.kind === 'letter' ? LETTER_HEIGHT : FRIEND_ROW_HEIGHT
-    const at = { length, offset, index }
-    offset += length
-    return at
-  })
-}
 
 export type FriendsListStatus = 'loading' | 'ready' | 'error'
 
 /**
- * See all (C2): the friends here, A to Z, searched and paged by cursor, 50 at a time.
+ * See all (C2): the friends here, A to Z, searched and paged by cursor, 20 at a time (C6).
  * A new search is a new list; an older answer never lands on a newer one. The count
  * in the title is the unfiltered total, so typing does not make friends vanish from it.
  */

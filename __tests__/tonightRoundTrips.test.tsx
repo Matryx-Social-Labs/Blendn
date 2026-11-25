@@ -22,6 +22,12 @@ jest.mock('expo-location', () => ({
 }))
 jest.mock('../lib/cityStorage', () => ({ readStoredCity: async () => ({ city: 'Bengaluru', source: 'chosen' }) }))
 jest.mock('../lib/checkIn', () => ({ subscribeCheckInChanged: () => () => {} }))
+// The centre button's signal, as the Pulse published it: `todayEventIds` are the events it says are yours today.
+let mockSignal = { insideEventId: null, insideVenue: null, insideCount: 0, todayEventIds: [] as string[] }
+jest.mock('../lib/roomSignal', () => ({
+  getRoomSignal: () => mockSignal,
+  subscribeRoomSignal: () => () => {},
+}))
 jest.mock('../lib/useLiveSync', () => ({ useLiveSync: () => 'connected' }))
 jest.mock('../lib/logger', () => ({ Logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() } }))
 
@@ -67,5 +73,18 @@ it('a failed RSVP read only loses the sort', async () => {
 
   await waitFor(() => expect(hook.result.current.status).toBe('ready'))
   expect(hook.result.current.events.map((e) => e.id)).toEqual(['a'])
+  hook.unmount()
+})
+
+it('opens on the event the centre button points at, though it starts past the six-hour horizon (SCRUM-971)', async () => {
+  // Yours, today in its own zone, 23.5 h away: the disc says "Open tonight's event"; the deck must have it, in front.
+  mockSignal = { ...mockSignal, todayEventIds: ['late'] }
+  mockGetMyRsvps.mockResolvedValue({ data: { events: [] } })
+  mockGetEvents.mockResolvedValue({ data: [event('a', 20), event('late', 23.5 * 60)] })
+
+  const hook = await renderHook(() => useTonight())
+  await waitFor(() => expect(hook.result.current.status).toBe('ready'))
+  expect(hook.result.current.events.map((e) => e.id)).toEqual(['late', 'a'])
+  mockSignal = { ...mockSignal, todayEventIds: [] }
   hook.unmount()
 })

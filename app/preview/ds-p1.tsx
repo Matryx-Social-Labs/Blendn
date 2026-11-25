@@ -330,7 +330,7 @@ function RadioCards() {
   const pair = (a: object, b: object) => (
     <>
       <RadioCard title="Anonymous" hint="Nobody here sees your name or photo." avatar={<Avatar kind="creature" pseudonym="Night Cat" size={56} />} onPress={noop} {...a} />
-      <RadioCard title="Named" hint="People here see your name and photo." avatar={<Avatar kind="photo" uri={PHOTO} size={56} />} onPress={noop} {...b} />
+      <RadioCard title="Named" hint="People here see your name and photo." avatar={<Avatar kind="photo" uri={PHOTO} name="Asha" size={56} />} onPress={noop} {...b} />
     </>
   )
   return (
@@ -348,7 +348,7 @@ function RadioCards() {
         {pair({ selected: true }, { disabled: true, hint: 'Add a photo to your profile first. That’s what other people would see.' })}
       </Cell>
       <Cell label="the glyph form" testID="ds-radiocard-glyph" style={styles.pair}>
-        <RadioCard title="I have space" hint="You’re offering a ride or a table." icon="car" selected onPress={noop} />
+        <RadioCard title="I have spots" hint="You’re offering a ride or a table." icon="car" selected onPress={noop} />
         <RadioCard title="I’m looking" hint="You want to join someone’s." icon="hand" onPress={noop} />
       </Cell>
     </Section>
@@ -359,8 +359,7 @@ const LOOKING = [
   ['Dating', require('../../assets/onboarding/looking-dating.jpg')],
   ['Friendship', require('../../assets/onboarding/looking-friendship.jpg')],
   ['Networking', require('../../assets/onboarding/looking-networking.jpg')],
-  ['Travel', require('../../assets/onboarding/looking-travel.jpg')],
-  ['Open', require('../../assets/onboarding/looking-open.jpg')],
+  ['Just here', require('../../assets/onboarding/looking-open.jpg')],
 ] as const
 
 function LookingFor() {
@@ -402,8 +401,8 @@ function Steppers() {
   const [n, setN] = useState(2)
   const row = (props: Partial<ComponentProps<typeof Stepper>>) => (
     <View style={styles.spread}>
-      <Text style={styles.body}>Spaces</Text>
-      <Stepper label="Spaces" value={2} onChange={noop} {...props} />
+      <Text style={styles.body}>Spots</Text>
+      <Stepper label="Spots" value={2} onChange={noop} {...props} />
     </View>
   )
   return (
@@ -435,7 +434,7 @@ function Progress() {
   return (
     <Section title="ProgressBar" note="4 pt, white on surfaceSunken · grows on M.settle after 200 ms; Reduce Motion jumps · hidden from screen readers">
       {[1, 2, 4, 6, 8].map((s) => (
-        <Cell key={s} label={`step ${s} of 8`} testID={`ds-progress-${s}`}>
+        <Cell key={s} label={`step ${s} of 5`} testID={`ds-progress-${s}`}>
           <Counter step={s} />
           <ProgressBar progress={s / 8} />
         </Cell>
@@ -449,9 +448,9 @@ function Progress() {
   )
 }
 
-/** The header's "Step n of 8", which is what a screen reader hears. */
+/** The header's "Step n of 5", which is what a screen reader hears. */
 function Counter({ step }: { step: number }) {
-  return <Text style={styles.counter}>{`Step ${step} of 8`}</Text>
+  return <Text style={styles.counter}>{`Step ${step} of 5`}</Text>
 }
 
 const IDLE: RoomButtonTarget = { state: 'idle', eventId: null, badge: 0 }
@@ -536,7 +535,7 @@ function Mono() {
         <PresenceDot />
         <PresenceDot kind="live" />
         <View>
-          <Avatar kind="photo" uri={PHOTO} size={56} />
+          <Avatar kind="photo" uri={PHOTO} name="Asha" size={56} />
           <View style={styles.faceDot}>
             <PresenceDot kind="live" size={12} ring={COLOR.ink} />
           </View>

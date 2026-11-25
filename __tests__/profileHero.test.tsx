@@ -8,7 +8,6 @@ import { makeMutable } from 'react-native-reanimated'
 
 const INSET_TOP = 59
 jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: INSET_TOP, bottom: 34, left: 0, right: 0 }) }))
-jest.mock('../components/profile/PhotoStack', () => ({ PhotoStack: () => null }))
 const mockOrbs = jest.fn((_: { tint?: string }) => null)
 jest.mock('../components/ds/Orbs', () => ({ Orbs: (props: { tint?: string }) => mockOrbs(props) }))
 jest.mock('../components/motion/ZoomableImage', () => ({ ZoomableImage: () => null }))
@@ -173,7 +172,7 @@ describe('the paged viewer', () => {
 
 describe('Me’s name line', () => {
   it('sets only the digits of the age in mono (the same as the hero)', async () => {
-    await render(<MeIdentity name="Rd Four" age={28} photos={[]} onEdit={jest.fn()} onPhotos={jest.fn()} />)
+    await render(<MeIdentity name="Rd Four" age={28} onEdit={jest.fn()} onPhoto={jest.fn()} onPreview={jest.fn()} />)
     expect(String(StyleSheet.flatten(screen.getByText('28').props.style).fontFamily)).toMatch(/Mono/i)
     expect(screen.queryByText(', 28')).toBeNull()
     expect(screen.getByRole('header', { name: 'Rd Four, 28' })).toBeTruthy()

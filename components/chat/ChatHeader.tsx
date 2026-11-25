@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 import { Platform, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import { COLOR, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE, TYPE } from '../../lib/design/tokens'
 import { CONTROL_FONT_CAP, font, IC_HAIRLINE, minTarget, useBoldText, useIncreaseContrast } from '../ds/shared'
 import ScalePress from '../motion/ScalePress'
 import { Icon } from '../ui/Icon'
@@ -22,16 +22,14 @@ export const CHAT_CAPSULE = {
   gap: 10,
   // design-exception: the Flow 5 builder's row gap, off the SPACE scale
   innerGap: 6,
-  // design-exception: the Flow 5 builder's name, Satoshi Medium 16/20 (no TYPE role)
-  title: { fontSize: 16, lineHeight: 20 },
-  // design-exception: the Flow 5 builder's line under it, 13/16 (no TYPE role)
-  subtitle: { fontSize: 13, lineHeight: 16 },
   moreIcon: 22,
   mutedIcon: 14,
 } as const
 
 /** The two-line name over the one-line subtitle, at the builder's line heights: what the capsule's text needs at the default size. */
-const TEXT_BLOCK = 2 * CHAT_CAPSULE.title.lineHeight + CHAT_CAPSULE.subtitle.lineHeight
+/** The Flow 5 name: the button role's 16/20 in Satoshi Medium (SCRUM-865: it was a raw 16/20 beside the roles). The line under it is caption. */
+const TITLE_TYPE = (bold: boolean) => font('button', bold, TYPE.bodyStrong.fontFamily)
+const TEXT_BLOCK = 2 * TYPE.button.lineHeight + TYPE.caption.lineHeight
 
 /**
  * The capsule's height on this platform: the builder's 56 (iOS) or 60 (Android) at the default text size, and taller by
@@ -117,7 +115,7 @@ export function ChatHeader({
       {leading}
       <View style={styles.titles}>
         <View style={styles.titleRow}>
-          <Text numberOfLines={2} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('bodyStrong', bold), CHAT_CAPSULE.title, styles.title]}>
+          <Text numberOfLines={2} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[TITLE_TYPE(bold), styles.title]}>
             {title}
           </Text>
           {muted ? (
@@ -180,7 +178,7 @@ export function ChatHeader({
 export function SubtitleText({ children }: { children: ReactNode }) {
   const bold = useBoldText()
   return (
-    <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold), CHAT_CAPSULE.subtitle, styles.secondary]}>
+    <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('caption', bold), styles.secondary]}>
       {children}
     </Text>
   )
@@ -199,9 +197,9 @@ export function OpensLine({ label, spoken, count }: { label: string; spoken: str
         numberOfLines={1}
         maxFontSizeMultiplier={CONTROL_FONT_CAP}
         accessibilityLabel={`Opens in ${spoken}${count ? `, ${count} in the room` : ''}`}
-        style={[font('meta', bold), CHAT_CAPSULE.subtitle, styles.secondary]}
+        style={[font('caption', bold), styles.secondary]}
       >
-        Opens in <Text style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.primary, styles.tabular]}>{label}</Text>
+        Opens in <Text style={[font('caption', bold, FONT_FAMILY.mono[500]), styles.primary, styles.tabular]}>{label}</Text>
         {count ? ` · ${count} in the room` : ''}
       </Text>
     </>

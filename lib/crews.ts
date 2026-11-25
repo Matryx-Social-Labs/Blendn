@@ -17,28 +17,58 @@
  *   exist, who blocked whom, or who left.
  */
 
-/** The server's `CREW` constants (blendn-admin lib/constants.ts). */
-import { toggleLanguage, type Badge, type Overlap } from './aboutYou'
+/** The server's `CREW` constants (blendn-admin lib/constants.ts): crews of up to 25 since admin #980 (owner 2026-11-14). */
+import { parseBadges } from './profileBadges'
+import type { Badge, Overlap } from './aboutYou'
 
-export const CREW_MAX_MEMBERS = 12
+export const CREW_MAX_MEMBERS = 25
 export const CREW_NAME_MIN = 2
 export const CREW_NAME_MAX = 32
 export const CREW_BIO_MAX = 140
-export const CREW_MAX_TAGS = 3
+/** A crew's own hashtags (owner pick A, admin #981): up to 5, each 1–24 characters after the #, an emoji one. */
+export const CREW_MAX_TAGS = 5
+export const CREW_TAG_MAX = 24
 
-/** The curated tags, as `CREW_TAGS` on the server. Never free text. */
-export const CREW_TAGS: readonly { slug: string; label: string }[] = [
-  { slug: 'quiz-team', label: 'Quiz team' },
-  { slug: 'run-club', label: 'Run club' },
-  { slug: 'techno-heads', label: 'Techno heads' },
-  { slug: 'office-gang', label: 'Office gang' },
-  { slug: 'birthday-crew', label: 'Birthday crew' },
-  { slug: 'foodies', label: 'Foodies' },
-  { slug: 'board-gamers', label: 'Board gamers' },
-  { slug: 'gig-goers', label: 'Gig goers' },
-  { slug: 'book-club', label: 'Book club' },
-  { slug: 'dance-floor', label: 'Dance floor' },
-]
+/**
+ * What a tag may be made of, as the server's `TAG_CHARS` (blendn-admin lib/crews/crews.ts): letters and digits in any
+ * script with their marks (Devanagari needs them), `_`, and emoji with their modifiers, joiners and flag pairs. No `.`
+ * `/` `:` `@` `+` `-`, so no link, handle or phone number; the server's moderation reads the rest.
+ */
+const TAG_CHARS = /^[\p{L}\p{M}\p{N}_\p{Extended_Pictographic}\p{Emoji_Modifier}\p{Regional_Indicator}\uFE0F\u200D\u20E3]+$/u
+/** The server's own sentence for a tag outside the rule, so the local refusal and its 400 read the same. */
+export const TAG_RULE = `A tag is 1–${CREW_TAG_MAX} letters, numbers, _ or emoji — no links, @ or contact details`
+export const TAG_CAP = `Up to ${CREW_MAX_TAGS} tags`
+
+/** A tag as the server will keep it: trimmed, the leading #s stripped, spaces closed up ("# late night" → latenight). */
+export const normaliseTag = (typed: string): string => typed.trim().replace(/^#+/, '').replace(/\s+/g, '')
+
+/** A tag as drawn, without its #: the label with spaces closed up, so an old slug ("Quiz team") reads as a hashtag. */
+export const tagText = (tag: CrewTag): string => tag.label.replace(/\s+/g, '')
+
+/** What typing into the tags field left: the tags, what stays in the field, and why it stayed. */
+export type TagEntry = { tags: string[]; draft: string; problem?: string }
+
+/**
+ * Adds what was typed: a comma splits it, each part is normalised, a second spelling of a tag you have is dropped (the
+ * server dedupes ignoring case and keeps the first), and the cap holds. A part the rule refuses, or one past the cap,
+ * stays in the field with the reason, so nothing typed is lost.
+ */
+export function addTags(tags: readonly string[], typed: string): TagEntry {
+  const next = [...tags]
+  const kept: string[] = []
+  let problem: string | undefined
+  for (const part of typed.split(',')) {
+    const tag = normaliseTag(part)
+    if (!tag) continue
+    if (next.some((t) => t.toLowerCase() === tag.toLowerCase())) continue
+    const refused = characters(tag) > CREW_TAG_MAX || !TAG_CHARS.test(tag) ? TAG_RULE : next.length >= CREW_MAX_TAGS ? TAG_CAP : undefined
+    if (refused) {
+      problem ??= refused
+      kept.push(part.trim())
+    } else next.push(tag)
+  }
+  return { tags: next, draft: kept.join(', '), ...(problem ? { problem } : {}) }
+}
 
 /** `POST /crews/:crewId/report` takes exactly these. */
 export const CREW_REPORT_REASONS: readonly { value: CrewReportReason; label: string }[] = [
@@ -59,7 +89,7 @@ export const CONSENT_LINE =
   'Anyone in this crew can reveal the crew — your name and photos — to people you match with.'
 export const KEEP_ANONYMOUS_LABEL = 'Keep me anonymous even when my crew reveals'
 
-export const BLEND_CLOSED_LINE = 'This Blend has closed'
+export const BLEND_CLOSED_LINE = 'This Mix has closed'
 export const CREW_GONE_LINE = 'This crew isn’t here any more'
 /** A crew chat that removed you (a ban written into it): you, not the crew, are gone. */
 export const CREW_REMOVED_LINE = 'You’re no longer in this crew’s chat'
@@ -115,7 +145,22 @@ export interface Crew {
    * off `members`. Optional for the same reason; absent says nothing.
    */
   apart?: boolean
+  /**
+   * SV-13: seats the server will still fill — it counts the open invites against the 12, which `size` does not. Optional: an older
+   * server sends none, and `crewSeatsLeft` falls back to `size`.
+   */
+  seatsLeft?: number
+  /** SV-11: `crewView`'s badges (`{ kind, label }[]`, read through `parseBadges`). Absent from an older server: no pill. */
+  badges?: unknown
 }
+
+/** The crew's one tier badge for a row or a card, or none (YOU-06). Only "Out together often" exists for a crew, and never with a count. */
+export const crewBadge = (badges: unknown): 'nights_together' | undefined =>
+  parseBadges(badges)?.some((b) => b.kind === 'nights_together') ? 'nights_together' : undefined
+
+/** Seats an invite can still take (YOU-12): the server's own count, else the members alone (the older server's best guess). */
+export const crewSeatsLeft = (crew: { size: number; seatsLeft?: number }): number =>
+  Math.max(0, typeof crew.seatsLeft === 'number' ? crew.seatsLeft : CREW_MAX_MEMBERS - crew.size)
 
 export interface CrewInvite {
   crewId: string
@@ -129,6 +174,25 @@ export interface CrewInvite {
   /** Their photo; optional (a client outlives a deploy) and drawn only when sent. */
   invitedByPhoto?: string | null
   invitedAt: string
+  /** When it lapses (admin #972, +14 days); optional, as a client outlives a deploy. */
+  expiresAt?: string
+}
+
+/** Who shared a crew link, and the crew, before anybody signs in (`GET /crews/links/:token/preview`). */
+export interface CrewLinkPreview {
+  name: string
+  emblemSeed: string
+  size: number
+  invitedBy: { name: string; photoUrl: string | null }
+}
+
+/** The card behind a crew link (S7). `member`: the holder is in the crew already. */
+export interface CrewLink extends CrewLinkPreview {
+  crewId: string
+  bio: string | null
+  tags: CrewTag[]
+  expiresAt: string
+  member: boolean
 }
 
 /** A crew here now, as a card. Counts only — never a person. */
@@ -141,8 +205,12 @@ export interface CrewCard {
   presentCount: number
   tags: CrewTag[]
   intent: CrewIntent[]
-  /** Your side liked them tonight. Never whether they liked you. */
+  /** Your side liked or waved at them tonight. */
   youLiked: boolean
+  /** Your side waved at them tonight ("✓ Waved"; admin #1003). Optional: a client outlives a deploy. */
+  youWaved?: boolean
+  /** They waved at your side tonight; unanswered ones (`!youLiked`) come first from the server. A like stays secret. */
+  wavedAtYou?: boolean
   /**
    * Up to two lines of what this crew holds in common with your side —
    * "Both crews are into Techno", "Two RCB crews". Crew-held, never a member
@@ -153,13 +221,132 @@ export interface CrewCard {
   badges?: Badge[]
 }
 
+/** A crew you blocked (`GET /crews/hidden`). */
+export interface HiddenCrew {
+  crewId: string
+  name: string
+  emblemSeed: string
+  hiddenAt: string
+}
+
+/**
+ * A crewmate by the crew room's identity (admin #971/#973): the crew-room handle (yours is your own id), the first name, and a
+ * photo only for a member who did not choose "keep me anonymous". Members only: a stranger's crew card never carries one.
+ */
+export interface CrewmateIn {
+  userId: string
+  name: string
+  photo: string | null
+  you: boolean
+}
+
 export interface CrewsAtEvent {
   crewsEnabled: boolean
   crews: CrewCard[]
-  /** Your crews here now (two of you checked in): what a like is sent "as". */
-  myCrews: { crewId: string; name: string; presentCount: number }[]
+  /**
+   * Your crews here now (two of you checked in): what a like is sent "as". `here` (4-A3) is who is in WITH the crew — checked
+   * in and told it ("With {crew}" at the hold), first in first; optional, as an older server sends only the count.
+   */
+  myCrews: { crewId: string; name: string; presentCount: number; here?: CrewmateIn[] }[]
   total: number
   hasMore: boolean
+}
+
+/** "Going together" (4-A1): one of your crews with a night of this event planned (`GET /events/:id` → `userStatus.myCrewPlans`). */
+export interface CrewPlan {
+  crewId: string
+  name: string
+  emblemSeed: string
+  occurrenceId: string
+  startsAt: string
+  /** Crewmates who said they're going (RSVP), by the crew room's identity. */
+  going: CrewmateIn[]
+}
+
+/** Others first, in the server's order (first in first), you last: "Priya, Arjun, You" (board 04 A3). */
+export function inYouLast(people: readonly CrewmateIn[]): CrewmateIn[] {
+  return [...people.filter((x) => !x.you), ...people.filter((x) => x.you)]
+}
+
+export const namesLine = (people: readonly CrewmateIn[]): string =>
+  inYouLast(people)
+    .map((x) => (x.you ? 'You' : x.name))
+    .join(', ')
+
+/** A big crew's strip (past `COUNT_TICKS_MAX`) names this many, then "+N" (board crews/tags/02-size-25). */
+const STRIP_NAMES_MAX = 3
+
+/** A big crew's strip names: three, you among them when you're in, then how many more ("प्रियंका, Arjun, You" +9). */
+export function stripNames(people: readonly CrewmateIn[]): { shown: CrewmateIn[]; more: number } {
+  const ordered = inYouLast(people)
+  const you = ordered.filter((x) => x.you)
+  const shown = ordered.length <= STRIP_NAMES_MAX ? ordered : [...ordered.filter((x) => !x.you).slice(0, STRIP_NAMES_MAX - you.length), ...you]
+  return { shown, more: ordered.length - shown.length }
+}
+
+/** The crew page's order (board 02-size-25): you, then the owner, then by who joined first. */
+export function membersInOrder(members: readonly CrewMember[], myId: string): CrewMember[] {
+  const rank = (m: CrewMember) => (m.userId === myId ? 0 : m.role === 'owner' ? 1 : 2)
+  return [...members].sort((a, b) => rank(a) - rank(b) || a.joinedAt.localeCompare(b.joinedAt))
+}
+
+/** The most names "… are going" spells out before "and N others" (the server's crew push does the same). */
+const GOING_NAMES_MAX = 3
+
+/** "Priya and Arjun are going" (board 04 A1): crewmates only, never you; nothing when nobody else is. */
+export function goingLine(going: readonly CrewmateIn[]): string | null {
+  const names = going.filter((x) => !x.you).map((x) => x.name)
+  if (names.length === 0) return null
+  const shown = names.length <= GOING_NAMES_MAX ? names : [...names.slice(0, GOING_NAMES_MAX - 1), `${names.length - (GOING_NAMES_MAX - 1)} others`]
+  const list = shown.length === 1 ? shown[0] : `${shown.slice(0, -1).join(', ')} and ${shown[shown.length - 1]}`
+  return `${list} ${names.length === 1 ? 'is' : 'are'} going`
+}
+
+/** One strip row (`CrewStrip`): how many are in with the crew and who, by first name. */
+export type StripCrewRow = {
+  id: string
+  name: string
+  emblemSeed: string
+  size: number
+  in: number
+  people: CrewmateIn[]
+  context: string
+}
+
+/**
+ * Your crews' strip rows from `myCrews` (4-A3): drawn from who told the crew (`here`), so a crew whose members all came in on
+ * their own draws nothing — nobody is listed, and nobody as "not here yet". An older server's count stands in, unnamed.
+ */
+export function stripCrewsFrom(
+  myCrews: CrewsAtEvent['myCrews'],
+  mine: readonly Pick<Crew, 'crewId' | 'emblemSeed' | 'size'>[],
+  context: string
+): StripCrewRow[] {
+  return myCrews.flatMap((c) => {
+    const crew = mine.find((m) => m.crewId === c.crewId)
+    const people = c.here ?? []
+    const count = c.here ? people.length : c.presentCount
+    if (count === 0) return []
+    return [{ id: c.crewId, name: c.name, emblemSeed: crew?.emblemSeed ?? c.crewId, size: Math.max(crew?.size ?? 0, count), in: count, people, context }]
+  })
+}
+
+/** A plan this close or already started is tonight's (doors open before the start; a plan's night has not ended yet). */
+export const TONIGHT_AHEAD_MS = 12 * 3_600_000
+
+/**
+ * The "With {crew}" chip at the hold (4-A2, owner 1b): a crew that planned tonight, on; otherwise your first crew, off (tap it
+ * on to tell them). No crew, no chip. `withCrewId` is sent only while it is on.
+ */
+export function withCrewChoice(
+  mine: readonly Pick<Crew, 'crewId' | 'name' | 'emblemSeed'>[],
+  plans: readonly CrewPlan[],
+  now: number = Date.now()
+): { crewId: string; name: string; emblemSeed: string; on: boolean } | null {
+  const tonight = plans.find((p) => Date.parse(p.startsAt) - now <= TONIGHT_AHEAD_MS)
+  if (tonight) return { crewId: tonight.crewId, name: tonight.name, emblemSeed: tonight.emblemSeed, on: true }
+  const first = mine[0]
+  return first ? { crewId: first.crewId, name: first.name, emblemSeed: first.emblemSeed, on: false } : null
 }
 
 export interface BlendPerson {
@@ -260,6 +447,8 @@ export function crewMessage(result: Refusal, surface: CrewSurface, fallback: str
   if (code === 'RATE_LIMITED' && result?.retryAfter) return 'Slow down — try again in a moment.'
   if (code === 'SERVER_ERROR' || !said) return fallback
   if (/^(HTTP \d|Invalid JSON)/.test(said)) return fallback
+  // ponytail: the wave routes still answer with the like's sentence (admin lib/crews/like.ts); drop this once they say wave.
+  if (said === 'Check in before liking anyone here.') return 'Check in before you wave here.'
   return said
 }
 
@@ -290,7 +479,7 @@ export const UNKNOWN_ROOM_NAME = 'Chat'
 
 /** The header's name for a room opened without one (from a push, say). */
 export function defaultRoomName(kind: 'crew' | 'blend' | null): string {
-  return kind === 'crew' ? 'Crew chat' : kind === 'blend' ? 'Your Blend' : 'Event chat'
+  return kind === 'crew' ? 'Crew chat' : kind === 'blend' ? 'Your Mix' : 'The room'
 }
 
 /**
@@ -300,7 +489,7 @@ export function defaultRoomName(kind: 'crew' | 'blend' | null): string {
  * ponytail: matched on the words, as the Banter's last message carries no `type` yet (S-7); read the kind once it does.
  */
 export function crewLikeLine(text: string, who: string): string | null {
-  return /^liked .+ for the crew$/.test(text.trim()) ? `${who} ${text.trim()}` : null
+  return /^(liked|waved at) .+ for the crew$/.test(text.trim()) ? `${who} ${text.trim()}` : null
 }
 
 /**
@@ -353,6 +542,18 @@ export interface CrewForm {
   tags: string[]
   openToSolo: boolean
   inviteUserIds: string[]
+  /** The emblem's look as Shuffle left it; fixed once the crew is made. */
+  emblemSeed?: string
+}
+
+/** The emblem seed `POST /crews` takes (SCRUM-1053); anything else is a 400. */
+export const EMBLEM_SEED = /^[0-9a-f]{16}$/
+const HEX = 16
+const SEED_LENGTH = 16
+
+/** A fresh look for Shuffle: 16 lowercase hex. A look, not a secret, so `Math.random` is enough. */
+export function newEmblemSeed(random: () => number = Math.random): string {
+  return Array.from({ length: SEED_LENGTH }, () => Math.floor(random() * HEX).toString(HEX)).join('')
 }
 
 export type CreateCrewBody = {
@@ -364,6 +565,7 @@ export type CreateCrewBody = {
   inviteUserIds: string[]
   revealConsent: true
   keepMeAnonymous: boolean
+  emblemSeed?: string
 }
 
 /**
@@ -379,7 +581,7 @@ export function createCrewBody(form: CrewForm, consent: ConsentState): CreateCre
     return { problem: `A crew name is ${CREW_NAME_MIN}–${CREW_NAME_MAX} characters.` }
   }
   if (characters(bio) > CREW_BIO_MAX) return { problem: `A crew bio is at most ${CREW_BIO_MAX} characters.` }
-  if (form.tags.length > CREW_MAX_TAGS) return { problem: `Pick up to ${CREW_MAX_TAGS} tags.` }
+  if (form.tags.length > CREW_MAX_TAGS) return { problem: `${TAG_CAP}.` }
   // A crew is friends who go out together: one person with nobody asked is not one.
   if (form.inviteUserIds.length === 0) return { problem: 'Pick at least one friend to ask.' }
   if (form.inviteUserIds.length > CREW_MAX_MEMBERS - 1) {
@@ -394,13 +596,9 @@ export function createCrewBody(form: CrewForm, consent: ConsentState): CreateCre
     tags: form.tags,
     openToSolo: form.openToSolo,
     inviteUserIds: form.inviteUserIds,
+    ...(form.emblemSeed && EMBLEM_SEED.test(form.emblemSeed) ? { emblemSeed: form.emblemSeed } : {}),
     ...agreed,
   }
-}
-
-/** Toggle a tag, holding the cap: a fourth tap does nothing rather than drop the first. */
-export function toggleTag(tags: readonly string[], slug: string): string[] {
-  return toggleLanguage(tags, slug, CREW_MAX_TAGS)
 }
 
 /* -------------------------------------------------------------------------- */
@@ -447,12 +645,12 @@ function sideName(side: BlendSide): string {
  * the frame's "Crew " before a crew's name doubled real ones ("Blend with Crew RC4 Crew Y") and differed from the Banter's
  * "Blend with RC4 Crew Y" (RC audit C24).
  */
-export const blendWith = (theirName: string) => `Blend with ${theirName}`
+export const blendWith = (theirName: string) => `Mix with ${theirName}`
 
 /** The room's header (flow10b.js `blendRoom`) and the Banter's card: `blendWith` the other side. */
 export function blendTitle(blend: Blend, myId: string | null | undefined): string {
   const { theirs } = blendSides(blend, myId)
-  return theirs ? blendWith(sideName(theirs)) : 'Your Blend'
+  return theirs ? blendWith(sideName(theirs)) : 'Your Mix'
 }
 
 /* -------------------------------------------------------------------------- */
@@ -494,7 +692,7 @@ export function crewRoomsFrom(payload: unknown): CrewRoomRow[] {
       {
         id: r.id,
         kind,
-        name: typeof r.name === 'string' ? r.name : kind === 'crew' ? 'Crew chat' : 'Blend',
+        name: typeof r.name === 'string' ? r.name : kind === 'crew' ? 'Crew chat' : 'Mix',
         crewId: typeof r.crewId === 'string' ? r.crewId : null,
         blendId: typeof r.blendId === 'string' ? r.blendId : null,
         closesAt: typeof r.closesAt === 'string' ? r.closesAt : null,
@@ -516,7 +714,7 @@ export function crewRoomsFrom(payload: unknown): CrewRoomRow[] {
 
 /** "Blend · Lot S9 × Nebula S9" — a Blend says what it is in the list; a crew's chat is its name. */
 export function crewRoomTitle(row: Pick<CrewRoomRow, 'kind' | 'name'>): string {
-  return row.kind === 'blend' ? `Blend · ${row.name}` : row.name
+  return row.kind === 'blend' ? `Mix · ${row.name}` : row.name
 }
 
 /* -------------------------------------------------------------------------- */
@@ -568,7 +766,7 @@ export function nextCrewOffset(offset: number, page: readonly CrewCard[]): numbe
   return offset + page.length
 }
 
-/** Crews larger than this match crews only, never one person (the server's `CREW.MAX_SOLO_MATCH`). */
+/** Crews larger than this match crews only, never one person (the server's `CREW.MAX_SOLO_MATCH`): a kept safety rule, one stranger facing a big group (owner 2026-11-14). */
 export const CREW_MAX_SOLO_MATCH = 6
 
 /**
@@ -590,10 +788,45 @@ export function crewsThatMayLikePeople(
  * Who a like of a crew is sent as. With no crew of yours here it is you
  * (crew ↔ person, which needs "Open to joining a crew tonight"); with one,
  * that crew; with several, the person chooses — the app never picks a crew
- * for somebody, because the crew chat says who liked on its behalf.
+ * for somebody, because the crew chat says who waved on its behalf.
  */
 export function likeAs(myCrews: CrewsAtEvent['myCrews']): { as: 'me' } | { as: 'crew'; crewId: string } | { as: 'choose' } {
   if (myCrews.length === 0) return { as: 'me' }
   if (myCrews.length === 1) return { as: 'crew', crewId: myCrews[0].crewId }
   return { as: 'choose' }
+}
+
+/** The most pages of invites one lookup reads: 4 × 50 = the server's newest 200 (YOU-11). */
+export const INVITE_LOOKUP_PAGES = 4
+
+type InvitesPage = { success: boolean; data?: { invites: CrewInvite[]; invitesPagination?: { hasMore: boolean; nextCursor: string | null } } }
+
+/**
+ * The invite to `crewId` among yours, however far down: pages `myCrews` by `invitesPagination.nextCursor` until it is found or there
+ * are no more (at most `INVITE_LOOKUP_PAGES`). `failed` is a page that did not load; `null` is "not open any more" (really).
+ */
+export async function findInvite(
+  loadPage: (cursor?: string | null) => Promise<InvitesPage>,
+  crewId: string
+): Promise<{ kind: 'found'; invite: CrewInvite } | { kind: 'notOpen' } | { kind: 'failed' }> {
+  let cursor: string | null = null
+  for (let page = 0; page < INVITE_LOOKUP_PAGES; page++) {
+    const result = await loadPage(cursor)
+    if (!result.success || !result.data) return { kind: 'failed' }
+    const invite = result.data.invites.find((i) => i.crewId === crewId)
+    if (invite) return { kind: 'found', invite }
+    const next = result.data.invitesPagination
+    if (!next?.hasMore || !next.nextCursor) break
+    cursor = next.nextCursor
+  }
+  return { kind: 'notOpen' }
+}
+
+/**
+ * What a crew card's button is (board crews/05-room A): your side waved or liked → Waved; they waved at yours and you
+ * haven't answered → Wave back (lit); otherwise Wave.
+ */
+export function crewWaveState(card: Pick<CrewCard, 'youLiked' | 'youWaved' | 'wavedAtYou'>): 'idle' | 'waved' | 'waveBack' {
+  if (card.youLiked || card.youWaved) return 'waved'
+  return card.wavedAtYou ? 'waveBack' : 'idle'
 }

@@ -51,6 +51,13 @@ export function timeSpentLabel(ms: number): string {
   return m === 0 ? `${h}h` : `${h}h ${m}m`
 }
 
+/** "2 hours 15 minutes": what a screen reader says for `timeSpentLabel`'s "2h 15m" (a reader says "2h" as letters). */
+export function spokenMinutes(total: number): string {
+  if (total < 1) return 'under a minute'
+  const part = (n: number, unit: string) => (n ? `${n} ${unit}${n === 1 ? '' : 's'}` : '')
+  return [part(Math.floor(total / 60), 'hour'), part(total % 60, 'minute')].filter(Boolean).join(' ')
+}
+
 /**
  * The recap, or null while the night is still going.
  *
@@ -69,4 +76,19 @@ export function roomRecap(source: RecapSource, now: number): RoomRecap | null {
     minutes: spent === null ? null : Math.floor(spent / 60_000),
     matched: source.people.filter((p) => p.matched).length,
   }
+}
+
+/** The server's `CHAT_WINDOW_HOURS` (blendn-admin lib/constants): an event's chat closes this long after its end. */
+const CHAT_WINDOW_MS = 24 * 60 * 60 * 1000
+
+/**
+ * Whether "People from tonight" is on offer (Flow 4 R4.1 4.5): from the end until the room's chat closes (`closesAt`, else
+ * end + 24 h), when the roster stops being readable. Unknown end is not offered, as `roomRecap` treats it.
+ */
+export function recapPeopleOpen(endsAt: string | null | undefined, now: number, closesAt?: string | null): boolean {
+  const end = endsAtMs(endsAt)
+  if (end === null || end > now) return false
+  // The door's own `write.closesAt` when it sent one (it is the server's rule); else the window this client knows.
+  const told = endsAtMs(closesAt)
+  return now < (told ?? end + CHAT_WINDOW_MS)
 }

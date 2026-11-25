@@ -79,20 +79,17 @@ beforeEach(async () => {
 })
 
 describe('a suspended phone is told why, through the sign-out that follows', () => {
-  it("keeps the refresh’s sentence when the push-token DELETE 401s after the tokens are gone", async () => {
+  it("keeps the refresh’s sentence when the push-token DELETE is asked for after the tokens are gone", async () => {
     await TokenStorage.setTokens('access-1', 'refresh-1')
     const seen = suspendedServer()
 
     await apiClient.getSession()
-    // What _layout does once `user` is null: an authenticated DELETE with no session.
+    // What _layout does once `user` is null: an authenticated DELETE with no session. It is answered here, not sent to be
+    // refused (SCRUM-879), and it must not write the generic marker over the sentence either way.
     await apiClient.removePushToken('ExponentPushToken[device]')
     await settle()
 
-    expect(seen).toEqual([
-      'GET /api/mobile/auth/session',
-      'POST /api/mobile/auth/refresh',
-      'DELETE /api/mobile/notifications/token?token=ExponentPushToken%5Bdevice%5D',
-    ])
+    expect(seen).toEqual(['GET /api/mobile/auth/session', 'POST /api/mobile/auth/refresh'])
     expect(await consumeSessionEndedNotice()).toBe(SUSPENDED)
   })
 
@@ -248,6 +245,9 @@ describe('the reason is typed (Flow 15 15.1 to 15.4)', () => {
 })
 
 describe('every request names the build (Flow 15 15.14), and a refusal to serve it marks the app', () => {
+  // An authed request with no session is answered here, not sent (SCRUM-879): these are about what a sent one carries.
+  beforeEach(async () => TokenStorage.setTokens('access-1', 'refresh-1'))
+
   it('sends X-App-Version, and 426 or UPDATE_REQUIRED marks update required', async () => {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const gate = require('../lib/updateRequired') as typeof import('../lib/updateRequired')
@@ -303,6 +303,9 @@ describe('every request names the build (Flow 15 15.14), and a refusal to serve 
 })
 
 describe('every request declares its channel set (SCRUM-739)', () => {
+  // An authed request with no session is answered here, not sent (SCRUM-879): these are about what a sent one carries.
+  beforeEach(async () => TokenStorage.setTokens('access-1', 'refresh-1'))
+
   // Without X-Channel-Set: 2 the server serves an event_changed bell row as event_update (blendn-admin #716 openapi, mobile-misc.ts).
   it.each(['ios', 'android', 'web'])('%s: a GET, a POST, a request with its own headers, and the token refresh all carry it, from the push token\'s constant', async (os) => {
     // eslint-disable-next-line @typescript-eslint/no-require-imports

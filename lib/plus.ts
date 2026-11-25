@@ -3,7 +3,7 @@ import { AppState } from 'react-native'
 
 import type { IconName } from '../components/ui/Icon'
 import { apiClient } from './apiClient'
-import type { PlusGrant, PlusState } from './plusManage'
+import type { PlusGrant, PlusPlan, PlusState } from './plusManage'
 import { NIGHT_PASS_ID, type PlusOffer } from './purchases'
 import { calendarDate, clockTime } from './time'
 
@@ -20,15 +20,34 @@ export type PlusStatus = {
    */
   gated: boolean
   product: 'plus' | 'night_pass' | null
-  source: 'apple' | 'google' | 'grant' | null
+  source: 'apple' | 'google' | 'grant' | 'razorpay' | null
   expiresAt: string | null
+  /**
+   * When the account's entitlement rows last changed (the server's `changedAt`). `GET /me/plus` reports only the longest live
+   * row, so a Night Pass stacked on a grant or a subscription never moves the answer; this does. Absent from an older server.
+   */
+  changedAt?: string | null
   /**
    * How a subscription stands, and which gift a grant is: not sent yet (`lib/plusManage.ts` reads them when they are,
    * and never guesses). Absent, a subscription is "active" and a grant is "nothing renews".
    */
   state?: PlusState | null
   grant?: PlusGrant | null
+  /** The store plan of a subscription (the server's, from the product the store billed); null or absent when not known. */
+  plan?: PlusPlan | null
 }
+
+/**
+ * What no plan buys (Flow 12 `NEVER`): the product's promise, the paywall's one row opened (remaining-screens 01 A,
+ * the board's words).
+ */
+export const NEVER_FOR_SALE = [
+  'Seeing who liked you',
+  'more asks than the caps',
+  'a venue’s room without going',
+  'a way round the reveal',
+  'boosting yourself',
+] as const
 
 export type PlusFeature = { icon: IconName; title: string; detail: string }
 
@@ -113,36 +132,52 @@ export function usePlusStatus(): { status: PlusStatus | null; refresh: () => voi
 export const PLUS_POLL_EVERY_MS = 3_000
 /** … for this long, before saying it is taking longer than usual. */
 export const PLUS_POLL_FOR_MS = 60_000
+/**
+ * An already active account on a server that sends no `changedAt` cannot be told apart from itself once the purchase lands
+ * (the answer is the longest live row), so it waits this long and then takes the active answer it has.
+ */
+export const PLUS_POLL_ACTIVE_NO_CHANGEDAT_MS = 10_000
 
 /**
- * The store's webhook grants Blendn+, not the app: ask the server until it
- * says active, or give up after a minute (null). `stopped` ends it early — the
- * screen closed.
+ * Whether the server's answer is a purchase landing on top of `before` (SYS-03): a different product or source, or a
+ * later expiry (a Night Pass stacks). An account that was not active needs no change, only to be active.
  */
-export async function waitForPlus(stopped: () => boolean = () => false, now: () => number = Date.now): Promise<PlusStatus | null> {
-  const until = now() + PLUS_POLL_FOR_MS
-  while (!stopped()) {
-    // A failed ask (offline, a cleared queue) is "not yet", never the end of the wait.
-    const res = await apiClient.getMyPlus().catch(() => null)
-    if (res?.success && res.data?.active) {
-      lastKnown = res.data
-      notifyPlusChanged()
-      return res.data
-    }
-    if (now() + PLUS_POLL_EVERY_MS > until) return null
-    await new Promise((resolve) => setTimeout(resolve, PLUS_POLL_EVERY_MS))
-  }
-  return null
+export function plusChangedSince(before: PlusStatus | null | undefined, status: PlusStatus): boolean {
+  if (!status.active) return false
+  if (!before?.active) return true
+  if (status.changedAt && before.changedAt && status.changedAt !== before.changedAt) return true
+  if (status.product !== before.product || status.source !== before.source) return true
+  return Date.parse(status.expiresAt ?? '') > Date.parse(before.expiresAt ?? '')
 }
 
 /**
- * What the dock does. A subscription the stores run is managed there: the dock
- * reads "Manage Blend’n+". Everything else keeps the buy button — a Night Pass
- * stacks (another adds 24 hours), and a granted account (App Review's) must
- * still be able to buy every product (guideline 2.1(b)).
+ * The store's webhook grants Blendn+, not the app: ask the server until it says so, or give up after a minute (null).
+ * `stopped` ends it early (the screen closed). `before` is what the account held when the purchase started: with it,
+ * an already active account (a grant, a Night Pass) waits for the purchase to land rather than for "active", which it
+ * already was. Without it, the first "active" ends the wait (a restore).
  */
-export function dockMode(status: PlusStatus | null | undefined): 'buy' | 'manage' {
-  return status?.active && status.product === 'plus' && (status.source === 'apple' || status.source === 'google') ? 'manage' : 'buy'
+export async function waitForPlus(
+  stopped: () => boolean = () => false,
+  now: () => number = Date.now,
+  before?: PlusStatus | null
+): Promise<PlusStatus | null> {
+  const until = now() + (before?.active && !before.changedAt ? PLUS_POLL_ACTIVE_NO_CHANGEDAT_MS : PLUS_POLL_FOR_MS)
+  let lastActive: PlusStatus | null = null
+  const settle = (status: PlusStatus) => {
+    lastKnown = status
+    notifyPlusChanged()
+    return status
+  }
+  while (!stopped()) {
+    // A failed ask (offline, a cleared queue) is "not yet", never the end of the wait.
+    const res = await apiClient.getMyPlus().catch(() => null)
+    if (res?.success && res.data && plusChangedSince(before, res.data)) return settle(res.data)
+    if (res?.success && res.data?.active) lastActive = res.data
+    // The account was already active and still is: the purchase may have stacked under the answer. Say it is on.
+    if (now() + PLUS_POLL_EVERY_MS > until) return before?.active && lastActive ? settle(lastActive) : null
+    await new Promise((resolve) => setTimeout(resolve, PLUS_POLL_EVERY_MS))
+  }
+  return null
 }
 
 /** A subscription's row: the short name and the unit beside the store's price string. */
@@ -160,12 +195,13 @@ const MONTHS: Record<string, number> = { $rc_monthly: 1, $rc_three_month: 3, $rc
 /**
  * The sub line under a subscription row, from the store's own numbers (never a
  * price written here): "About ₹166 a month · Save 16%" against the monthly
- * package. Monthly itself has none; no "Save" when the store's prices do not
+ * package. Monthly says "Renews every month"; no "Save" when the store's prices do not
  * say it saves; null when the store gave no monthly figure.
  */
 export function planSubline(offer: PlusOffer, offers: readonly PlusOffer[]): string | null {
   const months = MONTHS[offer.pkg.identifier]
-  if (!months || months === 1) return null
+  if (months === 1) return 'Renews every month'
+  if (!months) return null
   const { pricePerMonthString: each, pricePerMonth: perMonth } = offer.pkg.product
   if (!each) return null
   const monthly = offers.find((o) => o.pkg.identifier === '$rc_monthly')?.pkg.product.price
@@ -182,13 +218,13 @@ export function taxLine(offers: readonly PlusOffer[] | null | undefined): string
   return offers.every((o) => o.pkg.product.currencyCode === 'INR') ? GST_LINE : null
 }
 
-/** D4: what the store's subscriptions page can do. The App Store has no pause; Google Play does. */
-export const storeManageHint = (store: 'ios' | 'android'): string =>
-  store === 'android' ? 'Change plan, pause or cancel · one tap' : 'Change plan or cancel · one tap'
-
-/** D4: a granted Blend'n+ has no store row, only this. */
-export function grantManageLine(expiresAt: string | null | undefined): string {
-  return `Free ${expiresAt ? `until ${dateOf(expiresAt)}` : 'for now'} · nothing to manage`
+/**
+ * Manage's store row (remaining-screens 03 A): named for the store, and what cancelling costs — you keep it to the date.
+ * A grant has no store row at all.
+ */
+export function storeRow(store: 'ios' | 'android', expiresAt: string | null | undefined): { title: string; hint: string } {
+  const until = expiresAt ? `until ${dateOf(expiresAt)}` : 'to the end of the period'
+  return { title: `Change or cancel in ${store === 'android' ? 'Google Play' : 'the App Store'}`, hint: `You keep Blend’n+ ${until} if you cancel` }
 }
 
 /** The row for a subscription package; null for the Night Pass (its own row) or a package we do not name. */
@@ -196,22 +232,21 @@ export function planRowFor(offer: PlusOffer): { name: string; per: string } | nu
   return PLAN_ROWS[offer.pkg.identifier] ?? null
 }
 
-/** Monthly is picked first (the first subscription we sell); the Night Pass only when it is all there is. */
+/** Yearly is picked first where it is sold (remaining-screens 01 A), else the first subscription; the Night Pass only when it is all there is. */
 export function defaultPick(offers: readonly PlusOffer[]): string | null {
-  const first = offers.find((o) => !isNightPass(o)) ?? offers[0]
+  const first = offers.find((o) => o.pkg.identifier === '$rc_annual') ?? offers.find((o) => !isNightPass(o)) ?? offers[0]
   return first?.pkg.identifier ?? null
 }
 
 /**
- * The dock's button carries the price the person is about to pay, the store's
- * string: the words, the price (set in Geist Mono by the button), and the whole
- * as it is read.
+ * The dock's button restates the pick by name and carries the price the person is about to pay, the store's string
+ * ("Start Yearly · ₹1,499 / year", remaining-screens 01 A): the words, the price (set in Geist Mono by the button), and
+ * the whole as it is read.
  */
 export function ctaParts(offer: PlusOffer | undefined): { lead: string; price?: { amount: string; per?: string }; spoken: string } {
   if (!offer) return { lead: 'Start Blend’n+', spoken: 'Start Blend’n+' }
-  const lead = isNightPass(offer) ? 'Get the Night Pass —' : 'Start Blend’n+ —'
+  const lead = isNightPass(offer) ? 'Get the Night Pass ·' : `Start ${planRowFor(offer)?.name ?? 'Blend’n+'} ·`
   const per = isNightPass(offer) ? undefined : planRowFor(offer)?.per
   return { lead, price: { amount: offer.price, per }, spoken: `${lead} ${offer.price}${per ? ` ${per}` : ''}` }
 }
 
-export const ctaLabel = (offer: PlusOffer | undefined): string => ctaParts(offer).spoken

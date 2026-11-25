@@ -3,7 +3,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { dumpPerf, perfSnapshot, resetPerf, SLOW_COMMIT_MS } from '../../lib/perf'
-import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, SPACE, TYPE } from '../../lib/theme'
+import { COLOR, RADIUS, SIZE, SPACE, TYPE } from '../../lib/design/tokens'
 
 /**
  * What every screen cost, since the app started or since the last reset.
@@ -91,22 +91,22 @@ export default function PerfPreview() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: EMBER.bg, paddingHorizontal: GUTTER },
-  title: { ...TYPE.display, marginTop: SPACE.sm },
-  note: { ...TYPE.meta, marginTop: SPACE.xs },
+  container: { flex: 1, backgroundColor: COLOR.ink, paddingHorizontal: SPACE.gutter },
+  title: { ...TYPE.display, color: COLOR.textPrimary, marginTop: SPACE.sm },
+  note: { ...TYPE.meta, color: COLOR.textSecondary, marginTop: SPACE.xs },
   actions: { flexDirection: 'row', gap: SPACE.md, marginTop: SPACE.lg },
   button: {
-    minHeight: CONTROL.md,
+    minHeight: SIZE.control,
     paddingHorizontal: SPACE.xl,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: EMBER.surface,
+    borderRadius: RADIUS.capsule,
+    backgroundColor: COLOR.surface,
   },
-  buttonText: { ...TYPE.button },
+  buttonText: { ...TYPE.button, color: COLOR.textPrimary },
   list: { paddingVertical: SPACE.xl, gap: SPACE.lg },
-  empty: { ...TYPE.meta },
+  empty: { ...TYPE.meta, color: COLOR.textSecondary },
   row: { gap: SPACE.xs },
-  rowId: { ...TYPE.bodyStrong },
-  rowStat: { ...TYPE.meta },
+  rowId: { ...TYPE.bodyStrong, color: COLOR.textPrimary },
+  rowStat: { ...TYPE.meta, color: COLOR.textSecondary },
 })

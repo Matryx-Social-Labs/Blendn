@@ -30,6 +30,14 @@
 # for the whole app; keeping the annotation types is enough.
 -keep @interface expo.modules.** { *; }
 
+# Expo SDK 57 reads and writes a Record (an image picker's asset, a permission
+# response, ...) through generated Pika introspection data, not reflection. R8
+# renamed/stripped it, and every module call that RETURNS a Record then failed
+# with ERR_UNEXPECTED after doing its work: launchImageLibraryAsync and
+# launchCameraAsync picked the file, then threw (SCRUM-947). Release only.
+-keep class io.github.lukmccall.pika.** { *; }
+-keep class * implements io.github.lukmccall.pika.PIntrospectionProvider { *; }
+
 # MapLibre (home map, plan v2 step 2): the native SDK reaches its own classes by
 # reflection and JNI; its consumer rules cover today's release, this keeps a
 # future one from being optimised into a crash on a release build only.

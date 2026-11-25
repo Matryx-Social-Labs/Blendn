@@ -24,10 +24,17 @@ import {
   inviteTitle,
   invitedAgo,
   isGate,
+  endSheet,
+  heirOf,
   leaveSheet,
+  ownerSheet,
   leavingClosesCrew,
   madeLine,
-  makeSummary,
+  askedYouIn,
+  crewVerb,
+  inviteMeta,
+  inviteNote,
+  makeLabel,
   nameError,
   refusalTitle,
   removeSheet,
@@ -35,6 +42,8 @@ import {
   sideShape,
   stepLine,
   textFieldOf,
+  editOf,
+  crewPatch,
 } from '../lib/crewsScreens'
 
 const DAY = 24 * 60 * 60 * 1000
@@ -112,18 +121,58 @@ describe('making a crew', () => {
     expect(intentChoice([])).toBeNull()
   })
 
+  it('writes the invite card the way board 03 A does: who asked, the crew in one line, the days left', () => {
+    const now = Date.parse('2026-11-13T12:00:00Z')
+    const inv = (over: Partial<CrewInvite> = {}): CrewInvite => ({
+      crewId: 'c',
+      name: 'Nebula',
+      bio: null,
+      emblemSeed: 's',
+      tags: [{ slug: 'gig-goers', label: 'Gig goers' }, { slug: 'foodies', label: 'Foodies' }],
+      size: 4,
+      invitedBy: 'Priya',
+      invitedAt: new Date(now - DAY).toISOString(),
+      expiresAt: new Date(now + 13 * DAY).toISOString(),
+      ...over,
+    })
+    expect(askedYouIn('प्रियंका')).toBe('प्रियंका asked you in')
+    // Hashtags (board crews/tags/01 · Invite card): an old slug's label with its spaces closed up.
+    expect(inviteMeta(inv())).toBe('Crew of 4 · #Giggoers · #Foodies')
+    expect(inviteMeta(inv({ tags: [] }))).toBe('Crew of 4')
+    // The first three, then "+N": one centred line.
+    const five = ['sundayrunclub', 'कैफ़ेहॉपिंग', 'chai🍵', 'dosaafter', 'latenight'].map((t) => ({ slug: t, label: t }))
+    expect(inviteMeta(inv({ size: 25, tags: five }))).toBe('Crew of 25 · #sundayrunclub · #कैफ़ेहॉपिंग · #chai🍵 · +2')
+    // Control: three exactly is all three, no "+0".
+    expect(inviteMeta(inv({ tags: five.slice(0, 3) }))).toBe('Crew of 4 · #sundayrunclub · #कैफ़ेहॉपिंग · #chai🍵')
+    expect(inviteNote(inv(), now)).toBe('Open for 13 more days · Priya isn’t told if you say not now')
+    // Part of a day left is a day: never "0 more days".
+    expect(inviteNote(inv({ expiresAt: new Date(now + 2 * 60 * 60 * 1000).toISOString() }), now)).toBe('Open for 1 more day · Priya isn’t told if you say not now')
+    expect(inviteNote(inv({ expiresAt: new Date(now + 12.5 * DAY).toISOString() }), now)).toMatch(/^Open for 13 more days/)
+    // The server's expiresAt is the clock, not invitedAt + 14 (a shorter TTL is told as it is).
+    expect(inviteNote(inv({ invitedAt: new Date(now - 10 * DAY).toISOString(), expiresAt: new Date(now + 2 * DAY).toISOString() }), now)).toMatch(/^Open for 2 more days/)
+    // An older server sends no expiresAt: 14 days from the invite.
+    expect(inviteNote(inv({ expiresAt: undefined, invitedAt: new Date(now - 4 * DAY).toISOString() }), now)).toMatch(/^Open for 10 more days/)
+    // Past it, or unreadable: no days are claimed.
+    expect(inviteNote(inv({ expiresAt: new Date(now - 1000).toISOString() }), now)).toBe('Priya isn’t told if you say not now')
+    expect(inviteNote(inv({ expiresAt: 'soon', invitedAt: 'never' }), now)).toBe('Priya isn’t told if you say not now')
+  })
+
   it('writes the intent as a line, or nothing', () => {
     expect(intentLine(['friendship', 'dating'])).toBe('Friendship · Dating')
     expect(intentLine([])).toBeUndefined()
   })
 
-  it('writes the step and the summary the way the frames do', () => {
-    expect(stepLine(1)).toBe('1 of 3 · Name and vibe')
-    expect(stepLine(3)).toBe('3 of 3 · Consent')
-    expect(makeSummary({ invited: 3, intent: ['friendship'], tags: ['Dance floor', 'Techno heads'] })).toBe(
-      '3 invited · Friendship · Dance floor, Techno heads'
-    )
-    expect(makeSummary({ invited: 1, intent: [], tags: [] })).toBe('1 invited')
+  it('writes the step and the Make button the way board 02 A does', () => {
+    expect(stepLine(1)).toBe('1 of 2 · Name and friends')
+    expect(stepLine(2)).toBe('2 of 2 · Your crew’s vibe')
+    expect(makeLabel('Nebula', 3)).toBe('Make Nebula · ask 3 friends')
+    expect(makeLabel('Nebula', 1)).toBe('Make Nebula · ask 1 friend')
+    // A long name never pushes "ask 3 friends" off the button: the crew is named "the crew" there.
+    expect(makeLabel('Indiranagar Sunrise Run Club Cre', 3)).toBe('Make the crew · ask 3 friends')
+    // Twelve characters is the last that is named; an emoji is one (the server's char_length).
+    expect(crewVerb('Join', 'Twelve chars')).toBe('Join Twelve chars')
+    expect(crewVerb('Join', 'Thirteen char')).toBe('Join the crew')
+    expect(crewVerb('Join', 'यार टोली')).toBe('Join यार टोली')
     expect(madeLine(3)).toBe('Your crew. 3 invited; it starts when someone joins.')
     expect(madeLine(0)).toBe('Your crew.')
   })
@@ -137,6 +186,12 @@ describe('making a crew', () => {
     // Contact details are about whichever field held them: without a field it is the form's, not the bio's.
     expect(textFieldOf('A phone number. A crew card is shown to people you haven’t met, so contact details can’t go on it.')).toBeNull()
     expect(textFieldOf('You can own up to 3 crews at a time.')).toBeNull()
+    // Tags (admin #981): moderation names `tags`, a validation error `tags.0`; the sentence alone says "a crew’s tag".
+    expect(textFieldOf('This can’t be a crew’s tag.')).toBe('tags')
+    expect(textFieldOf('Anything', 'tags')).toBe('tags')
+    expect(textFieldOf('A tag is 1–24 letters, numbers, _ or emoji — no links, @ or contact details', 'tags.2')).toBe('tags')
+    // Control: a field the form has no place for is not filed under one.
+    expect(textFieldOf('Anything', 'tagsx')).toBeNull()
   })
 })
 
@@ -172,14 +227,48 @@ describe('leaving and removing', () => {
     expect(leaveSheet({ name: 'Nebula', size: 4 }).message).toContain('Nobody is told you left')
   })
 
-  // Drive 7 (YOU-14, D-L16): an owner leaving gave no consequence. Negative control: the member's words fail it.
-  it('an owner leaving a crew that carries on is told where it goes', () => {
-    const owner = { name: 'Nebula', size: 4, you: { role: 'owner' as const, keepMeAnonymous: false } }
-    expect(leaveSheet(owner).message).toBe('You leave the crew and its chat. It passes to whoever has been in it longest, who can then edit it and invite people.')
-    expect(leaveSheet(owner).action).toBe('Leave crew')
-    // A crew of two closes, owner or not.
-    expect(leaveSheet({ ...owner, size: 2 }).action).toBe('Leave and close the crew')
-    expect(leaveSheet({ ...owner, you: { role: 'member', keepMeAnonymous: false } }).message).toContain('Nobody is told you left')
+  // Crews 5A (board 06-leave, A · owner): the owner's two doors. The owner of a crew that carries on no longer gets the member's
+  // Leave sheet; a crew of two still closes, owner or not. Negative control: the member's words fail the owner's.
+  const at = (userId: string, name: string, role: 'owner' | 'member', joinedAt: string) => ({ userId, isFriend: true, name, photo: null, role, joinedAt })
+  const owned = {
+    name: 'Nebula',
+    size: 4,
+    you: { role: 'owner' as const, keepMeAnonymous: false },
+    members: [
+      at('me', 'Sam', 'owner', '2026-10-01T10:00:00Z'),
+      at('rh_kabir', 'Kabir', 'member', '2026-10-05T10:00:00Z'),
+      at('rh_priya', 'Priya', 'member', '2026-10-02T10:00:00Z'),
+      at('rh_arjun', 'Arjun', 'member', '2026-10-03T10:00:00Z'),
+    ],
+  }
+
+  it('the owner’s heir is the member who joined first, never the owner', () => {
+    expect(heirOf(owned)?.name).toBe('Priya')
+    expect(heirOf({ members: [at('me', 'Sam', 'owner', '2026-09-01T10:00:00Z')] })).toBeNull()
+  })
+
+  it('the owner gets two doors, each saying what happens to the others', () => {
+    expect(ownerSheet(owned)).toEqual({ title: 'Nebula', message: 'You own this crew.', leave: 'Leave — Priya takes it over', end: 'End the crew for everyone' })
+    // Nobody listed to hand it to (kept apart from the owner): the door still says it passes on, unnamed.
+    expect(ownerSheet({ ...owned, members: owned.members.slice(0, 1) }).leave).toBe('Leave — it passes on')
+    // A crew of two: nobody takes it over, leaving closes it (today's words); End is still there.
+    expect(ownerSheet({ ...owned, size: 2 })).toMatchObject({ leave: 'Leave and close the crew', end: 'End the crew for everyone' })
+  })
+
+  it('ending says exactly what ends, and that nobody is told', () => {
+    expect(endSheet(owned)).toEqual({
+      title: 'End Nebula?',
+      message:
+        'The crew and its chat close for all 4 of you, and the chat can’t be opened again. Its invites are cancelled and open Mixes close. Your friendships stay. Nobody is notified. This can’t be undone.',
+      action: 'End Nebula',
+    })
+    // Driven on 62d563a0: "for all 2 of you" read badly.
+    expect(endSheet({ ...owned, size: 2 }).message).toMatch(/^The crew and its chat close for both of you, /)
+    expect(endSheet({ ...owned, size: 1 }).message).toMatch(/^The crew and its chat close for you, /)
+  })
+
+  it('a member’s words are unchanged', () => {
+    expect(leaveSheet({ name: 'Nebula', size: 4 }).message).toContain('Nobody is told you left')
   })
 
   it('removing a member names them, and says they are not told who did it', () => {
@@ -190,7 +279,7 @@ describe('leaving and removing', () => {
   })
 })
 
-describe('a Blend', () => {
+describe('a Mix', () => {
   const side = (over: Partial<BlendSide>): BlendSide => ({
     kind: 'crew',
     crewId: 'c',
@@ -242,10 +331,10 @@ describe('a Blend', () => {
 
   it('reads the closing time on the phone’s own clock', () => {
     const at = (h: number, m = 0) => new Date(2026, 9, 18, h, m).toISOString()
-    expect(closesAtLine(at(4))).toBe('This Blend closes at 4 am')
-    expect(closesAtLine(at(0))).toBe('This Blend closes at 12 am')
-    expect(closesAtLine(at(12, 30))).toBe('This Blend closes at 12:30 pm')
-    expect(closesAtLine(at(23, 5))).toBe('This Blend closes at 11:05 pm')
+    expect(closesAtLine(at(4))).toBe('This Mix closes at 4 am')
+    expect(closesAtLine(at(0))).toBe('This Mix closes at 12 am')
+    expect(closesAtLine(at(12, 30))).toBe('This Mix closes at 12:30 pm')
+    expect(closesAtLine(at(23, 5))).toBe('This Mix closes at 11:05 pm')
     expect(closesAtLine('nope')).toBeNull()
   })
 
@@ -326,5 +415,32 @@ describe('the crew page’s bar', () => {
     expect(crewBarState(CREW_HEAD_HEIGHT)).toBe('scrolled')
     expect(crewBarState(CREW_HEAD_HEIGHT + 1)).toBe('condensed')
     expect(crewBarState(-40)).toBe('rest')
+  })
+})
+
+describe('Edit crew’s tags (free hashtags)', () => {
+  const crew = {
+    name: 'Nebula',
+    bio: null,
+    intent: ['friendship'],
+    tags: [{ slug: 'quiz-team', label: 'Quiz team' }, { slug: 'sundayrunclub', label: 'SundayRunClub' }],
+    openToSolo: false,
+  } as never
+
+  it('starts from the tags as drawn, and an untouched set is not sent', () => {
+    const edit = editOf(crew)
+    expect(edit.tags).toEqual(['Quizteam', 'SundayRunClub'])
+    expect(crewPatch(crew, edit)).toBeNull()
+  })
+
+  it('a removed or added tag sends the whole set, as typed', () => {
+    const edit = editOf(crew)
+    expect(crewPatch(crew, { ...edit, tags: ['SundayRunClub'] })).toEqual({ tags: ['SundayRunClub'] })
+    expect(crewPatch(crew, { ...edit, tags: [...edit.tags, 'chai🍵'] })).toEqual({ tags: ['Quizteam', 'SundayRunClub', 'chai🍵'] })
+  })
+
+  it('a reorder alone is not a change', () => {
+    const edit = editOf(crew)
+    expect(crewPatch(crew, { ...edit, tags: [...edit.tags].reverse() })).toBeNull()
   })
 })

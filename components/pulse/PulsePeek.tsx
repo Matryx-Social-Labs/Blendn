@@ -2,10 +2,12 @@ import { EventCard, type EventCardKind } from '../ds/EventCard'
 import { LongPressMenu, type MenuItem } from '../ds/ContextMenu'
 import type { Rect } from '../ds/chatShared'
 import type { BlendnEvent } from '../../lib/api'
+import type { DistanceShown } from '../../lib/placesPane'
 import { homeCardProps } from '../../lib/pulse'
 import { peekActions, type PeekAction } from '../../lib/pulsePeek'
 
-export type Peek = { event: BlendnEvent; anchor: Rect; kind: EventCardKind }
+/** `layout`: the row's own layout, so a held search result lifts as itself (board "C · search"). */
+export type Peek = { event: BlendnEvent; anchor: Rect; kind: EventCardKind; layout?: 'result' }
 
 const ITEM: Record<PeekAction, Pick<MenuItem, 'icon' | 'label'>> = {
   save: { icon: 'bookmark', label: 'Save' },
@@ -36,7 +38,7 @@ export function PulsePeek({
 }: {
   peek: Peek | null
   now: number
-  withDistance: boolean
+  withDistance: DistanceShown
   interested: boolean
   checkedIn: boolean
   withinFence: boolean
@@ -57,6 +59,7 @@ export function PulsePeek({
       {card && peek ? (
         <EventCard
           kind={peek.kind}
+          layout={peek.layout}
           title={card.title}
           time={card.time}
           venue={card.venue}

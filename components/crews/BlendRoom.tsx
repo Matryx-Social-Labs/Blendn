@@ -34,7 +34,8 @@ import { Button } from '../ds/Button'
 import { Creature, creatureFor } from '../ds/Creature'
 import { CrewEmblem, EMBLEM_SQUIRCLE } from '../ds/CrewEmblem'
 import { RevealSheet, RevealSide } from '../ds/RevealSheet'
-import { CONTROL_FONT_CAP, font, useBoldText } from '../ds/shared'
+import { announceOutcome, CONTROL_FONT_CAP, font, useAnnounced, useBoldText } from '../ds/shared'
+import { swapIn } from '../motion/presence'
 import { Icon } from '../ui/Icon'
 import { useToast } from '../Toast'
 import { OverflowMenu } from './OverflowMenu'
@@ -164,6 +165,8 @@ export function useBlendRoom(blendId: string | null, top: number): BlendRoomChro
    */
   const typing = useKeyboardShown()
 
+  // Said once as the closing line appears (M24); a hook, so above the early return.
+  useAnnounced(blend && closingSoon(blend.closesAt, now) ? closesAtLine(blend.closesAt) : null)
   if (!blendId || !blend) {
     /*
      * The read failed and nothing is known of this Blend (10-11): said, with a way back, never read as "closed". A Blend seen
@@ -172,7 +175,7 @@ export function useBlendRoom(blendId: string | null, top: number): BlendRoomChro
     const unreadable = !!blendId && !gone && loaded && failed
     const bar = unreadable ? (
       <View pointerEvents="box-none" onLayout={(e) => setHeight(e.nativeEvent.layout.height)} style={[styles.bar, { top }]}>
-        <Banner kind="info" text="This Blend didn’t load" action={{ label: 'Try again', onPress: () => void reload() }} testID="blend-unreadable" />
+        <Banner kind="info" text="This Mix didn’t load" action={{ label: 'Try again', onPress: () => void reload() }} testID="blend-unreadable" />
       </View>
     ) : null
     // A Blend you were in and that has closed keeps its name in the header ("Blend with Crew Y"), never "Event chat" (rc7).
@@ -197,6 +200,8 @@ export function useBlendRoom(blendId: string | null, top: number): BlendRoomChro
     setAsking(false)
     if (!result.success) return showToast(crewMessage(result, 'blend', 'Couldn’t reveal. Try again.'), 'error', { haptic: 'error' })
     H.success()
+    // The faces change in place (M24); on Android the side's status line is read where it is.
+    announceOutcome('You revealed your name.')
     if (myId) rememberReveal(myId, blend.blendId)
     // No toast: its "N revealed · M keep it private" needs the server's counts, which do not exist yet.
     void reload()
@@ -207,7 +212,7 @@ export function useBlendRoom(blendId: string | null, top: number): BlendRoomChro
       kind: 'actions',
       hue: 'rose',
       icon: 'log-out',
-      title: 'Leave this Blend?',
+      title: 'Leave this Mix?',
       message: 'Only you leave — it goes on for everyone else, and it leaves your Banter.',
       actions: [
         {
@@ -223,7 +228,7 @@ export function useBlendRoom(blendId: string | null, top: number): BlendRoomChro
             markRoomLeft(blend.chatGroupId)
             markCoachUsed('blend_first_open')
             router.dismissTo('/(tabs)/chat')
-            return { ok: true, toast: 'You left the Blend' }
+            return { ok: true, toast: 'You left the Mix' }
           },
         },
         { label: 'Cancel', cancel: true },
@@ -239,7 +244,7 @@ export function useBlendRoom(blendId: string | null, top: number): BlendRoomChro
       icon: 'ban',
       title: `Block ${who}?`,
       message:
-        'You won’t see each other here or anywhere else on Blend’n, and the Blend goes on for everyone else. They aren’t told. To report something said, long-press the message in the chat.',
+        'You won’t see each other here or anywhere else on Blend’n, and the Mix goes on for everyone else. They aren’t told. To report something said, long-press the message in the chat.',
       actions: [
         {
           label: 'Block',
@@ -292,8 +297,9 @@ export function useBlendRoom(blendId: string | null, top: number): BlendRoomChro
         </Text>
       ) : null}
       {coach.visible && !typing ? (
-        // "Got it" and Leave take it away with a fade (200 under Reduce Motion); the feed's top inset follows its height a frame later.
-        <Animated.View style={styles.card} testID="blend-first-open" exiting={cardOut}>
+        // "Got it" and Leave take it away with a fade (200 under Reduce Motion), and it fades back when typing stops (motion audit
+        // M27); the feed's top inset follows its height a frame later.
+        <Animated.View style={styles.card} testID="blend-first-open" entering={swapIn} exiting={cardOut}>
           <View style={styles.well}>
             <Icon name="users" size={ICON.nav} />
           </View>
@@ -327,7 +333,7 @@ export function useBlendRoom(blendId: string | null, top: number): BlendRoomChro
           onClose={() => setMenu(false)}
           items={[
             ...(theirs?.people.length ? [{ icon: 'ban' as const, label: 'Block someone', onPress: pickToBlock }] : []),
-            { icon: 'log-out', label: 'Leave this Blend', onPress: leave, destructive: true },
+            { icon: 'log-out', label: 'Leave this Mix', onPress: leave, destructive: true },
           ]}
         />
         <RevealSheet visible={asking} onClose={() => setAsking(false)} crew={crewName} onReveal={() => void reveal()} revealing={revealing} />

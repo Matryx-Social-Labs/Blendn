@@ -1,25 +1,29 @@
 import { ScreenProfiler } from '../lib/perf'
+import { googleSignInConfig } from '../lib/googleConfig'
 import {
   GoogleSignin,
   statusCodes
 } from '@react-native-google-signin/google-signin'
 import * as AppleAuthentication from 'expo-apple-authentication'
-import { router } from 'expo-router'
+import { router, useIsFocused, usePathname } from 'expo-router'
 import React, { useEffect, useRef, useState } from 'react'
 import { Platform, StyleSheet, Text, View, useWindowDimensions } from 'react-native'
-import Animated from 'react-native-reanimated'
+import Animated, { useAnimatedStyle, useDerivedValue } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { currentDeviceInfo } from '../components/onboarding/authForm'
 import { Backdrop, ORB_LEVEL } from '../components/onboarding/Backdrop'
+import type { Shelf } from '../components/onboarding/GalaxyBackdrop'
 import { Dock } from '../components/ds/Dock'
 import { GoogleMark } from '../components/onboarding/GoogleMark'
-import { Lockup } from '../components/onboarding/Lockup'
+import { Lockup, LOCKUP_HEIGHT } from '../components/onboarding/Lockup'
+import { emailSheet, handover, lockupShown, setLandingUnder } from '../lib/emailSheet'
 import { useSettleIn } from '../components/onboarding/useSettleIn'
 import FadeInUp from '../components/motion/FadeInUp'
+import { bannerFadeIn, bannerOut } from '../components/motion/presence'
 import ScalePress from '../components/motion/ScalePress'
 import { DiscMark } from '../components/ds/DiscMark'
 import { Spinner } from '../components/ds/Loader'
-import { font, PRESSED_WASH, useBoldText, useLargeText } from '../components/ds/shared'
+import { font, PRESSED_WASH, useBoldText, useLargeText, useAnnounced } from '../components/ds/shared'
 import { Icon } from '../components/ui/Icon'
 import { LegalLine } from '../components/LegalLine'
 import { Logger } from '../lib/logger'
@@ -27,7 +31,7 @@ import { COLOR, DURATION, FONT_FAMILY, ICON, MAX_FONT_SCALE, PRESS, RADIUS, RISE
 import { H } from '../lib/haptics'
 import { OPACITY } from '../lib/theme'
 import { setAccountState, useAccountState } from '../lib/accountState'
-import { pendingEventLink } from '../lib/pendingRoute'
+import { pendingEventId, pendingEventLink } from '../lib/pendingRoute'
 import { accountRefusalOf, SESSION_END_NOTICE } from '../lib/sessionEnd'
 import { consumeSessionEnd } from '../lib/sessionEvents'
 import { socialSignInMessage } from '../lib/signInRefusal'
@@ -67,6 +71,31 @@ function IndexInner() {
   const window = useWindowDimensions()
   const settle = useSettleIn()
   /*
+   * The sky turns until they sign in or sign up (owner, 2026-11-03), and on under the email sheet, which is drawn over
+   * this screen rather than in its place (Flow 1c, option C, 2026-11-04). Any other screen over it holds it.
+   */
+  const focused = useIsFocused()
+  const pathname = usePathname()
+  const underSheet = pathname === '/sign-in' || pathname === '/forgot-password'
+  /*
+   * The handover to the sheet (lib/emailSheet): the tagline and the Dock leave as it grows out of the Dock, the lockup as
+   * its edge comes up to it. The Dock's height is what it grows from.
+   */
+  const sheet = emailSheet()
+  const [dockHeight, setDockHeight] = useState(0)
+  useEffect(() => {
+    if (dockHeight > 0) setLandingUnder({ dockHeight })
+  }, [dockHeight])
+  useEffect(() => () => setLandingUnder(null), [])
+  const lockupBottom = window.height * (largeText ? LOCKUP_TOP_LARGE : LOCKUP_TOP) + LOCKUP_HEIGHT.landing
+  const lockupFade = useAnimatedStyle(() => ({ opacity: lockupShown(sheet.top.get(), lockupBottom) }))
+  const taglineFade = useAnimatedStyle(() => ({ opacity: handover(sheet.progress.get()).tagline }))
+  const dockFade = useAnimatedStyle(() => ({ opacity: handover(sheet.progress.get()).dock }))
+  // The ink shelf is the tagline's: it goes with it.
+  const shelfFade = useDerivedValue(() => handover(sheet.progress.get()).tagline)
+  /** The tagline's box, for the ink shelf the sky draws behind it (Flow 1b: a star crossing the words stays at AA). */
+  const [shelf, setShelf] = useState<Shelf | null>(null)
+  /*
    * Which provider is in flight, not just whether one is. With one boolean,
    * tapping Apple put Google's button into its spinner — the wrong button
    * said it was working. Every way in is still off while either runs.
@@ -83,11 +112,7 @@ function IndexInner() {
 
   useEffect(() => {
     // Configure Google Sign In once
-    GoogleSignin.configure({
-      webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || '',
-      iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID || '',
-      offlineAccess: true,
-    })
+    GoogleSignin.configure(googleSignInConfig())
   }, [])
 
   useEffect(() => {
@@ -103,6 +128,7 @@ function IndexInner() {
    * explanation. Same slot as a sign-in failure — it is the same kind of news.
    */
   const [notice, setNotice] = useState<string | null>(null)
+  useAnnounced(error || notice)
   useEffect(() => {
     if (user || loading || unreachable) return
     consumeSessionEnd().then((end) => {
@@ -171,6 +197,8 @@ function IndexInner() {
           return
         }
 
+        // The server's yes, once (readme #97); a refusal above played its H.error.
+        H.success()
         Logger.info('auth', 'Google Sign In successful', { isNewUser: result.isNewUser })
 
         // Where a new account goes is decided in `app/_layout.tsx`, which
@@ -238,6 +266,7 @@ function IndexInner() {
         return
       }
 
+      H.success()
       Logger.info('auth', 'Apple Sign In successful', { isNewUser: result.isNewUser })
 
       // Same as Google above: the layout effect routes new accounts.
@@ -287,13 +316,14 @@ function IndexInner() {
 
   /*
    * Auth is still resolving: the mark alone, for the frame or two the root layout takes to decide where to send
-   * them, on the orbs. Authenticated is the same frame, held so nothing flashes on the way out.
+   * them, on what the landing's collision leaves. Authenticated is the same frame, held so nothing flashes on the way out.
    */
   if (loading || user) {
     return (
       <View style={styles.root}>
         <Backdrop level={ORB_LEVEL.landing} />
         <View
+          accessible
           testID="auth-resolving"
           accessibilityRole="progressbar"
           accessibilityLabel="Loading"
@@ -307,8 +337,8 @@ function IndexInner() {
   }
 
   /*
-   * Signed out: the orbs as the hero, the lockup and its line, the ways in on a glass dock. The brand colour arrives
-   * through the mark and the orbs rather than through a button, because Google's mark has to sit on Google's chrome and
+   * Signed out: two galaxies colliding as the hero (Flow 1b), the lockup and its line, the ways in on a glass dock. The
+   * brand colour arrives through the mark and the sky rather than through a button, because Google's mark has to sit on Google's chrome and
    * Apple's button is Apple's.
    */
   const google = signingIn === 'google'
@@ -318,43 +348,51 @@ function IndexInner() {
   const rise = (index: number) => ({ delay: ENTRANCE_AT + index * STAGGER.loose, distance: RISE.message, duration: DURATION.medium })
 
   return (
-    <View style={styles.root}>
-      <Backdrop level={ORB_LEVEL.landing} enter />
+    <View
+      testID="landing-root"
+      style={styles.root}
+      // Under the sheet the form is the screen: a screen reader stays on it.
+      accessibilityElementsHidden={underSheet}
+      importantForAccessibility={underSheet ? 'no-hide-descendants' : 'auto'}
+    >
+      <Backdrop level={ORB_LEVEL.landing} enter shelf={shelf} shelfFade={shelfFade} paused={!focused && !underSheet} />
 
       {/* A link tapped while signed out is held through sign-in; say so (Flow 15 15.12 02). */}
       {pendingEventLink() ? (
         <View style={[styles.held, { top: insets.top + SPACE.md }]}>
-          <HeldLink />
+          <HeldLink eventId={pendingEventId()} />
         </View>
       ) : null}
 
       <Animated.View style={[styles.brand, { paddingTop: window.height * (largeText ? LOCKUP_TOP_LARGE : LOCKUP_TOP) }, settle]} testID="landing-brand">
-        <Lockup size="landing" testID="landing-lockup" />
-        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.tagline]}>
+        <Animated.View style={lockupFade}>
+          <Lockup size="landing" testID="landing-lockup" />
+        </Animated.View>
+        <Animated.Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.tagline, taglineFade]} onLayout={(e) => setShelf(e.nativeEvent.layout)}>
           Same place. Same vibe. Instant connections.
-        </Text>
+        </Animated.Text>
         {/* Whose invite is waiting, when an invite link brought them here. */}
         <PendingInvite />
       </Animated.View>
 
-      <Dock gap={SPACE.md} testID="landing-dock">
+      <Animated.View style={dockFade} pointerEvents={underSheet ? 'none' : 'auto'}>
+      <Dock gap={SPACE.md} testID="landing-dock" onHeight={setDockHeight}>
         {/*
-          * Announced to screen readers as an alert, so someone mid-gesture is
-          * told rather than left waiting. A toast would auto-dismiss and be
-          * missed entirely.
+          * Said to screen readers as it arrives (`useAnnounced`, the live region on Android), so someone mid-gesture is
+          * told rather than left waiting. A toast would auto-dismiss and be missed entirely.
           */}
         {error && (
-          <View style={styles.message}>
+          <Animated.View entering={bannerFadeIn} exiting={bannerOut} style={styles.message}>
             <Icon name="circle-alert" size={ICON.inline} color={COLOR.destructive} />
-            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.errorText]} accessibilityRole="alert">
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.errorText]} accessibilityRole="alert" accessibilityLiveRegion="assertive">
               {error}
             </Text>
-          </View>
+          </Animated.View>
         )}
         {!error && notice && (
-          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.notice]} accessibilityRole="alert">
+          <Animated.Text entering={bannerFadeIn} exiting={bannerOut} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.notice]} accessibilityRole="alert" accessibilityLiveRegion="polite">
             {notice}
-          </Text>
+          </Animated.Text>
         )}
 
         {/*
@@ -449,6 +487,7 @@ function IndexInner() {
           <LegalLine lead="By continuing you" />
         </FadeInUp>
       </Dock>
+      </Animated.View>
     </View>
   )
 }

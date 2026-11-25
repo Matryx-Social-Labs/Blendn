@@ -13,9 +13,13 @@ import {
   type Orientation,
 } from '../../lib/dating'
 import { ChipSet } from '../ds/ChipSet'
-import { font, minTarget, useBoldText, useIncreaseContrast } from '../ds/shared'
+import { font, minTarget, useAnnounced, useBoldText, useIncreaseContrast } from '../ds/shared'
 import { FieldLabel } from '../ds/TextField'
+import { orientationTier, TIER_SEES } from '../../lib/matchingTiers'
+import { WhoSees } from './WhoSees'
+import { Swap } from '../motion/Swap'
 import { COLOR, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
+import { OPACITY } from '../../lib/theme'
 
 /**
  * The five fields matching runs on: intent, work field, and — only when dating
@@ -100,6 +104,8 @@ export interface MatchingFieldsProps {
    * orientation questions it opens are shown (SCRUM-294).
    */
   offerDating: boolean
+  /** `show_orientation` as the profile has it: on, orientation is shown to whoever may see who you are (Tier C), not owner-only. */
+  showOrientation?: boolean
   /**
    * The list of fields of work could not be read (6-3, Edit profile · 04): the heading stands with the failure line under it, and
    * the line is the retry. A heading alone says nothing. Only a host that can retry passes both; onboarding is unchanged.
@@ -108,10 +114,22 @@ export interface MatchingFieldsProps {
   onRetryWorkFields?: () => void
   /** The retry is on its way: the line says so and holds still. */
   workFieldsRetrying?: boolean
+  /**
+   * One half on its own, for Edit profile's rows (Me + settings A 03): `open` is intent and the dating chain under it, `work`
+   * the field of work and its expertise. Omitted, both (onboarding asks them on one page).
+   */
+  part?: 'open' | 'work'
 }
 
-/** D20 (D-M14): the matching chip is seen before a reveal; the free "Job title" field is seen after one. */
-export const WORK_FIELD_HINT = 'On your card, even before you reveal.'
+/** A row's summary of what it holds: "Riso, Jazz, Poutine +2". Null for nothing. */
+export function listLine(labels: readonly string[], shown = 3): string | null {
+  if (!labels.length) return null
+  const rest = labels.length - shown
+  return `${labels.slice(0, shown).join(', ')}${rest > 0 ? ` +${rest}` : ''}`
+}
+
+/** D20 (D-M14, 14.0): the matching chip is Tier B (people you match with, in rooms of 8 or more); the free "Job title" field is seen after a reveal. */
+export const WORK_FIELD_HINT = TIER_SEES.B
 
 /** Edit profile · 04: the failure line under the heading, in the frame's words. */
 export const WORK_FIELDS_FAILED = 'Couldn’t load fields of work. Try again.'
@@ -119,6 +137,8 @@ export const WORK_FIELDS_FAILED = 'Couldn’t load fields of work. Try again.'
 function WorkFieldsFailed({ onRetry, retrying }: { onRetry?: () => void; retrying: boolean }) {
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
+  // Said when the fields fail, and again when a retry fails (M24).
+  useAnnounced(!retrying && WORK_FIELDS_FAILED)
   return (
     <View testID="matching-work-field-failed">
       <FieldLabel text="WHAT DO YOU DO?" bold={bold} contrast={contrast} />
@@ -130,9 +150,9 @@ function WorkFieldsFailed({ onRetry, retrying }: { onRetry?: () => void; retryin
         accessibilityState={{ disabled: !onRetry || retrying, busy: retrying }}
         // The target is the line's own box, a full 44 tall; the slop reaches up and down only, so it never covers the field beside it.
         hitSlop={{ top: SPACE.xs, bottom: SPACE.xs }}
-        style={styles.failed}
+        style={({ pressed }) => [styles.failed, pressed && styles.pressed]}
       >
-        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: contrast ? COLOR.textPrimary : COLOR.textTertiary }]}>{retrying ? 'Trying again…' : WORK_FIELDS_FAILED}</Text>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} accessibilityLiveRegion="polite" style={[font('meta', bold), { color: contrast ? COLOR.textPrimary : COLOR.textTertiary }]}>{retrying ? 'Trying again…' : WORK_FIELDS_FAILED}</Text>
       </Pressable>
     </View>
   )
@@ -152,6 +172,7 @@ export function MatchingFields({
   onChangeInterestedIn,
   afterIntents,
   offerDating,
+  showOrientation = false,
   expertiseOptions,
   expertise = [],
   maxExpertise = DEFAULT_MAX_EXPERTISE,
@@ -159,84 +180,103 @@ export function MatchingFields({
   workFieldsFailed = false,
   onRetryWorkFields,
   workFieldsRetrying = false,
+  part,
 }: MatchingFieldsProps) {
+  const showOpen = part !== 'work'
+  const showWork = part !== 'open'
   const wantsDating = offerDating && intents.includes('dating')
   const offered = offerDating ? INTENTS : INTENTS.filter((intent) => intent.value !== 'dating')
   const askInterestedIn = needsInterestedInPicker(gender, orientations, intents)
 
   return (
     <>
+      {showOpen ? (
+        <>
       {/* The first set sits straight under the card's own label: the gap (`set`) is between sets, not above the first. */}
       <View testID="matching-first-set">
         <ChipSet
-          label="WHAT ARE YOU OPEN TO?"
+          // In a sheet, its title heads the set (ChipSet: omit the label where a control above heads it).
+          label={part ? undefined : 'WHAT ARE YOU OPEN TO?'}
           items={offered.map((intent) => ({ key: intent.value, label: `${intent.label}${intent.hint ? ` · ${intent.hint}` : ''}` }))}
           selection="multi"
           selected={intents}
           onToggle={(value) => onToggleIntent(value as Intent)}
           testID="matching-intents"
         />
+        <WhoSees field="intent" />
       </View>
 
       {afterIntents}
 
-      {wantsDating ? (
-        <>
-          {/*
-            Only here, and only while dating is ticked. `blendn-admin/docs/DESIGN_HANDOFF.md`
-            is explicit: a networking user is never asked their gender.
-          */}
-          <View style={styles.set}>
-            <ChipSet
-              label="YOU ARE"
-              items={GENDERS.map((g) => ({ key: g, label: GENDER_LABELS[g] }))}
-              selection="single"
-              selected={gender ? [gender] : []}
-              onToggle={(value) => onChangeGender(value as Gender)}
-              testID="matching-gender"
-            />
-          </View>
-
-          <View style={styles.set}>
-            {/* Dimmed rather than removed at the cap: the chips you cannot reach are what tell you the limit exists. */}
-            <ChipSet
-              label="YOU IDENTIFY AS"
-              hint="Select all that apply — up to three."
-              items={ORIENTATIONS.map((o) => ({ key: o, label: ORIENTATION_LABELS[o], dimmed: orientationDisabled(orientations, o) }))}
-              selection="multi"
-              selected={orientations}
-              capHint="Up to three"
-              onToggle={(value) => onChangeOrientations(toggleOrientation(orientations, value as Orientation))}
-              testID="matching-orientations"
-            />
-          </View>
-
-          {askInterestedIn ? (
-            // Shown when the pair does not imply a target set — "straight" plus "non-binary", or "queer", which are identities
-            // rather than tables. Without this the server stores nothing and the dating tag never appears, with no explanation.
+      <Swap>
+        {wantsDating ? (
+          <>
+            {/*
+              Only here, and only while dating is ticked. `blendn-admin/docs/DESIGN_HANDOFF.md`
+              is explicit: a networking user is never asked their gender.
+            */}
             <View style={styles.set}>
               <ChipSet
-                label="INTERESTED IN"
+                label="YOU ARE"
                 items={GENDERS.map((g) => ({ key: g, label: GENDER_LABELS[g] }))}
-                selection="multi"
-                selected={interestedIn}
-                onToggle={(value) => {
-                  const g = value as Gender
-                  onChangeInterestedIn(interestedIn.includes(g) ? interestedIn.filter((x) => x !== g) : [...interestedIn, g])
-                }}
-                testID="matching-interested-in"
+                selection="single"
+                selected={gender ? [gender] : []}
+                onToggle={(value) => onChangeGender(value as Gender)}
+                testID="matching-gender"
               />
+              <WhoSees field="gender" />
             </View>
-          ) : null}
+
+            <View style={styles.set}>
+              {/* Dimmed rather than removed at the cap: the chips you cannot reach are what tell you the limit exists. */}
+              <ChipSet
+                label="YOU IDENTIFY AS"
+                hint="Select all that apply — up to three."
+                items={ORIENTATIONS.map((o) => ({ key: o, label: ORIENTATION_LABELS[o], dimmed: orientationDisabled(orientations, o) }))}
+                selection="multi"
+                selected={orientations}
+                capHint="Up to three"
+                onToggle={(value) => onChangeOrientations(toggleOrientation(orientations, value as Orientation))}
+                testID="matching-orientations"
+              />
+              <WhoSees field="orientation" tier={orientationTier(showOrientation)} />
+            </View>
+
+            <Swap>
+              {askInterestedIn ? (
+                // Shown when the pair does not imply a target set — "straight" plus "non-binary", or "queer", which are identities
+                // rather than tables. Without this the server stores nothing and the dating tag never appears, with no explanation.
+                <View style={styles.set}>
+                  <ChipSet
+                    label="INTERESTED IN"
+                    items={GENDERS.map((g) => ({ key: g, label: GENDER_LABELS[g] }))}
+                    selection="multi"
+                    selected={interestedIn}
+                    onToggle={(value) => {
+                      const g = value as Gender
+                      onChangeInterestedIn(interestedIn.includes(g) ? interestedIn.filter((x) => x !== g) : [...interestedIn, g])
+                    }}
+                    testID="matching-interested-in"
+                  />
+                  <WhoSees field="interestedIn" />
+                </View>
+              ) : null}
+            </Swap>
+          </>
+        ) : null}
+      </Swap>
+
         </>
       ) : null}
 
-      <View style={styles.set}>
+      {showWork ? (
+        <>
+      <View style={showOpen ? styles.set : undefined}>
         {workFieldsFailed && workFields.length === 0 ? (
           <WorkFieldsFailed onRetry={onRetryWorkFields} retrying={workFieldsRetrying} />
         ) : (
           <ChipSet
-            label="WHAT DO YOU DO?"
+            label={part ? undefined : 'WHAT DO YOU DO?'}
             // D20: who sees it, beside the job title below, which shows only once you reveal.
             hint={WORK_FIELD_HINT}
             items={workFields.map((f) => ({ key: f.slug, label: f.label }))}
@@ -248,20 +288,24 @@ export function MatchingFields({
         )}
       </View>
 
-      {workField && expertiseOptions?.length && onChangeExpertise ? (
-        <View style={styles.set}>
-          {/* The same rule as interests: the rest dim at the cap and say why, rather than a tap that does nothing. */}
-          <ChipSet
-            label="WHAT KIND?"
-            items={expertiseOptions.map((e) => ({ key: e.slug, label: e.label }))}
-            selection="multi"
-            selected={expertise}
-            max={maxExpertise}
-            capHint={`Up to ${maxExpertise}`}
-            onToggle={(slug) => onChangeExpertise(expertise.includes(slug) ? expertise.filter((x) => x !== slug) : [...expertise, slug])}
-            testID="matching-expertise"
-          />
-        </View>
+      <Swap>
+        {workField && expertiseOptions?.length && onChangeExpertise ? (
+          <View style={styles.set}>
+            {/* The same rule as interests: the rest dim at the cap and say why, rather than a tap that does nothing. */}
+            <ChipSet
+              label="WHAT KIND?"
+              items={expertiseOptions.map((e) => ({ key: e.slug, label: e.label }))}
+              selection="multi"
+              selected={expertise}
+              max={maxExpertise}
+              capHint={`Up to ${maxExpertise}`}
+              onToggle={(slug) => onChangeExpertise(expertise.includes(slug) ? expertise.filter((x) => x !== slug) : [...expertise, slug])}
+              testID="matching-expertise"
+            />
+          </View>
+        ) : null}
+      </Swap>
+        </>
       ) : null}
     </>
   )
@@ -270,4 +314,5 @@ export function MatchingFields({
 const styles = StyleSheet.create({
   set: { marginTop: SPACE.xl },
   failed: { minHeight: minTarget(), justifyContent: 'center' },
+  pressed: { opacity: OPACITY.pressed },
 })

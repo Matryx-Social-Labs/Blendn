@@ -12,7 +12,14 @@ jest.mock('react-native-reanimated', () => {
   // Spies live on the builder itself: imports are hoisted above any top-level const.
   const delay = jest.fn()
   const duration = jest.fn()
-  const builder = { delay: (ms: number) => (delay(ms), builder), duration: (ms: number) => (duration(ms), builder), easing: () => builder, spies: { delay, duration } }
+  const reduceMotion = jest.fn()
+  const builder = {
+    delay: (ms: number) => (delay(ms), builder),
+    duration: (ms: number) => (duration(ms), builder),
+    easing: () => builder,
+    reduceMotion: (mode: string) => (reduceMotion(mode), builder),
+    spies: { delay, duration, reduceMotion },
+  }
   return { ...actual, __esModule: true, FadeIn: builder, useReducedMotion: jest.fn(() => false) }
 })
 
@@ -23,6 +30,7 @@ import { COLOR } from '../lib/design/tokens'
 const { FadeIn } = require('react-native-reanimated')
 const mockDelay: jest.Mock = FadeIn.spies.delay
 const mockDuration: jest.Mock = FadeIn.spies.duration
+const mockReduceMotion: jest.Mock = FadeIn.spies.reduceMotion
 
 describe('<Skeleton>', () => {
   it('is one still block on the design surface, with an entrance after the grace', async () => {
@@ -73,6 +81,27 @@ describe('useSkeletonCrossfade', () => {
     await act(async () => jest.advanceTimersByTime(100))
     await screen.rerender(<Body loading={false} />)
     expect(screen.getByTestId('entering').children.join('')).toBe('none')
+  })
+
+  it('is the arrival only: a row mounted after the crossfade (a list cell scrolled back in, a later page) does not fade', async () => {
+    await render(<Body loading />)
+    await act(async () => jest.advanceTimersByTime(300))
+    await screen.rerender(<Body loading={false} />)
+    expect(screen.getByTestId('entering').children.join('')).toBe('fade')
+    await act(async () => jest.advanceTimersByTime(220))
+    expect(screen.getByTestId('entering').children.join('')).toBe('none')
+    // A second slow load (Try again, a refresh that drew the skeleton) crosses again.
+    await screen.rerender(<Body loading />)
+    await act(async () => jest.advanceTimersByTime(300))
+    await screen.rerender(<Body loading={false} />)
+    expect(screen.getByTestId('entering').children.join('')).toBe('fade')
+  })
+
+  it('keeps its fade under Reduce Motion: Never, since left on System Reanimated skips an entering outright', async () => {
+    const { ReduceMotion } = jest.requireActual('react-native-reanimated')
+    await render(<Body loading />)
+    await act(async () => jest.advanceTimersByTime(300))
+    expect(mockReduceMotion).toHaveBeenCalledWith(ReduceMotion.Never)
   })
 
   it('uses base, and 200 under Reduce Motion', async () => {

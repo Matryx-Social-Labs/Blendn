@@ -10,8 +10,8 @@ import { AccessibilityInfo, Platform, StyleSheet } from 'react-native'
 import * as Reanimated from 'react-native-reanimated'
 
 import { Button } from '../components/ds/Button'
-import { HueProvider, SELECTION, type Hue } from '../components/ds/shared'
-import { COLOR, FONT_FAMILY, MATERIAL, RADIUS, SIZE, SPACE } from '../lib/design/tokens'
+import { GroundProvider, HueProvider, SELECTION, type Ground, type Hue } from '../components/ds/shared'
+import { COLOR, FONT_FAMILY, GRADIENT, MATERIAL, RADIUS, SIZE, SPACE } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 import { OPACITY } from '../lib/theme'
 
@@ -67,21 +67,56 @@ describe('kinds and sizes', () => {
     ['lg', SIZE.primary],
     ['md', SIZE.control],
     ['sm', 36],
+    ['pill', 40],
   ] as const)('%s is %i pt tall', async (size, height) => {
     await draw({ size })
     expect(flat('b').height).toBe(height)
   })
 
+  it('pill is the board’s `.db.sm`: 40 tall, 16 in, hugging its label in control 700, no row-action minimum', async () => {
+    await draw({ size: 'pill' })
+    expect(flat('b')).toMatchObject({ height: 40, paddingHorizontal: SPACE.lg })
+    expect(flat('b').minWidth).toBeUndefined()
+    expect(StyleSheet.flatten(screen.getByText('I’m going').props.style)).toMatchObject({ fontSize: 15, lineHeight: 20, fontFamily: FONT_FAMILY.brand[700] })
+  })
+
   it('primary is the fill gradient with a white label', async () => {
     await draw({ kind: 'primary' })
-    expect(screen.getByTestId('gradient')).toBeTruthy()
+    expect(screen.getByTestId('gradient').props.colors).toBe(GRADIENT.fill.colors)
     expect(StyleSheet.flatten(screen.getByText('I’m going').props.style).color).toBe(COLOR.textOnGradient)
   })
 
-  it('strong is white with an ink label; destructive is destructiveFill, never the text red', async () => {
-    await draw({ kind: 'strong' })
-    expect(flat('b').backgroundColor).toBe(COLOR.textPrimary)
-    expect(StyleSheet.flatten(screen.getByText('I’m going').props.style).color).toBe(COLOR.ink)
+  it('the hero glows (board C `0 8px 22px -6px` rose 55%): iOS casts it from an ink underlay', async () => {
+    await draw({ kind: 'primary' })
+    const glow = flat('b-glow')
+    expect(glow.backgroundColor).toBe(COLOR.ink)
+    // Inset 4 inside the button (its ink never shows as the button presses to 0.97), spread −2: the board's −6 overall.
+    expect(glow).toMatchObject({ top: 4, left: 4, right: 4, bottom: 4 })
+    expect(glow.boxShadow).toEqual([{ offsetX: 0, offsetY: 8, blurRadius: 22, spreadDistance: -2, color: 'rgba(187,85,107,0.55)' }])
+    expect(glow.opacity).toBe(1)
+  })
+
+  it('Android draws the glow as the gradient, blurred, at 35%; it dims with a disabled button', async () => {
+    on('android')
+    Object.defineProperty(Platform, 'Version', { value: 34, configurable: true })
+    await draw({ kind: 'primary', disabled: true })
+    const glow = flat('b-glow')
+    expect(glow.filter).toEqual([{ blur: 11 }])
+    expect(glow.opacity).toBeCloseTo(0.35 * OPACITY.disabled)
+    expect(glow.top).toBe(8 - 22)
+  })
+
+  it('no glow below Android 12 (no blur to draw it with), and none on any other kind', async () => {
+    on('android')
+    Object.defineProperty(Platform, 'Version', { value: 30, configurable: true })
+    await draw({ kind: 'primary' })
+    expect(screen.queryByTestId('b-glow')).toBeNull()
+    on('ios')
+    await draw({ kind: 'lit', size: 'md' })
+    expect(screen.queryByTestId('b-glow')).toBeNull()
+  })
+
+  it('destructive is destructiveFill, never the text red', async () => {
     await draw({ kind: 'destructive' })
     expect(flat('b').backgroundColor).toBe(COLOR.destructiveFill)
   })
@@ -117,7 +152,54 @@ describe('kinds and sizes', () => {
   })
 })
 
-describe('kind lit: a positive action inside a hue world', () => {
+/*
+ * The neutral on a sheet (Me + settings A drive, 2026-11-18): Android's solid sheet is `surface`, and so was the secondary's
+ * fill, so Sign out and Done read as plain text there while iOS drew a pill. The fill now steps one tier up from the ground
+ * it sits on (the board's `.n9neu`: `surface-raised` on a `surface` sheet), and a rim carries the boundary at 3:1 on every
+ * ground (`themeContrast.test.ts`), as the lit rim does for a positive.
+ */
+describe('the neutral reads as a button on every ground', () => {
+  const onGround = (ground: Ground, props: Partial<React.ComponentProps<typeof Button>> = {}) =>
+    render(
+      <GroundProvider value={ground}>
+        <Button label="Sign out" kind="secondary" onPress={jest.fn()} testID="b" {...props} />
+      </GroundProvider>
+    )
+
+  it.each([
+    ['ink', COLOR.surface],
+    ['surface', COLOR.surfaceRaised],
+    ['glass', MATERIAL.fillOnGlass],
+  ] as const)('on %s its fill is %s, never the ground itself', async (ground, fill) => {
+    await onGround(ground)
+    expect(flat('b').backgroundColor).toBe(fill)
+  })
+
+  it('a surface card or an Android sheet: never the surface it sits on (the drive’s bug)', async () => {
+    await onGround('surface')
+    expect(flat('b').backgroundColor).not.toBe(COLOR.surface)
+  })
+
+  it.each(['ink', 'surface', 'glass'] as const)('on %s it carries the 1 pt rim at rest', async (ground) => {
+    await onGround(ground)
+    expect(flat('b-rim')).toMatchObject({ borderWidth: 1, borderColor: COLOR.inputBorder })
+  })
+
+  it('Increase Contrast swaps the rim for the 50% hairline, not a second one', async () => {
+    jest.spyOn(AccessibilityInfo, 'isDarkerSystemColorsEnabled').mockResolvedValue(true)
+    await onGround('surface')
+    await act(async () => {})
+    expect(flat('b-contrast').borderColor).toBe(MATERIAL.hairlineIncreaseContrast)
+    expect(screen.queryByTestId('b-rim')).toBeNull()
+  })
+
+  it.each(['primary', 'lit', 'tertiary', 'destructive'] as const)('control: %s draws no neutral rim', async (kind) => {
+    await onGround('surface', { kind, size: 'md' })
+    expect(screen.queryByTestId('b-rim')).toBeNull()
+  })
+})
+
+describe('kind lit: every positive action, one look (buttons board C, owner 2026-11-17)', () => {
   const HUES: Hue[] = ['ember', 'rose', 'violet']
   const drawLit = (hue: Hue, props: Partial<React.ComponentProps<typeof Button>> = {}) =>
     render(
@@ -126,22 +208,27 @@ describe('kind lit: a positive action inside a hue world', () => {
       </HueProvider>
     )
   const transform = (id: string) => JSON.stringify(flat(id).transform ?? [])
+  const gradients = () => screen.getAllByTestId('gradient', { includeHiddenElements: true }).map((g) => g.props.colors)
 
-  it.each(HUES)('under %s: the fill, the 1 pt rim, a white label and the glyph in the hue are its own', async (hue) => {
+  it.each(HUES)('under %s: the gradient rim, the lit tint inside it 1.5 pt in, a white label and a white glyph (no hue)', async (hue) => {
     await drawLit(hue)
-    expect(flat('b').backgroundColor).toBe(SELECTION[hue].fill)
-    expect(flat('b-rim')).toMatchObject({ borderWidth: 1, borderColor: SELECTION[hue].edge })
+    // The rim is the full gradient; the tint is GRADIENT.lit; the pour is GRADIENT.litPressed. None is the hue.
+    expect(gradients()).toEqual([GRADIENT.fill.colors, GRADIENT.lit.colors, GRADIENT.litPressed.colors])
+    expect(flat('b-lit-inset')).toMatchObject({ top: 1.5, left: 1.5, right: 1.5, bottom: 1.5 })
+    expect(flat('b').backgroundColor).toBe('transparent')
     expect(StyleSheet.flatten(screen.getByText('Accept').props.style).color).toBe(COLOR.textPrimary)
-    expect(JSON.stringify(screen.toJSON())).toContain(SELECTION[hue].glyph)
+    const json = JSON.stringify(screen.toJSON())
+    // (The hue's edge is not checked: violet's is the gradient's own end stop.)
+    for (const tone of [SELECTION[hue].fill, SELECTION[hue].glyph, SELECTION[hue].flare]) expect(json).not.toContain(tone)
   })
 
-  it('uses the flare tokens, one per hue, and the rim is the brand colour', async () => {
-    await drawLit('rose')
-    expect(flat('b-flare').backgroundColor).toBe(COLOR.selectionRoseFlare)
-    expect(flat('b-rim').borderColor).toBe(COLOR.brandRose)
+  it('control: a secondary draws none of it', async () => {
+    await draw({ kind: 'secondary' })
+    expect(screen.queryByTestId('b-lit', { includeHiddenElements: true })).toBeNull()
+    expect(screen.queryAllByTestId('gradient', { includeHiddenElements: true })).toHaveLength(0)
   })
 
-  it('rests with the flare drained, pours it in on press-in over press, and drains it over quick on release', async () => {
+  it('rests with the pour drained, pours litPressed in on press-in over press, and drains it over quick on release', async () => {
     await drawLit('rose')
     expect(flat('b-flare').opacity).toBe(0)
     expect(transform('b-flare')).toContain('-101%')
@@ -156,18 +243,18 @@ describe('kind lit: a positive action inside a hue world', () => {
     expect(transition()).toBe('transform 160ms cubic-bezier(0.2, 0, 0, 1), opacity 160ms cubic-bezier(0.33, 1, 0.68, 1)')
   })
 
-  it('busy holds the flare, and the spinner is the hue’s glyph tone after the 300 ms grace', async () => {
+  it('busy holds the pour, and the spinner is white after the 300 ms grace', async () => {
     jest.useFakeTimers()
     await drawLit('violet', { loading: true })
     expect(flat('b-flare').opacity).toBe(1)
     expect(screen.queryByTestId('b-spinner', { includeHiddenElements: true })).toBeNull()
     await act(async () => jest.advanceTimersByTime(300))
     const arc = StyleSheet.flatten(screen.getByTestId('b-spinner', { includeHiddenElements: true }).props.style)
-    expect(arc.borderTopColor).toBe(COLOR.selectionVioletGlyph)
+    expect(arc.borderTopColor).toBe(COLOR.textPrimary)
     expect(screen.getByTestId('b').props.accessibilityState).toMatchObject({ busy: true })
   })
 
-  it('Reduce Motion: the flare never translates, it crosses over opacity', async () => {
+  it('Reduce Motion: the pour never translates, it crosses over opacity', async () => {
     reduceMotion.mockReturnValue(true)
     await drawLit('rose')
     expect(transform('b-flare')).not.toContain('translateX')
@@ -175,6 +262,11 @@ describe('kind lit: a positive action inside a hue world', () => {
     expect(transform('b-flare')).not.toContain('translateX')
     expect(flat('b-flare').opacity).toBe(1)
     expect(String(StyleSheet.flatten(screen.getByTestId('b-flare').props.jestInlineStyle).transition)).toBe('opacity 160ms cubic-bezier(0.33, 1, 0.68, 1)')
+  })
+
+  it('disabled dims the whole pill to 45%, rim and all', async () => {
+    await drawLit('rose', { disabled: true })
+    expect(flat('b').opacity).toBe(OPACITY.disabled)
   })
 
   it('plays no press haptic unless a page names one', async () => {
@@ -186,10 +278,9 @@ describe('kind lit: a positive action inside a hue world', () => {
     expect(haptics.primary).toHaveBeenCalledTimes(1)
   })
 
-  it('the other kinds draw no flare and no rim', async () => {
+  it('the other kinds draw no pour', async () => {
     await draw({ kind: 'secondary' })
     expect(screen.queryByTestId('b-flare')).toBeNull()
-    expect(screen.queryByTestId('b-rim')).toBeNull()
   })
 
   it('warns once in development that lit is never lg', async () => {
@@ -227,8 +318,8 @@ describe('haptics: only where the page puts one', () => {
     expect(haptics.destructive).toHaveBeenCalledTimes(1)
   })
 
-  it('plays the cue a page names instead of its kind’s own (H.primary on a strong “Use at the door”)', async () => {
-    await draw({ kind: 'strong', pressHaptic: H.primary })
+  it('plays the cue a page names instead of its kind’s own (H.primary on “Use at the door”)', async () => {
+    await draw({ kind: 'secondary', pressHaptic: H.primary })
     await pressIn()
     expect(haptics.primary).toHaveBeenCalledTimes(1)
     await draw({ kind: 'primary', pressHaptic: H.select })
@@ -237,7 +328,7 @@ describe('haptics: only where the page puts one', () => {
     expect(haptics.primary).toHaveBeenCalledTimes(1)
   })
 
-  it.each(['strong', 'secondary', 'tertiary'] as const)('%s is silent', async (kind) => {
+  it.each(['secondary', 'tertiary'] as const)('%s is silent', async (kind) => {
     await draw({ kind })
     await pressIn()
     for (const spy of Object.values(haptics)) expect(spy).not.toHaveBeenCalled()
@@ -288,6 +379,26 @@ describe('states', () => {
     expect(screen.getByText('I’m going')).toBeTruthy()
     await fireEvent.press(b)
     expect(onPress).not.toHaveBeenCalled()
+  })
+
+  it('the label keeps one parent while the spinner comes and goes, so a save that leaves cannot move it (SCRUM-1048)', async () => {
+    jest.useFakeTimers()
+    await draw({ loading: true })
+    /** The host View the label sits in: the one Android would flatten away when it has no opacity. */
+    const holder = () => {
+      let node = screen.getByText('I’m going').parent
+      while (node && node.type !== 'View') node = node.parent
+      if (!node) throw new Error('the label has no View above it')
+      return node
+    }
+    expect(holder().props.collapsable).toBe(false)
+    await act(async () => jest.advanceTimersByTime(300))
+    // Control: this is the view the spinner hides, by opacity, which is what toggles Android's flattening.
+    expect(StyleSheet.flatten(holder().props.style).opacity).toBe(0)
+    expect(holder().props.collapsable).toBe(false)
+    await screen.rerender(<Button label="I’m going" onPress={jest.fn()} testID="b" />)
+    expect(StyleSheet.flatten(holder().props.style).opacity).toBeUndefined()
+    expect(holder().props.collapsable).toBe(false)
   })
 
   it('refused: the destructive border, H.error once at t0, and the shake', async () => {
@@ -375,6 +486,35 @@ describe('a count in the label ("Show {n} places")', () => {
     expect(screen.getByTestId('b').props.accessibilityLiveRegion).toBe('polite')
   })
 
+  it('a unit glued to the number ("Resend in {n}s") is drawn against it, not a word space away', async () => {
+    await render(<Button label="Resend in {n}s" count={30} testID="b" />)
+    const unit = screen.getByText('s')
+    expect(StyleSheet.flatten(unit.props.style).marginLeft).toBe(-SPACE.xs)
+    // A word after a space keeps the row's word space.
+    await render(<Button label="Show {n} places" count={3} testID="b" />)
+    expect(StyleSheet.flatten(screen.getByText('places').props.style).marginLeft).toBeUndefined()
+  })
+
+  it('the sentence keeps the width it first took, so a count losing a digit (10 → 9) moves nothing but the digits', async () => {
+    await render(<Button label="Resend in {n}s" count={30} testID="b" />)
+    const sentence = screen.getByTestId('b-sentence')
+    await act(async () => sentence.props.onLayout({ nativeEvent: { layout: { x: 0, y: 0, width: 118, height: 20 } } }))
+    await screen.rerender(<Button label="Resend in {n}s" count={9} testID="b" />)
+    await act(async () => screen.getByTestId('b-sentence').props.onLayout({ nativeEvent: { layout: { x: 0, y: 0, width: 109, height: 20 } } }))
+    expect(StyleSheet.flatten(screen.getByTestId('b-sentence').props.style).minWidth).toBe(118)
+  })
+
+  it('a count change never plays the label swap: the words stay put while the digits roll', async () => {
+    jest.useFakeTimers()
+    await render(<Button label="Resend in {n}s" count={30} testID="b" />)
+    await screen.rerender(<Button label="Resend in {n}s" count={29} testID="b" />)
+    await act(async () => jest.advanceTimersByTime(1000))
+    const words = screen.getByText('Resend in')
+    // Plain text: not the swap's animated label, so nothing fades or lifts.
+    expect(StyleSheet.flatten(words.props.style).opacity).toBeUndefined()
+    expect(screen.getByTestId('b-count')).toBeTruthy()
+  })
+
   it('without a count the label is a plain label and nothing is a live region', async () => {
     await render(<Button label="Show places" testID="b" />)
     expect(screen.getByTestId('b').props.accessibilityLiveRegion).toBeUndefined()
@@ -427,5 +567,24 @@ describe('the press state is the lit flare’s alone (L3)', () => {
 
   it('a lit press does: its flare pours and drains', async () => {
     expect(await commits('lit')).toBeGreaterThan(0)
+  })
+})
+
+describe('danger (Me + settings A 07): Delete account outlined in red, never filled', () => {
+  it('draws a 1.5 pt destructive rim and a destructive label on no fill', async () => {
+    await render(<Button kind="danger" label="Delete account" onPress={() => {}} testID="del" />)
+    const rim = StyleSheet.flatten(screen.getByTestId('del-rim', { includeHiddenElements: true }).props.style)
+    expect(rim.borderColor).toBe(COLOR.destructive)
+    expect(rim.borderWidth).toBe(1.5)
+    const tree = JSON.stringify(screen.toJSON())
+    // Negative control: kind="destructive" puts destructiveFill in the tree and draws no rim.
+    expect(tree).not.toContain(COLOR.destructiveFill)
+    expect(StyleSheet.flatten(screen.getByText('Delete account').props.style).color).toBe(COLOR.destructive)
+  })
+
+  it('destructive is still the fill, for every other irreversible confirm', async () => {
+    await render(<Button kind="destructive" label="Leave" onPress={() => {}} testID="leave" />)
+    expect(JSON.stringify(screen.toJSON())).toContain(COLOR.destructiveFill)
+    expect(screen.queryByTestId('leave-rim', { includeHiddenElements: true })).toBeNull()
   })
 })

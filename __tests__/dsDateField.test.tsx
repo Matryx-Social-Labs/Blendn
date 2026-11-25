@@ -40,6 +40,11 @@ describe('<DateField>', () => {
     expect(box('year').props.maxLength).toBe(4)
   })
 
+  it('selects a filled box on focus, so typing replaces it instead of being dropped at maxLength (SCRUM-923)', async () => {
+    await render(<Controlled />)
+    for (const name of ['day', 'month', 'year'] as const) expect(box(name).props.selectTextOnFocus).toBe(true)
+  })
+
   it('keeps digits only, and moves focus on when a box is full', async () => {
     const focus = jest.spyOn(TextInput.prototype, 'focus')
     const onChange = jest.fn()

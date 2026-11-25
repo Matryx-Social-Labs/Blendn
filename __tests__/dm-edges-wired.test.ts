@@ -36,7 +36,9 @@ describe('answering a request', () => {
     const src = read('lib/useBanterInbox.ts')
     const at = src.indexOf('Message request ${action}ed')
     const after = src.slice(at, at + 900)
-    expect(after).toContain('loadChats(true, true)')
+    expect(after).toContain('reloadAfterAnswer()')
     expect(after).not.toContain('loadChats(false, true)')
+    // Both branches go past the cache: the page's by `fresh`, the Banter's by `force`.
+    expect(src).toMatch(/reloadAfterAnswer = \(\) =>\s+requestsOnly && user \? loadMessageRequests\(undefined, [^,]+, false, true\) : loadChats\(true, true\)/)
   })
 })

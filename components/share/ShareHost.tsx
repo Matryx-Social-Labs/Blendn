@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Share } from 'react-native'
 
 import { shareText, shareUrl } from '../../lib/shareEvent'
+import { venueTextOnly } from '../../lib/shareLinks'
 import { closeShare, useShareRequest } from '../../lib/shareTray'
 import { openWhatsApp, whatsAppInstalled } from '../../lib/shareWhatsApp'
 import { openStoryCamera, STORY_LINK_COPIED, sweepStoryCaptures } from '../../lib/storyShare'
@@ -14,6 +15,9 @@ import { StoryOptionsSheet } from './StoryOptionsSheet'
 
 /** If the tray's exit never reports, the Story sheet opens anyway after this long. */
 const CHAIN_FALLBACK_MS = 600
+
+/** A venue's Story has no link to copy while its page is not live: the words are copied instead. */
+const STORY_TEXT_COPIED = 'Copied — paste it into your Story'
 
 type Stage = 'tray' | 'handoff' | 'story'
 
@@ -49,8 +53,12 @@ function ShareFlow({ target, shown }: { target: ShareTarget; shown: boolean }) {
   const [whatsApp, setWhatsApp] = useState<boolean | null>(null)
   /** The link went somewhere: what `openShare` resolves with when the tray closes. */
   const went = useRef(false)
-  const text = shareText(target)
-  const url = shareUrl(target)
+  // A venue shared before its page exists is words only: no link that opens the homepage (E12, SYS-04).
+  const textOnly = target.kind === 'venue' ? venueTextOnly(target.name) : null
+  const text = textOnly ?? shareText(target)
+  const url = textOnly ? undefined : shareUrl(target)
+  /** What Copy and the Story copy: the link, or the words when there is no link. */
+  const copyable = url ?? textOnly ?? undefined
 
   useEffect(() => {
     let live = true
@@ -92,8 +100,8 @@ function ShareFlow({ target, shown }: { target: ShareTarget; shown: boolean }) {
   }
 
   const copy = () => {
-    if (!url) return
-    Clipboard.setStringAsync(url).then(
+    if (!copyable) return
+    Clipboard.setStringAsync(copyable).then(
       () => {
         went.current = true
       },
@@ -117,13 +125,13 @@ function ShareFlow({ target, shown }: { target: ShareTarget; shown: boolean }) {
       return
     }
     try {
-      if (url) await Clipboard.setStringAsync(url)
+      if (copyable) await Clipboard.setStringAsync(copyable)
       await openStoryCamera()
       went.current = true
     } catch {
       return closeThenSay("Instagram didn’t open. Try again.", 'error')
     }
-    return closeThenSay(STORY_LINK_COPIED, 'success')
+    return closeThenSay(textOnly ? STORY_TEXT_COPIED : STORY_LINK_COPIED, 'success')
   }
 
   // Mounted once, outside every screen's world: an invite is among people (Add friends, rose), an event or a place is going out (ember).
@@ -133,6 +141,7 @@ function ShareFlow({ target, shown }: { target: ShareTarget; shown: boolean }) {
         visible={shown && stage === 'tray' && whatsApp !== null}
         onClose={finish}
         onDismissed={openStory}
+        linkless={!!textOnly}
         share={target}
         whatsApp={whatsApp ?? true}
         onWhatsApp={() => void whatsAppSend()}

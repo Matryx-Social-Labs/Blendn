@@ -1,18 +1,17 @@
 /*
- * <RevealBar> (guidelines/components/RevealBar.html): the two-sided you / them
- * panel above a DM, on the sheet tier. Each side a face, a name and an eye
- * that says seen or anonymous; under them the one action, "Show them who you
- * are" (white; a sheet confirms it), with "Ask them" beside it. Silent: the
- * sheet that confirms carries the outcome.
+ * <RevealBar> (Flow 5 D-A under the identity model; board `swap-names/`, advisor pick A): the two-sided you / them panel
+ * above a DM, on the sheet tier. Each side a face, a name and an eye line; under them the state's one action, stacked:
+ * Swap names (lit) with what it shows, or "Waiting for them to swap too" with Cancel (quiet).
  */
 import { act, fireEvent, render, screen, within } from '@testing-library/react-native'
 import React from 'react'
 import { AccessibilityInfo, StyleSheet } from 'react-native'
 
-import { RevealBar } from '../components/ds/RevealBar'
+import { RevealBar, SWAP_NOTE } from '../components/ds/RevealBar'
 import { SELECTION } from '../components/ds/shared'
 import { COLOR, MATERIAL, RADIUS } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
+import { isLitControl } from './helpers/lit'
 
 jest.mock('expo-linear-gradient', () => {
   const { View } = jest.requireActual('react-native')
@@ -24,57 +23,55 @@ const YOU = { face: { kind: 'creature', pseudonym: 'Night Cat' } as const, name:
 const THEM = { face: { kind: 'creature', pseudonym: 'Cosmic Panda' } as const, name: 'Cosmic Panda' }
 
 const draw = (props: Partial<React.ComponentProps<typeof RevealBar>> = {}) =>
-  render(<RevealBar state="none" you={YOU} them={THEM} onShow={jest.fn()} onAsk={jest.fn()} testID="r" {...props} />)
+  render(<RevealBar state="none" you={YOU} them={THEM} onSwap={jest.fn()} onCancel={jest.fn()} testID="r" {...props} />)
 
 it('is a radius 24 panel on the sheet tier', async () => {
   await draw()
   expect(flat('r')).toMatchObject({ borderRadius: RADIUS.sheet })
 })
 
-it('anonymous both ways: both sides read, then Show them (lit) and Ask them, silently', async () => {
-  const onShow = jest.fn()
-  const onAsk = jest.fn()
-  const haptics = Object.keys(H).map((k) => jest.spyOn(H, k as keyof typeof H).mockImplementation(() => {}))
-  await draw({ onShow, onAsk })
+it('neither tapped: both sides anonymous, then Swap names (lit) and what a swap shows; no Ask them, no Cancel', async () => {
+  const onSwap = jest.fn()
+  await draw({ onSwap })
   expect(screen.getByLabelText('You, Night Cat, anonymous. Cosmic Panda, anonymous.')).toBeTruthy()
-  const show = screen.getByRole('button', { name: 'Show them who you are' })
-  expect(StyleSheet.flatten(show.props.style).backgroundColor).toBe(SELECTION.ember.fill)
-  const ask = screen.getByRole('button', { name: 'Ask them' })
-  expect(StyleSheet.flatten(ask.props.style).backgroundColor).toBe(MATERIAL.fillOnGlass)
-  await fireEvent(show, 'pressIn')
-  await fireEvent.press(show)
-  await fireEvent.press(ask)
-  expect(onShow).toHaveBeenCalledTimes(1)
-  expect(onAsk).toHaveBeenCalledTimes(1)
-  for (const spy of haptics) expect(spy).not.toHaveBeenCalled()
+  const swap = screen.getByRole('button', { name: 'Swap names' })
+  expect(isLitControl(swap)).toBe(true)
+  expect(screen.getByText(SWAP_NOTE)).toBeTruthy()
+  expect(screen.queryByRole('button', { name: 'Ask them' })).toBeNull()
+  expect(screen.queryByRole('button', { name: /Cancel/ })).toBeNull()
+  await fireEvent.press(swap)
+  expect(onSwap).toHaveBeenCalledTimes(1)
 })
 
-it('you revealed: your side is seen, and it waits with no action', async () => {
-  await draw({ state: 'youOnly', you: { face: { kind: 'photo', uri: 'https://example.com/sam.jpg' }, name: 'Sam' } })
-  expect(screen.getByLabelText('You, Sam, seen. Cosmic Panda, anonymous.')).toBeTruthy()
-  expect(screen.queryByRole('button')).toBeNull()
-  expect(screen.getByText('They can see you. They’ll decide in their own time.')).toBeTruthy()
-})
-
-it('they revealed: their side is seen, and Show them is the one action', async () => {
-  await draw({ state: 'theyOnly', them: { face: { kind: 'photo', uri: 'https://example.com/priya.jpg' }, name: 'Priya' } })
-  expect(screen.getByLabelText('You, Night Cat, anonymous. Priya, seen.')).toBeTruthy()
+it('you tapped: your side says so, still your pseudonym; waiting, and Cancel (quiet) is the one action', async () => {
+  const onCancel = jest.fn()
+  await draw({ state: 'mine', onCancel })
+  expect(screen.getByLabelText('You, Night Cat, tapped. Cosmic Panda, anonymous.')).toBeTruthy()
+  expect(screen.getByText('Waiting for them to swap too')).toBeTruthy()
+  // A screen reader hears what is cancelled, not a bare "Cancel".
+  const cancel = screen.getByRole('button', { name: 'Cancel your swap' })
+  expect(screen.getByText('Cancel')).toBeTruthy()
+  expect(StyleSheet.flatten(cancel.props.style).backgroundColor).toBe(MATERIAL.fillOnGlass)
   expect(screen.getAllByRole('button')).toHaveLength(1)
+  expect(screen.queryByText(SWAP_NOTE)).toBeNull()
+  await fireEvent.press(cancel)
+  expect(onCancel).toHaveBeenCalledTimes(1)
 })
 
-it('asked: a still line in place of the actions', async () => {
-  await draw({ state: 'asked' })
-  expect(screen.queryByRole('button')).toBeNull()
-  expect(screen.getByText('Asked · they’ll decide in their own time')).toBeTruthy()
+it('they tapped: their side and a line say so, and Swap names is the one action', async () => {
+  await draw({ state: 'theirs' })
+  expect(screen.getByLabelText('You, Night Cat, anonymous. Cosmic Panda, wants to swap.')).toBeTruthy()
+  expect(screen.getByText('Cosmic Panda wants to swap names')).toBeTruthy()
+  expect(screen.getAllByRole('button').map((b) => b.props.accessibilityLabel)).toEqual(['Swap names'])
+  expect(screen.getByText(SWAP_NOTE)).toBeTruthy()
 })
 
-it('the actions wrap rather than truncate on a narrow phone; the asked line grows rather than clips', async () => {
-  await draw({ testID: 'r' })
-  expect(flat('r-actions')).toMatchObject({ flexDirection: 'row', flexWrap: 'wrap' })
-  await draw({ state: 'asked', testID: 'r' })
-  const line = screen.getByText('Asked · they’ll decide in their own time')
-  expect(line.props.numberOfLines).toBeUndefined()
-  expect(flat('r-asked').minHeight).toBe(48)
+it('the action is stacked under its line at every size; a refusal is said in place, once', async () => {
+  await draw({ state: 'theirs', error: 'Add a photo to your profile first' })
+  expect(flat('r-actions')).toMatchObject({ flexDirection: 'column' })
+  const err = screen.getByTestId('r-error')
+  expect(err.props.accessibilityLiveRegion).toBe('polite')
+  expect(screen.getByText('Add a photo to your profile first')).toBeTruthy()
 })
 
 it('Increase Contrast: the 50% hairline, the eye line in white', async () => {
@@ -87,8 +84,8 @@ it('Increase Contrast: the 50% hairline, the eye line in white', async () => {
 
 describe('both: the one thing left once you can see each other is to add them (SCRUM-750)', () => {
   const PHOTOS = {
-    you: { face: { kind: 'photo', uri: 'https://example.com/sam.jpg' } as const, name: 'Sam' },
-    them: { face: { kind: 'photo', uri: 'https://example.com/priya.jpg' } as const, name: 'Priya' },
+    you: { face: { kind: 'photo', uri: 'https://example.com/sam.jpg', name: 'Sam' } as const, name: 'Sam' },
+    them: { face: { kind: 'photo', uri: 'https://example.com/priya.jpg', name: 'Priya' } as const, name: 'Priya' },
   }
 
   it('reads both sides as seen, says so, and has a lit small Add friend', async () => {
@@ -97,9 +94,9 @@ describe('both: the one thing left once you can see each other is to add them (S
     expect(screen.getByLabelText('You, Sam, seen. Priya, seen.')).toBeTruthy()
     expect(screen.getByText('You can both see each other')).toBeTruthy()
     const add = screen.getByRole('button', { name: 'Add friend' })
-    expect(StyleSheet.flatten(add.props.style)).toMatchObject({ backgroundColor: SELECTION.ember.fill, height: 36 })
-    expect(screen.queryByRole('button', { name: 'Show them who you are' })).toBeNull()
-    expect(screen.queryByRole('button', { name: 'Ask them' })).toBeNull()
+    expect(StyleSheet.flatten(add.props.style)).toMatchObject({ height: 36 })
+    expect(isLitControl(add)).toBe(true)
+    expect(screen.queryByRole('button', { name: 'Swap names' })).toBeNull()
     await fireEvent.press(add)
     expect(onPress).toHaveBeenCalledTimes(1)
   })
@@ -132,7 +129,7 @@ describe('rc7 D8', () => {
     expect(StyleSheet.flatten(eye.props.style)).toMatchObject({ flexShrink: 1 })
   })
 
-  it('your side before you show yourself reads "You", never "You · anonymous" over an eye that says anonymous', async () => {
+  it('your side with no pseudonym reads "You", never "You · anonymous" over an eye that says anonymous', async () => {
     await draw({ you: { face: { kind: 'creature', pseudonym: 'You' }, name: 'You' } })
     expect(screen.getByText('You', { includeHiddenElements: true })).toBeTruthy()
     expect(screen.queryByText(/You · /, { includeHiddenElements: true })).toBeNull()
@@ -165,4 +162,11 @@ describe('rc8 10d: the eye line at 360 dp', () => {
     const names = screen.getByTestId('r-you-names', { includeHiddenElements: true })
     expect(within(names).getByTestId('r-you-eye', { includeHiddenElements: true })).toBeTruthy()
   })
+})
+
+it('never cuts a long pseudonym: each side name wraps as far as it needs (advisor A, "never truncate")', async () => {
+  const long = 'Luminous Wandering Albatross 999'
+  await draw({ state: 'theirs', them: { face: { kind: 'creature', pseudonym: long }, name: long } })
+  expect(screen.getByText(long).props.numberOfLines).toBeUndefined()
+  expect(screen.getByText('You · Night Cat').props.numberOfLines).toBeUndefined()
 })

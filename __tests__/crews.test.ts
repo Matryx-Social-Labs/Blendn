@@ -9,6 +9,10 @@ import {
   CREW_REMOVED_LINE,
   OPEN_TO_CREWS_HELPER,
   CREW_MAX_TAGS,
+  CREW_TAG_MAX,
+  addTags,
+  normaliseTag,
+  tagText,
   CREW_REPORT_REASONS,
   blendSides,
   blendTitle,
@@ -29,7 +33,6 @@ import {
   nextCrewOffset,
   roomClosedLine,
   roomKindParam,
-  toggleTag,
   type Blend,
   type BlendPerson,
   type BlendSide,
@@ -48,7 +51,7 @@ describe('what a refusal says (code → copy)', () => {
     expect(crewMessage(notFound, 'crew', 'x')).toBe(`${CREW_GONE_LINE}.`)
     expect(crewMessage(notFound, 'join', 'x')).toBe('That invite isn’t open any more.')
     expect(crewMessage(notFound, 'card', 'x')).toBe('That crew isn’t here any more.')
-    expect(crewMessage({ error: 'Blend not found', errorCode: 'NOT_FOUND' }, 'blend', 'x')).toBe(`${BLEND_CLOSED_LINE}.`)
+    expect(crewMessage({ error: 'Mix not found', errorCode: 'NOT_FOUND' }, 'blend', 'x')).toBe(`${BLEND_CLOSED_LINE}.`)
   })
 
   it('a 404 that is a sentence is the server’s sentence (inviting a non-friend on create)', () => {
@@ -62,7 +65,7 @@ describe('what a refusal says (code → copy)', () => {
     )
   })
 
-  it('CHAT_CLOSED in a Blend is the Blend closing', () => {
+  it('CHAT_CLOSED in a Mix is the Mix closing', () => {
     expect(crewMessage({ error: 'This chat has closed', errorCode: 'CHAT_CLOSED' }, 'blend', 'x')).toBe(`${BLEND_CLOSED_LINE}.`)
   })
 
@@ -102,8 +105,8 @@ describe('what a refusal says (code → copy)', () => {
   })
 })
 
-describe('a crew or Blend room that is over', () => {
-  it('a Blend reads closed for a 404, a 403 and CHAT_CLOSED alike — no oracle on why', () => {
+describe('a crew or Mix room that is over', () => {
+  it('a Mix reads closed for a 404, a 403 and CHAT_CLOSED alike — no oracle on why', () => {
     for (const code of ['NOT_FOUND', 'FORBIDDEN', 'CHAT_CLOSED']) expect(roomClosedLine('blend', code)).toBe(BLEND_CLOSED_LINE)
   })
 
@@ -123,8 +126,8 @@ describe('a crew or Blend room that is over', () => {
     expect(roomKindParam('crew')).toBe('crew')
     expect(roomKindParam(undefined)).toBeNull()
     expect(roomKindParam(['blend'])).toBeNull()
-    expect(defaultRoomName('blend')).toBe('Your Blend')
-    expect(defaultRoomName(null)).toBe('Event chat')
+    expect(defaultRoomName('blend')).toBe('Your Mix')
+    expect(defaultRoomName(null)).toBe('The room')
   })
 })
 
@@ -179,21 +182,78 @@ describe('the create body', () => {
     expect(createCrewBody({ ...form, name: '🔥🔥' }, agreed)).not.toHaveProperty('problem')
   })
 
-  it('holds the bio to 140, the tags to 3 and the invites to 11', () => {
+  it('holds the bio to 140, the tags to 5 and the invites to 24 (a crew of 25)', () => {
     expect(createCrewBody({ ...form, bio: 'b'.repeat(141) }, agreed)).toHaveProperty('problem')
-    expect(createCrewBody({ ...form, tags: ['a', 'b', 'c', 'd'] }, agreed)).toHaveProperty('problem')
-    expect(createCrewBody({ ...form, inviteUserIds: Array.from({ length: 12 }, (_, i) => `u${i}`) }, agreed)).toHaveProperty('problem')
-    expect(createCrewBody({ ...form, inviteUserIds: Array.from({ length: 11 }, (_, i) => `u${i}`) }, agreed)).not.toHaveProperty('problem')
+    expect(createCrewBody({ ...form, tags: ['a', 'b', 'c', 'd', 'e', 'f'] }, agreed)).toHaveProperty('problem')
+    // Control: five is the server's MAX_TAGS (admin #981), not a refusal.
+    expect(createCrewBody({ ...form, tags: ['a', 'b', 'c', 'd', 'e'] }, agreed)).not.toHaveProperty('problem')
+    expect(createCrewBody({ ...form, inviteUserIds: Array.from({ length: 25 }, (_, i) => `u${i}`) }, agreed)).toHaveProperty('problem')
+    expect(createCrewBody({ ...form, inviteUserIds: Array.from({ length: 24 }, (_, i) => `u${i}`) }, agreed)).not.toHaveProperty('problem')
+  })
+})
+
+describe('free hashtags (owner pick A, admin #981)', () => {
+  it('holds the server’s limits: 5 tags, 24 characters each', () => {
+    expect(CREW_MAX_TAGS).toBe(5)
+    expect(CREW_TAG_MAX).toBe(24)
   })
 
-  it('a fourth tag does nothing rather than drop the first', () => {
-    const three = ['a', 'b', 'c']
-    expect(toggleTag(three, 'd')).toEqual(three)
-    expect(toggleTag(three, 'b')).toEqual(['a', 'c'])
-    expect(toggleTag(['a'], 'b')).toEqual(['a', 'b'])
-    expect(CREW_MAX_TAGS).toBe(3)
+  it('normalises as the server does: trim, the leading #s stripped, spaces closed up', () => {
+    expect(normaliseTag(' # late night ')).toBe('latenight')
+    expect(normaliseTag('##RunClub')).toBe('RunClub')
+    expect(normaliseTag('कैफ़े हॉपिंग')).toBe('कैफ़ेहॉपिंग')
+    // A # inside a tag is not a leading one: left for the rule to refuse.
+    expect(normaliseTag('a#b')).toBe('a#b')
   })
 
+  it('adds what was typed, as typed, and empties the field', () => {
+    expect(addTags([], '#late night')).toEqual({ tags: ['latenight'], draft: '' })
+    expect(addTags(['a'], 'chai🍵')).toEqual({ tags: ['a', 'chai🍵'], draft: '' })
+  })
+
+  it('a comma splits: each part is its own tag', () => {
+    expect(addTags([], 'runclub, dosa after,')).toEqual({ tags: ['runclub', 'dosaafter'], draft: '' })
+  })
+
+  it('dedupes ignoring case, keeping the first spelling — silently, not a refusal', () => {
+    expect(addTags(['RunClub'], '#runclub')).toEqual({ tags: ['RunClub'], draft: '' })
+    expect(addTags([], 'Foo, FOO')).toEqual({ tags: ['Foo'], draft: '' })
+  })
+
+  it('holds 24 characters as a person counts them: an emoji is one', () => {
+    const t24 = 'a'.repeat(23) + '🍵'
+    expect(addTags([], t24)).toEqual({ tags: [t24], draft: '' })
+    // Control: 25 is refused, and the text stays in the field to fix.
+    const t25 = 'a'.repeat(25)
+    expect(addTags([], t25)).toEqual({ tags: [], draft: t25, problem: expect.stringMatching(/1–24/) })
+  })
+
+  it('refuses a link, an @ or a phone’s + and -, in the server’s words, and keeps the text', () => {
+    for (const bad of ['blendn.app', '@priya', '+91-98', 'a/b', 'x:y']) {
+      expect(addTags(['a'], bad)).toEqual({ tags: ['a'], draft: bad, problem: 'A tag is 1–24 letters, numbers, _ or emoji — no links, @ or contact details' })
+    }
+    // Control: letters in any script, digits, _ and emoji pass.
+    expect(addTags([], 'कैफ़ेहॉपिंग, late_night_2, 🇮🇳, 👍🏽').tags).toEqual(['कैफ़ेहॉपिंग', 'late_night_2', '🇮🇳', '👍🏽'])
+  })
+
+  it('a sixth is not added: the field keeps it and says why', () => {
+    const five = ['a', 'b', 'c', 'd', 'e']
+    expect(addTags(five, 'f')).toEqual({ tags: five, draft: 'f', problem: 'Up to 5 tags' })
+    // Control: the fifth goes in.
+    expect(addTags(five.slice(0, 4), 'e')).toEqual({ tags: five, draft: '' })
+  })
+
+  it('a blank or a lone # adds nothing and says nothing', () => {
+    expect(addTags(['a'], '  # ')).toEqual({ tags: ['a'], draft: '' })
+  })
+
+  it('draws a tag as its label with the spaces closed up, so an old slug reads as a hashtag', () => {
+    expect(tagText({ slug: 'quiz-team', label: 'Quiz team' })).toBe('Quizteam')
+    expect(tagText({ slug: 'sundayrunclub', label: 'SundayRunClub' })).toBe('SundayRunClub')
+  })
+})
+
+describe('crew reports', () => {
   it('reports with exactly the server’s reasons', () => {
     expect(CREW_REPORT_REASONS.map((r) => r.value).sort()).toEqual(
       ['contact_details', 'impersonation', 'offensive', 'other', 'spam'].sort()
@@ -206,7 +266,7 @@ describe('lines', () => {
     expect(hereNowLine({ presentCount: 3, size: 5 })).toBe('Here now · 3 of 5')
   })
 
-  it('the Blend’s clock', () => {
+  it('the Mix’s clock', () => {
     const now = Date.parse('2026-10-09T20:00:00Z')
     expect(closesLine('2026-10-10T05:00:00Z', now)).toBe('Closes in 9h')
     expect(closesLine('2026-10-09T20:25:00Z', now)).toBe('Closes in 25m')
@@ -229,7 +289,7 @@ const side = (over: Partial<BlendSide>): BlendSide => ({
   ...over,
 })
 
-describe('a Blend’s sides', () => {
+describe('a Mix’s sides', () => {
   it('yours is the side with your own id; the title is theirs', () => {
     const blend: Blend = {
       blendId: 'b1',
@@ -241,7 +301,7 @@ describe('a Blend’s sides', () => {
     expect(blendSides(blend, 'me').mine?.name).toBe('Two')
     expect(blendSides(blend, 'me').theirs?.name).toBe('Five')
     // One name on every surface (TG-11): the other side's name as given, never "Crew " before it.
-    expect(blendTitle(blend, 'me')).toBe('Blend with Five')
+    expect(blendTitle(blend, 'me')).toBe('Mix with Five')
     expect(blendTitle({ ...blend, sides: [blend.sides[0], { ...blend.sides[1], name: 'RC4 Crew Y' }] }, 'me')).toBe(blendWith('RC4 Crew Y'))
   })
 
@@ -253,11 +313,11 @@ describe('a Blend’s sides', () => {
       closesAt: '2026-10-10T05:00:00Z',
       sides: [side({ name: 'Two', mine: true, people: [person({ userId: 'me' })] }), side({ kind: 'person', name: null, people: [person({ name })] })],
     })
-    expect(blendTitle(solo(null), 'me')).toBe('Blend with Cosmic Panda')
-    expect(blendTitle(solo('Kavya'), 'me')).toBe('Blend with Kavya')
+    expect(blendTitle(solo(null), 'me')).toBe('Mix with Cosmic Panda')
+    expect(blendTitle(solo('Kavya'), 'me')).toBe('Mix with Kavya')
     const alone: Blend = { ...solo(null), sides: [side({ kind: 'person', name: null, mine: true, people: [person({ userId: 'me' })] }), side({ name: 'Nebula' })] }
-    expect(blendTitle(alone, 'me')).toBe('Blend with Nebula')
-    expect(blendTitle({ ...alone, sides: [alone.sides[0]] }, 'me')).toBe('Your Blend')
+    expect(blendTitle(alone, 'me')).toBe('Mix with Nebula')
+    expect(blendTitle({ ...alone, sides: [alone.sides[0]] }, 'me')).toBe('Your Mix')
   })
 })
 
@@ -287,7 +347,7 @@ describe('the Crews view: paging and liking', () => {
     expect(nextCrewOffset(0, [])).toBe(0)
   })
 
-  it('only a crew with "Room for one more" and 6 or fewer is offered a like of a person', () => {
+  it('only a crew with "Room for one more" and 6 or fewer is offered a like of a person (a kept safety rule, owner 2026-11-14)', () => {
     const here = [
       { crewId: 'open6', name: 'Open six', presentCount: 2 },
       { crewId: 'closed', name: 'Closed', presentCount: 2 },
@@ -324,7 +384,7 @@ describe('pass 2 (review of #369)', () => {
     expect(body).toEqual({ problem: 'Pick at least one friend to ask.' })
   })
 
-  it('M10: a ban closes the room — a Blend as closed, a crew chat as you being out of it', () => {
+  it('M10: a ban closes the room — a Mix as closed, a crew chat as you being out of it', () => {
     expect(roomClosedLine('blend', 'USER_BANNED')).toBe(BLEND_CLOSED_LINE)
     expect(roomClosedLine('crew', 'USER_BANNED')).toBe(CREW_REMOVED_LINE)
   })
@@ -364,7 +424,7 @@ describe('pass 2 (review of #369)', () => {
     expect(OPEN_TO_CREWS_HELPER).not.toMatch(/can see you/)
   })
 
-  it('S5: crew and Blend rooms from GET /chat/groups, and only those', () => {
+  it('S5: crew and Mix rooms from GET /chat/groups, and only those', () => {
     const rows = crewRoomsFrom({
       groups: [{ id: 'e1', kind: 'event' }],
       rooms: [
@@ -380,14 +440,14 @@ describe('pass 2 (review of #369)', () => {
     ])
     expect(rows[0].lastMessage?.user.name).toBe('Ishan')
     expect(rows[0].unreadCount).toBe(2)
-    expect(crewRoomTitle(rows[1])).toBe('Blend · Lot S9 × Nebula S9')
+    expect(crewRoomTitle(rows[1])).toBe('Mix · Lot S9 × Nebula S9')
     expect(crewRoomTitle(rows[0])).toBe('Lot S9')
     expect(crewRoomsFrom({ groups: [] })).toEqual([])
   })
 })
 
 describe('crew pushes land where they mean something, and name nobody', () => {
-  it('H2: a reply in a crew or Blend room opens as that room; an event or venue day reply as an event room', () => {
+  it('H2: a reply in a crew or Mix room opens as that room; an event or venue day reply as an event room', () => {
     expect(notificationTarget({ type: 'group_message', chatGroupId: 'g1', kind: 'blend', blendId: 'b1' })).toEqual({
       pathname: '/chat/[id]',
       params: { id: 'g1', kind: 'blend', blendId: 'b1' },
@@ -400,6 +460,12 @@ describe('crew pushes land where they mean something, and name nobody', () => {
       pathname: '/chat/[id]',
       params: { id: 'g3' },
     })
+  })
+
+  it('ROOM-05: an event room’s push carries the event id, so the room can ask that door for its lock; a crew’s never does', () => {
+    expect(notificationTarget({ type: 'group_message', chatGroupId: 'g3', eventId: 'e9' })).toEqual({ pathname: '/chat/[id]', params: { id: 'g3', eventId: 'e9' } })
+    expect(notificationTarget({ type: 'announcement', chatGroupId: 'g3', eventId: 'e9' })).toEqual({ pathname: '/chat/[id]', params: { id: 'g3', eventId: 'e9' } })
+    expect(notificationTarget({ type: 'group_message', chatGroupId: 'g2', kind: 'crew', crewId: 'c1', eventId: 'e9' })).toEqual({ pathname: '/chat/[id]', params: { id: 'g2', kind: 'crew', crewId: 'c1' } })
   })
 
   it('an invite opens the crews screen', () => {
@@ -418,7 +484,7 @@ describe('crew pushes land where they mean something, and name nobody', () => {
     expect(notificationTarget({ type: 'crew_here', crewId: 'c1' })).toBe('/crews')
   })
 
-  it('a Blend opens its room, as a Blend', () => {
+  it('a Mix opens its room, as a Mix', () => {
     expect(notificationTarget({ type: 'blend', blendId: 'b1', chatGroupId: 'g1' })).toEqual({
       pathname: '/chat/[id]',
       params: { id: 'g1', kind: 'blend', blendId: 'b1' },
@@ -431,7 +497,7 @@ describe('systemPreview (TG-10, S-7)', () => {
   const last = (content: string, type?: string) => ({ content, ...(type ? { type } : null), user: { id: 'u', name: 'Rohan' } })
   it('a system like names who; any other system line is its words; a person’s message is null', () => {
     expect(systemPreview(last('liked Crew Nebula for the crew', 'system'), 'You')).toBe('You liked Crew Nebula for the crew')
-    expect(systemPreview(last('The Blend closed', 'system'), 'Rohan')).toBe('The Blend closed')
+    expect(systemPreview(last('The Mix closed', 'system'), 'Rohan')).toBe('The Mix closed')
     expect(systemPreview(last('liked Crew Nebula for the crew', 'text'), 'You')).toBeNull()
   })
   it('a server with no type falls back to the like’s words', () => {
@@ -443,5 +509,35 @@ describe('systemPreview (TG-10, S-7)', () => {
     const rows = crewRoomsFrom({ rooms: [{ id: 'r', kind: 'crew', lastMessage: { content: 'x', type: 'system', user: { id: 'u' } } }] })
     expect(rows[0].lastMessage?.type).toBe('system')
     expect(crewRoomsFrom({ rooms: [{ id: 'r', kind: 'crew', lastMessage: { content: 'x', user: { id: 'u' } } }] })[0].lastMessage).not.toHaveProperty('type')
+  })
+})
+
+describe('finding an invite past the first page (YOU-11)', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { findInvite, INVITE_LOOKUP_PAGES } = require('../lib/crews')
+  const inv = (crewId: string) => ({ crewId })
+  const page = (ids: string[], next: string | null) => ({ success: true, data: { invites: ids.map(inv), invitesPagination: { hasMore: !!next, nextCursor: next } } })
+
+  it('finds invite #51 on page two', async () => {
+    const load = jest.fn(async (cursor?: string | null) => (cursor ? page(['c51'], null) : page(['c1', 'c2'], 'p2')))
+    expect(await findInvite(load, 'c51')).toMatchObject({ kind: 'found', invite: { crewId: 'c51' } })
+    expect(load).toHaveBeenNthCalledWith(2, 'p2')
+  })
+
+  it('stops when there are no more pages: really not open', async () => {
+    const load = jest.fn(async () => page(['c1'], null))
+    expect(await findInvite(load, 'zzz')).toEqual({ kind: 'notOpen' })
+    expect(load).toHaveBeenCalledTimes(1)
+  })
+
+  it('never reads past the cap (200 invites)', async () => {
+    const load = jest.fn(async () => page(['c1'], 'more'))
+    expect(await findInvite(load, 'zzz')).toEqual({ kind: 'notOpen' })
+    expect(load).toHaveBeenCalledTimes(INVITE_LOOKUP_PAGES)
+  })
+
+  it('a page that fails is a failure, not "not open"', async () => {
+    const load = jest.fn(async (cursor?: string | null) => (cursor ? { success: false } : page(['c1'], 'p2')))
+    expect(await findInvite(load, 'c9')).toEqual({ kind: 'failed' })
   })
 })

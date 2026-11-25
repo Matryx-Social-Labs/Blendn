@@ -61,6 +61,15 @@ export function pendingInviteToken(): string | null {
   return match ? decodeURIComponent(match[1]) : null
 }
 
+/** The token of a crew's link waiting for sign-in (`/c/<token>`, S7), or null. */
+export function pendingCrewToken(): string | null {
+  const match = pendingPath()?.match(/^\/c\/([A-Za-z0-9_-]{1,64})$/)
+  return match ? match[1] : null
+}
+
+/** Whether a path is an invite (a friend's `/f/` or a crew's `/c/`): held until sign-in, and until onboarding is done. */
+export const isInvitePath = (path: string): boolean => path.startsWith('/f/') || path.startsWith('/c/')
+
 /** The held target's path, whichever shape it was held in. */
 function pendingPath(): string | null {
   const target = pending as unknown
@@ -74,11 +83,27 @@ function pendingPath(): string | null {
 
 /**
  * Whether an event's link is waiting for sign-in (Flow 15 15.12 "Sign in to open this"): the landing says a link is held,
- * so the sign-in does not look like it dropped it. The event's name is not asked for: the public link says nothing to
- * someone who has not signed in.
+ * so the sign-in does not look like it dropped it. `pendingEventId` names which event, and `HeldLink` reads its name
+ * and day from the public share read (SYS-15): the link says nothing more to someone who has not signed in.
  */
 export function pendingEventLink(): boolean {
   return /^\/event\//.test(pendingPath() ?? '')
+}
+
+/** The id of the event whose link is waiting for sign-in, or null (a link is held as its path: `/event/<id>`). */
+export function pendingEventId(): string | null {
+  const target = pending as unknown
+  if (target && typeof target === 'object') {
+    const t = target as { pathname?: unknown; params?: { id?: unknown } }
+    if (t.pathname === '/event/[id]' && typeof t.params?.id === 'string') return t.params.id || null
+  }
+  const m = pendingPath()?.match(/^\/event\/([^/?#]+)/)
+  if (!m) return null
+  try {
+    return decodeURIComponent(m[1])
+  } catch {
+    return null
+  }
 }
 
 /** Tests only. */
@@ -91,7 +116,7 @@ export function resetPendingRoute(): void {
  * The root stack's modal routes: those with a modal `presentation` in `app/_layout.tsx` (`__tests__/linkOverModal.test.tsx`
  * reads it back).
  */
-export const ROOT_MODAL_ROUTES: readonly string[] = ['event-preferences/[eventId]', 'crews/new', 'plus', 'f/[token]']
+export const ROOT_MODAL_ROUTES: readonly string[] = ['event-preferences/[eventId]', 'crews/new', 'waves/[eventId]', 'plus', 'f/[token]', 'c/[token]', 'sign-in', 'forgot-password']
 
 type LinkNavigator = Pick<ReturnType<typeof useNavigationContainerRef>, 'isReady' | 'getRootState' | 'dispatch' | 'addListener'>
 type NavigationState = ReturnType<LinkNavigator['getRootState']>

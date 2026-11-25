@@ -54,3 +54,47 @@ it('no screen opens one of our pages through Linking any more', () => {
     expect(read(file)).not.toMatch(/Linking\.openURL\((BLENDN_LINKS|COMMUNITY_GUIDELINES_URL)/)
   }
 })
+
+/*
+ * SCRUM-994 / SCRUM-911: "What's kept" closes the Delete-account sheet and opens a page in the same tick. iOS presented
+ * the browser on the sheet's Modal, still on screen; React Native then dismissed that Modal with
+ * `[modal dismissViewControllerAnimated:]`, which UIKit applies to its presented child (the browser), so the empty Modal
+ * stayed over the app and took every touch until a relaunch. A closing sheet is waited for (modalTurnRefusal.test.tsx,
+ * deleteAccountDialog.test.tsx); here, what must not wait.
+ */
+describe('iOS: what it does not wait for (SCRUM-994)', () => {
+  const { Platform } = require('react-native')
+  const turns = require('../lib/modalTurn') as typeof import('../lib/modalTurn')
+  const os = Platform.OS
+  beforeEach(() => {
+    Object.defineProperty(Platform, 'OS', { value: 'ios', configurable: true })
+    turns.resetModalTurns()
+    open.mockClear()
+    jest.useFakeTimers()
+  })
+  afterEach(() => {
+    jest.useRealTimers()
+    Object.defineProperty(Platform, 'OS', { value: os, configurable: true })
+    turns.resetModalTurns()
+  })
+
+  it('a Modal that stays up (Tonight ▸ Terms): presented over at once, as before', async () => {
+    turns.requestTurn({})
+    void openInApp(BLENDN_LINKS.terms)
+    await jest.advanceTimersByTimeAsync(0)
+    expect(open).toHaveBeenCalledTimes(1)
+  })
+
+  it('the paywall (a router modal holding the screen): at once', async () => {
+    turns.requestTurn({}, { screen: true })
+    void openInApp(BLENDN_LINKS.terms)
+    await jest.advanceTimersByTimeAsync(0)
+    expect(open).toHaveBeenCalledTimes(1)
+  })
+
+  it('nothing on screen: at once', async () => {
+    void openInApp(BLENDN_LINKS.deleteAccount)
+    await jest.advanceTimersByTimeAsync(0)
+    expect(open).toHaveBeenCalledTimes(1)
+  })
+})

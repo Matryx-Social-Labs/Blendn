@@ -10,6 +10,7 @@ import { InviteFriendsSheet } from '../../components/crews/InviteFriendsSheet'
 import { OverflowMenu } from '../../components/crews/OverflowMenu'
 import { RowsCard } from '../../components/crews/RowsCard'
 import { Banner } from '../../components/ds/Banner'
+import { BannerPresence } from '../../components/motion/BannerPresence'
 import { SectionHeader } from '../../components/ds/SectionHeader'
 import { SettingsRow } from '../../components/ds/SettingsRow'
 import { font, HueProvider, useBoldText } from '../../components/ds/shared'
@@ -21,7 +22,7 @@ import { SkeletonBlock } from '../../components/Skeleton'
 import { useToast } from '../../components/Toast'
 import { apiClient } from '../../lib/apiClient'
 import {
-  CREW_MAX_MEMBERS,
+  crewSeatsLeft,
   CREW_REPORT_REASONS,
   KEEP_ANONYMOUS_LABEL,
   crewMessage,
@@ -31,13 +32,15 @@ import {
   type CrewReportReason,
 } from '../../lib/crews'
 import { crewsApi, type CrewPatch } from '../../lib/crewsApi'
-import { crewBarState, leaveSheet, removeSheet, textFieldOf } from '../../lib/crewsScreens'
+import { crewBarState, endSheet, leaveSheet, ownerSheet, removeSheet, textFieldOf, type CrewTextField } from '../../lib/crewsScreens'
 import { COLOR, RADIUS, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { FRIEND_SEARCH_OFFER } from '../../lib/friendsPaging'
 import { pickerView, useFriendsList } from '../../lib/useFriendsList'
+import { roomCardRoute } from '../../lib/roomCard'
 import { isMuted, rememberRoomMute, useRoomMute } from '../../lib/roomMembership'
 import { useRoomRow } from '../../lib/roomRow'
-import { showSheet } from '../../lib/sheet'
+import { shareNatively } from '../../lib/shareTray'
+import { showSheet, type SheetOutcome } from '../../lib/sheet'
 import { useAuth } from '../../lib/useAuth'
 import { userMessage } from '../../lib/userMessage'
 
@@ -55,7 +58,7 @@ const SKELETON_LINE_H = 17
 const SKELETON_ROW = 56
 const LEAVE_HEIGHT = 56
 const HIDDEN_LINE = 'This crew is hidden while we look at a report. Only its members can see it.'
-const REPORT_SENT = 'Reported. Thanks — nobody is told it was you.'
+const REPORT_SENT = 'Reported. Thanks — the crew isn’t told it was you.'
 
 /**
  * One of your crews (Flow 10 · 10.4): the emblem, name, line and tags; the
@@ -73,7 +76,7 @@ function CrewScreenContent() {
   const { showToast } = useToast()
   const [load, setLoad] = useState<Load>({ kind: 'loading' })
   const [refreshing, setRefreshing] = useState(false)
-  const [busy, setBusy] = useState<'anon' | 'mute' | 'invite' | 'edit' | null>(null)
+  const [busy, setBusy] = useState<'anon' | 'mute' | 'invite' | 'link' | 'edit' | null>(null)
   const [menu, setMenu] = useState(false)
   // The bar's glass and the crew's name in it follow the scroll: a render per threshold crossing, never per frame.
   const [barState, setBarState] = useState<TopBarState>('rest')
@@ -89,7 +92,7 @@ function CrewScreenContent() {
   const friendList = useFriendsList()
   const [inviting, setInviting] = useState(false)
   const [editing, setEditing] = useState(false)
-  const [editError, setEditError] = useState<{ field: 'name' | 'bio'; text: string } | null>(null)
+  const [editError, setEditError] = useState<{ field: CrewTextField; text: string } | null>(null)
 
   const crew = load.kind === 'ready' ? load.crew : null
   // The page fades in over the skeleton only if a skeleton was drawn (a load under 300 ms just shows the page).
@@ -169,8 +172,20 @@ function CrewScreenContent() {
     setBusy(null)
     if (!result.success || !result.data) return showToast(crewMessage(result, 'crew', 'Couldn’t send the invites. Try again.'), 'error', { haptic: 'error' })
     setInviting(false)
+    // The open invites now count against the 12: take them off the seats at once, so a full crew stops offering Invite without a re-read.
+    patchCrew((c) => ({ ...c, seatsLeft: Math.max(0, crewSeatsLeft(c) - (result.data?.invited ?? 0)) }))
     // `invited` is how many you asked for, never who got one.
     showToast(result.data.invited === 1 ? 'Asked 1 friend' : `Asked ${result.data.invited} friends`, 'success')
+  }
+
+  /** S7: a fresh link (once, 7 days) into the system tray; whoever joins by it becomes your friend. */
+  const shareLink = async () => {
+    if (busy || !crew) return
+    setBusy('link')
+    const result = await crewsApi.makeLink(crewId)
+    setBusy(null)
+    if (!result.success || !result.data) return showToast(crewMessage(result, 'crew', 'Couldn’t make the link. Try again.'), 'error', { haptic: 'error' })
+    if ((await shareNatively({ kind: 'crew', name: crew.name, url: result.data.url })) === 'failed') showToast('Couldn’t open the share sheet. Try again.', 'error', { haptic: 'error' })
   }
 
   const saveEdit = async (patch: CrewPatch) => {
@@ -181,7 +196,7 @@ function CrewScreenContent() {
     setBusy(null)
     if (!result.success || !result.data) {
       const text = crewMessage(result, 'crew', 'Couldn’t save that. Try again.')
-      const field = textFieldOf(text, result.field)
+      const field = textFieldOf(text, result.field ?? result.errors?.find((e) => e.field)?.field)
       if (field) setEditError({ field, text })
       else showToast(text, 'error', { haptic: 'error' })
       return
@@ -191,8 +206,56 @@ function CrewScreenContent() {
     setEditing(false)
   }
 
+  // From the chat, two screens go: the chat of a crew you left or ended has nothing to show.
+  const leaveScreen = () => (params.fromChat ? router.dismissTo('/crews') : router.back())
+
+  const leave = async (crewName: string): Promise<SheetOutcome> => {
+    if (!myId) return { ok: false, error: 'Couldn’t leave. Try again.' }
+    const result = await crewsApi.leave(crewId, myId)
+    if (!result.success) return { ok: false, error: crewMessage(result, 'crew', 'Couldn’t leave. Try again.') }
+    leaveScreen()
+    return { ok: true, toast: result.data?.dissolved ? `${crewName} has closed` : `You left ${crewName}` }
+  }
+
+  const end = async (crewName: string): Promise<SheetOutcome> => {
+    const result = await crewsApi.end(crewId)
+    if (!result.success) return { ok: false, error: crewMessage(result, 'crew', 'Couldn’t end the crew. Try again.') }
+    leaveScreen()
+    return { ok: true, toast: `${crewName} has ended` }
+  }
+
+  /* Crews 5A (board 06-leave · A): the owner gets two doors, Leave and End; End has its own confirm. A member keeps today's Leave sheet. */
   const confirmLeave = () => {
     if (!crew) return
+    if (owner) {
+      const doors = ownerSheet(crew)
+      const ending = endSheet(crew)
+      return showSheet({
+        kind: 'actions',
+        hue: 'rose',
+        layout: 'rows',
+        title: doors.title,
+        message: doors.message,
+        actions: [
+          { label: doors.leave, run: () => leave(crew.name) },
+          {
+            label: doors.end,
+            variant: 'destructive',
+            next: () => ({
+              kind: 'actions',
+              hue: 'rose',
+              title: ending.title,
+              message: ending.message,
+              actions: [
+                { label: ending.action, variant: 'destructive', run: () => end(crew.name) },
+                { label: 'Cancel', cancel: true },
+              ],
+            }),
+          },
+          { label: 'Cancel', cancel: true },
+        ],
+      })
+    }
     const sheet = leaveSheet(crew)
     showSheet({
       kind: 'actions',
@@ -201,19 +264,7 @@ function CrewScreenContent() {
       title: sheet.title,
       message: sheet.message,
       actions: [
-        {
-          label: sheet.action,
-          variant: 'destructive',
-          run: async () => {
-            if (!myId) return { ok: false, error: 'Couldn’t leave. Try again.' }
-            const result = await crewsApi.leave(crewId, myId)
-            if (!result.success) return { ok: false, error: crewMessage(result, 'crew', 'Couldn’t leave. Try again.') }
-            // From the chat, two screens go: the chat of a crew you left has nothing to show.
-            if (params.fromChat) router.dismissTo('/crews')
-            else router.back()
-            return { ok: true, toast: result.data?.dissolved ? `${crew.name} has closed` : `You left ${crew.name}` }
-          },
-        },
+        { label: sheet.action, variant: 'destructive', run: () => leave(crew.name) },
         { label: 'Cancel', cancel: true },
       ],
     })
@@ -251,7 +302,7 @@ function CrewScreenContent() {
       kind: 'reasons',
       hue: 'rose',
       title: `Report ${crew.name}`,
-      message: 'Only the crew’s name and bio are reported. Our team is not told who sent it, and the crew isn’t either.',
+      message: 'Only the crew’s name and bio are reported. The crew isn’t told who sent it.',
       reasons: CREW_REPORT_REASONS.map((r) => ({ value: r.value, label: r.label })),
       submitLabel: 'Send report',
       run: async (reason, note) => {
@@ -276,7 +327,7 @@ function CrewScreenContent() {
           testID="crew-failed"
         />
       ) : (
-        <View style={styles.skeletonPage} accessibilityLabel="Loading the crew">
+        <View accessible style={styles.skeletonPage} accessibilityLabel="Loading the crew">
           {/* The page's own shape (DS #17): the emblem, the name, a line, then two rows. */}
           <View style={styles.skeleton}>
             <SkeletonBlock width={HEAD_SKELETON} height={HEAD_SKELETON} borderRadius={RADIUS.card} />
@@ -294,7 +345,7 @@ function CrewScreenContent() {
   } else {
     body = (
       <Animated.View entering={arrive} style={styles.page}>
-        {crew.hidden ? <Banner kind="info" text={HIDDEN_LINE} testID="crew-hidden" /> : null}
+        {crew.hidden ? <BannerPresence><Banner kind="info" text={HIDDEN_LINE} testID="crew-hidden" /></BannerPresence> : null}
         <CrewHead crew={crew} />
         <View style={styles.section}>
           <SectionHeader title="Members" count={crew.members.length} />
@@ -302,9 +353,10 @@ function CrewScreenContent() {
             members={crew.members}
             myId={myId}
             isOwner={owner}
-            canInvite={crew.size < CREW_MAX_MEMBERS}
+            canInvite={crewSeatsLeft(crew) > 0}
             apart={crew.apart === true}
             onInvite={() => void startInvite()}
+            onOpen={(member) => router.push(roomCardRoute({ id: member.userId, name: member.name }, crewId) as never)}
             onMore={confirmRemove}
           />
         </View>
@@ -386,10 +438,12 @@ function CrewScreenContent() {
             friends={invitable}
             search={{ query: friendList.query, onChange: friendList.search, searching: friendList.searching, active: friendList.searched !== null, offered: friendList.allTotal > FRIEND_SEARCH_OFFER }}
             paging={{ hasMore: friendList.hasMore, loadingMore: friendList.loadingMore, moreFailed: friendList.moreFailed, onMore: () => void friendList.loadMore() }}
-            room={CREW_MAX_MEMBERS - crew.size}
+            room={crewSeatsLeft(crew)}
             asking={busy === 'invite'}
             onRetry={startInvite}
             onAsk={(ids) => void sendInvites(ids)}
+            onShareLink={() => void shareLink()}
+            sharing={busy === 'link'}
             onClose={() => setInviting(false)}
           />
           {owner ? (

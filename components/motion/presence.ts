@@ -1,5 +1,5 @@
-import { Easing, FadeIn, FadeOut, ReduceMotion, withDelay, withTiming } from 'react-native-reanimated'
-import { DURATION, EASING, REDUCE_MOTION, RISE } from '../../lib/design/tokens'
+import { Easing, FadeIn, FadeOut, LinearTransition, ReduceMotion, withDelay, withTiming } from 'react-native-reanimated'
+import { DURATION, EASING, REDUCE_MOTION, RISE, SPRING } from '../../lib/design/tokens'
 
 /*
  * Entering/exiting presets for small things that appear and disappear —
@@ -20,13 +20,13 @@ import { DURATION, EASING, REDUCE_MOTION, RISE } from '../../lib/design/tokens'
  */
 const EASE_OUT = Easing.bezier(0.23, 1, 0.32, 1)
 
-export const fadeInFast = FadeIn.duration(150).easing(EASE_OUT).reduceMotion(ReduceMotion.Never)
-export const fadeOutFast = FadeOut.duration(120).easing(EASE_OUT).reduceMotion(ReduceMotion.Never)
+export const fadeInFast = FadeIn.duration(DURATION.quick).easing(EASE_OUT).reduceMotion(ReduceMotion.Never)
+export const fadeOutFast = FadeOut.duration(DURATION.quick).easing(EASE_OUT).reduceMotion(ReduceMotion.Never)
 
 /** Opacity plus a 0.9 → 1 scale, for a floating control. Never from scale(0). */
 export const popIn = () => {
   'worklet'
-  const t = { duration: 150, easing: EASE_OUT, reduceMotion: ReduceMotion.System }
+  const t = { duration: DURATION.quick, easing: EASE_OUT, reduceMotion: ReduceMotion.System }
   return {
     initialValues: { opacity: 0, transform: [{ scale: 0.9 }] },
     animations: {
@@ -38,7 +38,7 @@ export const popIn = () => {
 
 export const popOut = () => {
   'worklet'
-  const t = { duration: 120, easing: EASE_OUT, reduceMotion: ReduceMotion.System }
+  const t = { duration: DURATION.quick, easing: EASE_OUT, reduceMotion: ReduceMotion.System }
   return {
     initialValues: { opacity: 1, transform: [{ scale: 1 }] },
     animations: {
@@ -125,3 +125,26 @@ export const resortIn = (delay: number) => () => {
 }
 export const resortFadeIn = FadeIn.duration(REDUCE_MOTION.duration.quick).easing(ENTRANCE).reduceMotion(ReduceMotion.Never)
 export const resortOut = FadeOut.duration(DURATION.quick).easing(Easing.bezier(...EASING.exit)).reduceMotion(ReduceMotion.Never)
+
+/*
+ * A row answered away (DS #16: a friend request, a withdrawn request, an unblocked person): it fades out over `quick` on
+ * the exit curve while the rows below close the gap on `M.settle`. Reduce Motion: pass neither; the row goes and the list
+ * updates at once. Going's saved rows use them, and `rowBack` is a row put back (Undo, a failed answer) fading in where
+ * it was while the list opens for it.
+ */
+export const rowOut = FadeOut.duration(DURATION.quick).easing(Easing.bezier(...EASING.exit))
+export const rowReflow = LinearTransition.springify().stiffness(SPRING.settle.stiffness).damping(SPRING.settle.damping).mass(SPRING.settle.mass)
+export const rowBack = FadeIn.duration(DURATION.base).easing(Easing.bezier(...EASING.entrance))
+/*
+ * The empty state a list shows once its last row has been answered away: it waits out the row's `quick` exit, then fades in
+ * over `base`, so the words are never drawn across the fading card (iOS drive, SCRUM-1001). Reduce Motion: pass neither.
+ */
+export const emptyAfterRowOut = FadeIn.duration(DURATION.base).delay(DURATION.quick).easing(GENTLE).reduceMotion(ReduceMotion.Never)
+
+/*
+ * One thing swapped for another, or a part that comes and goes with an answer (audit M16, M27: a sign-out under an
+ * under-age date, a dock's line, a set that opens when a choice is ticked): it fades in over `base` on the gentle curve.
+ * A fade, so Reduce Motion keeps it (`Never`: on System, Reanimated skips an entering outright, a hard cut). `Swap` puts
+ * it on; why there is no exit is said there.
+ */
+export const swapIn = FadeIn.duration(DURATION.base).easing(GENTLE).reduceMotion(ReduceMotion.Never)

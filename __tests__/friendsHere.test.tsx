@@ -1,8 +1,7 @@
 /*
- * Friends here (plans/friends-in-room.md, C1): the Room's section of friends
- * who let friends see them. Nothing with none; a row and Message for each of
- * up to three; "N more here" and See all past that; offline dims Message; the
- * count tells the truth at 60 and 5,000.
+ * Friends here (plans/friends-in-room.md, C1; Flow 5 R-A `friendsHere`): one row in People for the friends who let
+ * friends see them. Nothing with none; "Asha Menon is here" for one, "4 friends here" past that, three faces at most,
+ * and the count tells the truth at 5,000. The row opens the Friends here screen, where each has Message.
  */
 import { fireEvent, render, screen } from '@testing-library/react-native'
 import React from 'react'
@@ -31,7 +30,7 @@ const people = (n: number): FriendHere[] =>
 const draw = (props: Partial<React.ComponentProps<typeof FriendsHere>> = {}) =>
   render(
     <HueProvider value="rose">
-      <FriendsHere friends={people(4)} total={4} opening={null} offline={false} onMessage={jest.fn()} onSeeAll={jest.fn()} {...props} />
+      <FriendsHere friends={people(4)} total={4} onSeeAll={jest.fn()} {...props} />
     </HueProvider>
   )
 const HIDDEN = { includeHiddenElements: true }
@@ -48,77 +47,32 @@ describe('<FriendsHere>', () => {
     expect(screen.queryByTestId('friends-here', HIDDEN)).toBeNull()
   })
 
-  it('one: the header with no count, one row, Message', async () => {
-    await draw({ friends: people(1), total: 1 })
-    expect(screen.getByText('Friends here')).toBeTruthy()
-    expect(screen.getByRole('header', { name: 'Friends here' })).toBeTruthy()
-    expect(screen.getByText('Asha Menon')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Message Asha Menon' })).toBeTruthy()
-    expect(screen.queryByText('See all')).toBeNull()
-    expect(screen.queryByTestId('friends-here-more', HIDDEN)).toBeNull()
-  })
-
-  it('three: the count, three rows, no overflow, no See all', async () => {
-    await draw({ friends: people(3), total: 3 })
-    expect(screen.getByRole('header', { name: 'Friends here, 3' })).toBeTruthy()
-    expect(screen.getAllByRole('button', { name: /^Message / })).toHaveLength(3)
-    expect(screen.queryByText('See all')).toBeNull()
-    expect(screen.queryByTestId('friends-here-more', HIDDEN)).toBeNull()
-  })
-
-  it('four: three rows, "1 more here" and See all; both open the list', async () => {
+  it('one: their name, "is here", one face; the row opens Friends here', async () => {
     const onSeeAll = jest.fn()
-    await draw({ onSeeAll })
-    expect(screen.getAllByRole('button', { name: /^Message / })).toHaveLength(3)
-    expect(screen.queryByText('Aarav Gupta')).toBeNull()
-    expect(screen.getByText('1 more here')).toBeTruthy()
-    // The header's action and the overflow row are both named for what they open.
-    const both = screen.getAllByRole('button', { name: 'See all 4 friends here' })
-    expect(both).toHaveLength(2)
-    await fireEvent.press(both[0])
-    await fireEvent.press(both[1])
-    expect(onSeeAll).toHaveBeenCalledTimes(2)
+    await draw({ friends: people(1), total: 1, onSeeAll })
+    expect(screen.getByText('Asha Menon is here')).toBeTruthy()
+    expect(screen.getByTestId('friends-here-face-0', HIDDEN)).toBeTruthy()
+    expect(screen.queryByTestId('friends-here-face-1', HIDDEN)).toBeNull()
+    await fireEvent.press(screen.getByRole('button', { name: 'Asha Menon is here' }))
+    expect(onSeeAll).toHaveBeenCalledTimes(1)
   })
 
-  it('sixty and five thousand: the first page is eight, the count is the truth', async () => {
-    await draw({ friends: people(8), total: 60 })
-    expect(screen.getByText('57 more here')).toBeTruthy()
-    expect(screen.getAllByRole('button', { name: 'See all 60 friends here' })).toHaveLength(2)
-    await draw({ friends: people(8), total: 1204 })
-    // Grouped, so a long count reads at a glance and does not wrap the header.
-    expect(screen.getByText('1,201 more here')).toBeTruthy()
-    expect(screen.getByRole('header', { name: 'Friends here, 1,204' })).toBeTruthy()
-    expect(screen.getAllByRole('button', { name: 'See all 1,204 friends here' })).toHaveLength(2)
+  it('four: "4 friends here" and three faces, never a fourth', async () => {
+    await draw()
+    expect(screen.getByText('4 friends here')).toBeTruthy()
+    expect(screen.getByTestId('friends-here-face-2', HIDDEN)).toBeTruthy()
+    expect(screen.queryByTestId('friends-here-face-3', HIDDEN)).toBeNull()
   })
 
-  it('Message opens that friend’s chat', async () => {
-    const onMessage = jest.fn()
-    await draw({ onMessage })
-    await fireEvent.press(screen.getByRole('button', { name: 'Message Rohan Iyer' }))
-    expect(onMessage).toHaveBeenCalledWith(expect.objectContaining({ userId: 'u1', name: 'Rohan Iyer' }))
+  it('five thousand: the count is the truth, grouped, with the first page’s faces', async () => {
+    await draw({ friends: people(8), total: 5000 })
+    expect(screen.getByText('5,000 friends here')).toBeTruthy()
   })
 
-  it('offline: the rows stay and Message is disabled', async () => {
-    const onMessage = jest.fn()
-    await draw({ offline: true, onMessage })
-    expect(screen.getByText('Asha Menon')).toBeTruthy()
-    const button = screen.getByRole('button', { name: 'Message Asha Menon' })
-    expect(button.props.accessibilityState).toMatchObject({ disabled: true })
-    await fireEvent.press(button)
-    expect(onMessage).not.toHaveBeenCalled()
-  })
-
-  it('busy: only that row’s Message is busy; the others stay enabled', async () => {
-    await draw({ opening: 'u1' })
-    expect(screen.getByRole('button', { name: 'Message Rohan Iyer' }).props.accessibilityState).toMatchObject({ busy: true })
-    expect(screen.getByRole('button', { name: 'Message Asha Menon' }).props.accessibilityState?.disabled).toBeFalsy()
-  })
-
-  it('a very long name takes at most two lines and keeps its Message (one line read "Aarav …" at 360 dp and 1.3: RC drive 5)', async () => {
+  it('a very long name stays on the row’s one line (60 pt, ellipsised)', async () => {
     const long = { userId: 'x', name: 'Karthik Subramaniam Venkataraman', photo: null }
     await draw({ friends: [long], total: 1 })
-    expect(screen.getByText(long.name).props.numberOfLines).toBe(2)
-    expect(screen.getByRole('button', { name: `Message ${long.name}` })).toBeTruthy()
+    expect(screen.getByText(`${long.name} is here`).props.numberOfLines).toBe(1)
   })
 
   it('Reduce Motion: the section fades in place, with no rise', async () => {

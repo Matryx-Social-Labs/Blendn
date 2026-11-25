@@ -5,8 +5,8 @@
  * empty, populated in three sections, the request answered in place (pending → done, stale, decline),
  * See all, the ⋯ menu and Clear all, paging, opening marking everything seen.
  */
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native'
-import { StyleSheet, View } from 'react-native'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native'
+import { Pressable, StyleSheet, Text, View } from 'react-native'
 
 jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock')
@@ -39,7 +39,7 @@ jest.mock('../lib/apiClient', () => ({
 }))
 // The fetch deadline at 100 ms, so the answer's (three of them) passes in a test's time.
 jest.mock('../lib/fetchTimeout', () => ({ ...jest.requireActual('../lib/fetchTimeout'), REQUEST_TIMEOUT_MS: 100 }))
-jest.mock('../lib/crewsApi', () => ({ crewsApi: { decline: jest.fn() } }))
+jest.mock('../lib/crewsApi', () => ({ crewsApi: { decline: jest.fn(), myCrews: jest.fn() } }))
 jest.mock('../lib/notifications', () => ({
   navigateFromNotificationData: jest.fn(),
   initializePushNotifications: jest.fn(async () => null),
@@ -72,9 +72,15 @@ import { crewsApi } from '../lib/crewsApi'
 import type { NotificationItem } from '../lib/notificationFormat'
 import { navigateFromNotificationData } from '../lib/notifications'
 import { H } from '../lib/haptics'
+import * as sheetModule from '../lib/sheet'
 import { closeSheet } from '../lib/sheet'
 import { ANSWER_DEADLINE_MS, DONE_DWELL_MS } from '../lib/useNotificationFeed'
 import { forgetPushPermission } from '../lib/pushStatus'
+import { resetFriendRequests, useFriendRequestsState } from '../lib/friendRequests'
+import { crewInviteAnswered, resetCrewInvites, useCrewInvites } from '../lib/crewInvites'
+import { useFriendRequests } from '../lib/useFriendRequests'
+import { isLitControl } from './helpers/lit'
+import { markOffline, markOnline } from '../lib/networkStatus'
 
 const api = apiClient as jest.Mocked<typeof apiClient>
 const permissions = Notifications.getPermissionsAsync as jest.Mock
@@ -126,11 +132,26 @@ beforeEach(async () => {
   api.getNotifications.mockResolvedValue(feed([friend, match, older]) as never)
   api.markNotificationsRead.mockResolvedValue({ success: true } as never)
   api.clearNotifications.mockResolvedValue({ success: true } as never)
-  // Every request the fixtures name is still waiting, unless a test says one was answered elsewhere.
+  /*
+   * The shared lists hold exactly the asks the feed names as open, unless a test says one was answered elsewhere: Waiting on you
+   * is those lists (SCRUM-1062), so a list holding more than the feed would add rows a test did not ask for. Read off the feed's
+   * mock without calling it, so no test's count of feed reads moves.
+   */
+  const feedAsks = async (kind: string, key: string) => {
+    const read = (await api.getNotifications.getMockImplementation()?.()) as { data?: { notifications?: NotificationItem[] } } | undefined
+    const ids = (read?.data?.notifications ?? []).filter((n) => n.kind === kind && n.open !== false).map((n) => n.data?.[key])
+    return ids.filter((id): id is string => typeof id === 'string')
+  }
   api.getFriendRequests.mockImplementation(
-    async () =>
-      ({ success: true, data: { incoming: ['r1', 'r2', 'ra', 'rb', 'rc', 'rd', 're'].map((id) => ({ id, person: { userId: `u_${id}` } })), outgoing: [] } }) as never
+    async () => ({ success: true, data: { incoming: (await feedAsks('friend_request', 'requestId')).map((id) => ({ id, person: { userId: `u_${id}` } })), outgoing: [] } }) as never
   )
+  ;(crewsApi.myCrews as jest.Mock).mockImplementation(async () => ({
+    success: true,
+    data: { crews: [], invites: (await feedAsks('crew_invite', 'crewId')).map((crewId) => ({ crewId, name: `Crew ${crewId}` })) },
+  }))
+  // Those lists are shared by every surface, so each test starts them from nothing.
+  resetFriendRequests()
+  resetCrewInvites()
   api.getFriends.mockResolvedValue({ success: true, data: { friends: [], count: 0 } } as never)
   api.getProfile.mockResolvedValue({ success: true, data: { profile: { push_enabled: true } } } as never)
   permissions.mockResolvedValue({ status: 'granted', canAskAgain: true })
@@ -161,7 +182,10 @@ describe('the states', () => {
     api.getNotifications.mockResolvedValue(feed([]) as never)
     await render(<Screen />)
     expect(await screen.findByText('Quiet for now')).toBeTruthy()
-    expect(screen.getByText(/land here\. Messages are in Banter\./)).toBeTruthy()
+    // Requests placement A, board 04: message requests are in Banter now, and the copy says so.
+    // Flow 9 A: "waves back", the Wave world's word; "matches" is gone.
+    expect(screen.getByText('Friend requests, crew invites, waves back and event changes land here. Messages are in Banter.')).toBeTruthy()
+    expect(screen.queryByText(/matches/)).toBeNull()
     expect(screen.queryByText(/Waves, matches and reminders/)).toBeNull()
   })
 
@@ -308,51 +332,72 @@ describe('answering a request in place', () => {
     await waitFor(() => expect(api.respondToFriendRequest).toHaveBeenCalledTimes(2))
   })
 
-  it('a request answered somewhere else is not Waiting on you, on open and on a refresh', async () => {
+  // SCRUM-1036: and it is not left behind as "New friend request" either: an answered friend request leaves the feed.
+  it('a request answered somewhere else is not Waiting on you, and not a "New friend request" either', async () => {
     api.getFriendRequests.mockResolvedValue({ success: true, data: { incoming: [], outgoing: [] } } as never)
     await render(<Screen />)
-    await screen.findByText('New friend request')
-    await waitFor(() => expect(screen.queryByRole('header', { name: /Waiting on you/ })).toBeNull())
+    await screen.findByText('You have a new match')
+    await waitFor(() => expect(screen.queryByText('New friend request')).toBeNull())
+    expect(screen.queryByRole('header', { name: /Waiting on you/ })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Accept' })).toBeNull()
   })
 
+  it('the server’s own word that a request is closed (`open: false`) leaves it out from the first frame', async () => {
+    api.getNotifications.mockResolvedValue(feed([{ ...friend, open: false }, match]) as never)
+    await render(<Screen />)
+    await screen.findByText('You have a new match')
+    expect(screen.queryByText('New friend request')).toBeNull()
+  })
+
   it('51 requests waiting: one not on the first page of 50 is still waiting, not answered elsewhere', async () => {
-    const others = Array.from({ length: 50 }, (_, i) => ({ id: `other${i}`, person: { userId: `u_other${i}` } }))
+    const others = Array.from({ length: 50 }, (_, i) => ({ id: `other${i}`, person: { userId: `u_other${i}`, name: `Other ${i}` }, createdAt: ago(HOUR) }))
     api.getFriendRequests.mockResolvedValue({
       success: true,
       data: { incoming: others, outgoing: [], pagination: { incoming: { limit: 50, hasMore: true, nextCursor: 'i1', totalCount: 51 } } },
     } as never)
     await render(<Screen />)
-    expect(await screen.findByRole('button', { name: 'Accept' })).toBeTruthy()
+    expect(within(await screen.findByTestId('notification-f1')).getByRole('button', { name: 'Accept' })).toBeTruthy()
     await act(async () => {})
-    expect(screen.getByRole('button', { name: 'Accept' })).toBeTruthy()
+    expect(within(screen.getByTestId('notification-f1')).getByRole('button', { name: 'Accept' })).toBeTruthy()
+    // Counted as the list counts it: the server's 51, not the 50 read.
+    expect(screen.getByRole('header', { name: 'Waiting on you, 51' })).toBeTruthy()
     expect(screen.queryByText('This request is no longer open')).toBeNull()
   })
 
   it('a partial list still says who sent the requests on it: a timed-out Accept is checked against friends', async () => {
-    const onPage = ['r1', 'r2', 'ra', 'rb', 'rc'].map((id) => ({ id, person: { userId: `u_${id}` } }))
+    const onPage = ['r1', 'r2', 'ra', 'rb', 'rc'].map((id) => ({ id, person: { userId: `u_${id}`, name: `Person ${id}` }, createdAt: ago(HOUR) }))
     api.getFriendRequests.mockResolvedValue({
       success: true,
       data: { incoming: onPage, outgoing: [], pagination: { incoming: { limit: 50, hasMore: true, nextCursor: 'i1', totalCount: 90 } } },
     } as never)
     api.respondToFriendRequest.mockReturnValueOnce(new Promise(() => {}) as never).mockResolvedValue({ success: false, errorCode: 'NOT_FOUND' } as never)
     await render(<Screen />)
-    fireEvent.press(await screen.findByRole('button', { name: 'Accept' }))
+    const row = () => within(screen.getByTestId('notification-f1'))
+    await screen.findByTestId('notification-f1')
+    fireEvent.press(row().getByRole('button', { name: 'Accept' }))
     await waitFor(() => expect(mockShowToast).toHaveBeenCalled(), { timeout: ANSWER_DEADLINE_MS * 2 })
     api.getFriends.mockResolvedValue({ success: true, data: { friends: [{ userId: 'u_r1', name: 'Priya', photo: null, since: ago(MIN) }], count: 1 } } as never)
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Accept' }).props.accessibilityState).toMatchObject({ busy: false }))
-    fireEvent.press(screen.getByRole('button', { name: 'Accept' }))
+    await waitFor(() => expect(row().getByRole('button', { name: 'Accept' }).props.accessibilityState).toMatchObject({ busy: false }))
+    fireEvent.press(row().getByRole('button', { name: 'Accept' }))
     expect(await screen.findByText('You’re friends now')).toBeTruthy()
   })
 
   it('the same list when it is the whole list (50 or fewer) does close the one that is not on it', async () => {
     api.getFriendRequests.mockResolvedValue({
       success: true,
-      data: { incoming: [{ id: 'other0', person: { userId: 'u_other0' } }], outgoing: [], pagination: { incoming: { limit: 50, hasMore: false, nextCursor: null, totalCount: 1 } } },
+      data: {
+        incoming: [{ id: 'other0', person: { userId: 'u_other0', name: 'Kavya Iyer' }, createdAt: ago(HOUR) }],
+        outgoing: [],
+        pagination: { incoming: { limit: 50, hasMore: false, nextCursor: null, totalCount: 1 } },
+      },
     } as never)
     await render(<Screen />)
-    await screen.findByText('New friend request')
-    await waitFor(() => expect(screen.queryByRole('button', { name: 'Accept' })).toBeNull())
+    await screen.findByText('You have a new match')
+    await waitFor(() => expect(screen.queryByTestId('notification-f1')).toBeNull())
+    expect(screen.queryByText('New friend request')).toBeNull()
+    // What is waiting is the list's one, drawn from the list.
+    expect(screen.getByRole('header', { name: 'Waiting on you, 1' })).toBeTruthy()
+    expect(screen.getByText('Kavya Iyer wants to be friends')).toBeTruthy()
   })
 
   it('shows the list at once, and reconciles the requests after: a slow requests list holds nothing up', async () => {
@@ -388,7 +433,8 @@ describe('answering a request in place', () => {
     api.getFriendRequests.mockResolvedValue({ success: true, data: { incoming: [], outgoing: [] } } as never)
     await act(async () => mockBell?.())
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Accept' })).toBeNull())
-    expect(screen.getByText('New friend request')).toBeTruthy()
+    expect(screen.queryByText('New friend request')).toBeNull()
+    expect(screen.getByText('You have a new match')).toBeTruthy()
   })
 
   it('keeps Waiting as it was when the requests list does not load', async () => {
@@ -439,13 +485,13 @@ describe('answering a request in place', () => {
 describe('the rose world (foundations C, part 2)', () => {
   const flat = (id: string) => StyleSheet.flatten(screen.getByTestId(id, { includeHiddenElements: true }).props.style)
 
-  it('lights the Waiting count, the glyph tile and the Accept pill in rose', async () => {
+  it('lights the Waiting count and the glyph tile in rose; the Accept pill is the one positive look (board C)', async () => {
     await render(<Screen />)
     await screen.findByText('New friend request')
     expect(flat('notifications-waiting-count').backgroundColor).toBe(COLOR.selectionRoseFill)
     expect(flat('notifications-waiting-count').borderColor).toBe(COLOR.brandRose)
     expect(flat('notification-f1-art-tile').backgroundColor).toBe(COLOR.selectionRoseFill)
-    expect(flat('notification-f1-pill-0').backgroundColor).toBe(COLOR.selectionRoseFill)
+    expect(isLitControl(screen.getByTestId('notification-f1-pill-0'))).toBe(true)
     expect(screen.getByRole('header', { name: 'Waiting on you, 1' })).toBeTruthy()
   })
 
@@ -466,11 +512,11 @@ describe('the rose world (foundations C, part 2)', () => {
     expect(JSON.stringify(screen.getByTestId('notification-f1-art-tile', { includeHiddenElements: true }).children)).not.toBe(before)
   })
 
-  it('Turn on is a lit button with the bell, in rose', async () => {
+  it('Turn on is a lit button with the bell (board C: no hue on buttons)', async () => {
     permissions.mockResolvedValue({ status: 'denied', canAskAgain: false })
     await render(<Screen />)
     await screen.findByText(/Push is off/)
-    expect(flat('notifications-push-off-action').backgroundColor).toBe(COLOR.selectionRoseFill)
+    expect(isLitControl(screen.getByTestId('notifications-push-off-action'))).toBe(true)
   })
 })
 
@@ -505,6 +551,17 @@ describe('the ⋯ menu and Clear all', () => {
     expect(router.push).toHaveBeenCalledWith('/notification-settings')
   })
 
+  it('asks for the neutral Clear all confirm: not red (E13), not lit (not a yes), and strong is retired (board C)', async () => {
+    const show = jest.spyOn(sheetModule, 'showSheet')
+    await render(<Screen />)
+    await screen.findByText('You have a new match')
+    await openMenu()
+    fireEvent.press(screen.getByRole('button', { name: 'Clear all' }))
+    const sheet = show.mock.calls[0][0] as { actions: { label: string; variant?: string }[] }
+    expect(sheet.actions.find((a) => a.label === 'Clear all')?.variant).toBe('secondary')
+    show.mockRestore()
+  })
+
   it('has nothing to clear when there is nothing', async () => {
     api.getNotifications.mockResolvedValue(feed([]) as never)
     await render(<Screen />)
@@ -532,9 +589,21 @@ describe('the ⋯ menu and Clear all', () => {
     expect(await screen.findByText(/Requests waiting on you stay open in Friends and Crews until you answer them/)).toBeTruthy()
     expect(screen.queryByText(/Everything else leaves this list/)).toBeNull()
     fireEvent.press(screen.getAllByText('Clear all').slice(-1)[0])
-    // Empty, and true about it: the requests were not answered by clearing.
+    await waitFor(() => expect(screen.queryByText('You have a new match')).toBeNull())
+    // True about it: clearing answered nothing, and Waiting on you is the requests list, so the request is still there (SCRUM-1062).
+    expect(screen.getByRole('header', { name: 'Waiting on you, 1' })).toBeTruthy()
+  })
+
+  it('empty after a clear says where the requests still are, when their list has not answered', async () => {
+    api.getFriendRequests.mockResolvedValue({ success: false } as never)
+    await render(<Screen />)
+    await screen.findByText('You have a new match')
+    await openMenu()
+    fireEvent.press(screen.getByRole('button', { name: 'Clear all' }))
+    await screen.findByText('Clear all notifications?')
+    fireEvent.press(screen.getAllByText('Clear all').slice(-1)[0])
     expect(await screen.findByText('Quiet for now')).toBeTruthy()
-    expect(screen.getByText('Requests you haven’t answered are still open in Friends and Crews.')).toBeTruthy()
+    expect(screen.getByText('Friend requests and crew invites you haven’t answered are still open in Friends and Crews.')).toBeTruthy()
   })
 
   it('a clear given up on that lands after all reads the list again, so the screen ends up as the server is', async () => {
@@ -712,5 +781,338 @@ describe('the app icon (badgeCount, Flow 9 · 9.4)', () => {
     await waitFor(() => expect(api.markNotificationsRead).toHaveBeenCalled())
     await act(async () => {})
     expect(setBadge).not.toHaveBeenCalled()
+  })
+})
+
+/*
+ * Requests placement A (owner 2026-11-15, board 05): friend requests and crew invites are ONE list each, read by
+ * Notifications · Waiting on you, Friends/Me and Crews. An answer on any surface takes the ask off every surface at once,
+ * with no reload, so it can be answered once (SCRUM-1036: three lists, three counts, and they drifted).
+ */
+describe('one list per ask kind, every surface at once (requests placement A)', () => {
+  /** Me's row and the Friends page's count: the shared list's total. */
+  function FriendsCount() {
+    return <Text testID="friends-count">{String(useFriendRequestsState().incoming.total)}</Text>
+  }
+  /** Friends › Friend requests: its own Accept, on the same list. */
+  function FriendsPage() {
+    const { incoming, respond } = useFriendRequests()
+    return (
+      <View>
+        {incoming.map((r) => (
+          <Pressable key={r.id} accessibilityRole="button" accessibilityLabel={`Friends accept ${r.id}`} onPress={() => void respond(r, 'accept')} />
+        ))}
+      </View>
+    )
+  }
+  /** Crews › Invites and Me's Crews dot: the shared list. */
+  function CrewsCount() {
+    const { invites, total } = useCrewInvites()
+    return <Text testID="crews-count">{`${total}:${invites.map((i) => i.crewId).join(',')}`}</Text>
+  }
+  const Surfaces = () => (
+    <View>
+      <Screen />
+      <FriendsCount />
+      <FriendsPage />
+      <CrewsCount />
+    </View>
+  )
+  const crewsRead = { success: true, data: { crews: [], invites: [{ crewId: 'cr1', name: 'Night Owls' }], invitesPagination: { hasMore: false, nextCursor: null, totalCount: 1 } } }
+  // The server names the asker on its row (task 12): the list never rewrites it.
+  const named = { ...friend, display: { title: 'Asha wants to be friends', visual: { type: 'initial', name: 'Asha' } } }
+  beforeEach(() => {
+    api.getNotifications.mockResolvedValue(feed([named, invite, match]) as never)
+    api.getFriendRequests.mockResolvedValue({ success: true, data: { incoming: [{ id: 'r1', person: { userId: 'u_r1', name: 'Asha' } }], outgoing: [] } } as never)
+    ;(crewsApi.myCrews as jest.Mock).mockResolvedValue(crewsRead)
+  })
+  const settled = async () => {
+    await screen.findByText('Asha wants to be friends')
+    await waitFor(() => expect(screen.getByTestId('friends-count').props.children).toBe('1'))
+    await waitFor(() => expect(screen.getByTestId('crews-count').props.children).toBe('1:cr1'))
+  }
+
+  it('Accept in Waiting on you takes the request off Friends and Me at once, without reading the list again', async () => {
+    api.respondToFriendRequest.mockResolvedValue({ success: true } as never)
+    await render(<Surfaces />)
+    await settled()
+    api.getFriendRequests.mockClear()
+    await act(async () => fireEvent.press(screen.getByRole('button', { name: 'Accept' })))
+    expect(screen.getByTestId('friends-count').props.children).toBe('0')
+    expect(screen.queryByRole('button', { name: 'Friends accept r1' })).toBeNull()
+    expect(api.getFriendRequests).not.toHaveBeenCalled()
+    // One answer: the Friends page has nothing left to send a second.
+    expect(api.respondToFriendRequest).toHaveBeenCalledTimes(1)
+  })
+
+  it('Accept on Friends takes the row out of Waiting on you at once', async () => {
+    api.respondToFriendRequest.mockResolvedValue({ success: true } as never)
+    await render(<Surfaces />)
+    await settled()
+    expect(screen.getByRole('button', { name: 'Accept' })).toBeTruthy()
+    await act(async () => fireEvent.press(screen.getByRole('button', { name: 'Friends accept r1' })))
+    expect(screen.queryByRole('button', { name: 'Accept' })).toBeNull()
+    expect(screen.queryByText('Asha wants to be friends')).toBeNull()
+    expect(screen.getByTestId('friends-count').props.children).toBe('0')
+    expect(api.respondToFriendRequest).toHaveBeenCalledTimes(1)
+  })
+
+  it('Decline of a crew invite in Waiting on you takes it off Crews and Me’s dot at once', async () => {
+    ;(crewsApi.decline as jest.Mock).mockResolvedValue({ success: true })
+    api.getNotifications.mockResolvedValue(feed([invite]) as never)
+    api.getFriendRequests.mockResolvedValue({ success: true, data: { incoming: [], outgoing: [] } } as never)
+    await render(<Surfaces />)
+    await waitFor(() => expect(screen.getByTestId('crews-count').props.children).toBe('1:cr1'))
+    ;(crewsApi.myCrews as jest.Mock).mockClear()
+    await act(async () => fireEvent.press(await screen.findByRole('button', { name: 'Decline' })))
+    expect(screen.getByTestId('crews-count').props.children).toBe('0:')
+    expect(crewsApi.myCrews).not.toHaveBeenCalled()
+  })
+
+  it('a Join on the consent screen comes back saying so, then the row leaves; Crews has let it go already', async () => {
+    jest.useFakeTimers()
+    try {
+      await render(<Surfaces />)
+      await settled()
+      await act(async () => crewInviteAnswered('cr1', 'joined', 'Thiruvananthapuram Night Owls'))
+      expect(screen.getByTestId('crews-count').props.children).toBe('0:')
+      expect(screen.getByText('You’re in Thiruvananthapuram Night Owls')).toBeTruthy()
+      expect(screen.queryByRole('button', { name: 'Join' })).toBeNull()
+      await act(async () => jest.advanceTimersByTime(DONE_DWELL_MS + 50))
+      expect(screen.queryByText('You’re in Thiruvananthapuram Night Owls')).toBeNull()
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
+  // Control: a read that began before an answer and lands after it does not put the ask back on any surface.
+  it('a list read that was out before the answer does not bring the ask back', async () => {
+    api.respondToFriendRequest.mockResolvedValue({ success: true } as never)
+    await render(<Surfaces />)
+    await settled()
+    let land: (v: unknown) => void = () => {}
+    api.getFriendRequests.mockImplementationOnce(() => new Promise((r) => (land = r)) as never)
+    const { loadFriendRequests } = jest.requireActual('../lib/friendRequests') as typeof import('../lib/friendRequests')
+    const read = loadFriendRequests()
+    await act(async () => fireEvent.press(screen.getByRole('button', { name: 'Accept' })))
+    await act(async () => {
+      land({ success: true, data: { incoming: [{ id: 'r1', person: { userId: 'u_r1', name: 'Asha' } }], outgoing: [] } })
+      await read
+    })
+    expect(screen.getByTestId('friends-count').props.children).toBe('0')
+    expect(screen.queryByRole('button', { name: 'Friends accept r1' })).toBeNull()
+  })
+
+  it('a message request is never in Waiting on you: it is a plain line with a chevron, and opens Banter', async () => {
+    const ask = item({ id: 'mr1', kind: 'message_request', title: 'Venkatalakshmi wants to message you', data: { requestId: 'm1' } })
+    api.getNotifications.mockResolvedValue(feed([ask, friend]) as never)
+    await render(<Screen />)
+    await screen.findByText('Venkatalakshmi wants to message you')
+    expect(screen.getByTestId('notifications-waiting-card')).toBeTruthy()
+    expect(within(screen.getByTestId('notifications-waiting-card')).queryByText('Venkatalakshmi wants to message you')).toBeNull()
+    expect(screen.getByText('Message requests · 5 min ago')).toBeTruthy()
+    expect(screen.getByTestId('notification-mr1-chevron')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'View' })).toBeNull()
+    fireEvent.press(screen.getByRole('button', { name: /^Venkatalakshmi wants to message you/ }))
+    expect(navigateFromNotificationData).toHaveBeenCalledWith({ requestId: 'm1' })
+  })
+})
+
+/*
+ * SCRUM-1062: Notifications said "Waiting on you · 8" while Friend requests said "14 waiting", for the same 14. The six missing
+ * were older than 7 days: Waiting on you was built from the notification rows, and an ask with no row in the feed was not in it.
+ */
+describe('Waiting on you is the shared lists, whatever the feed holds (SCRUM-1062)', () => {
+  const DAY = 24 * HOUR
+  const names = ['Asha', 'Ravi', 'Meera', 'Kabir', 'Isha', 'Arjun', 'Diya', 'Rohan', 'Tara', 'Vikram', 'Leela', 'Neel', 'Anaya', 'Dev']
+  // 14 waiting: 8 within the week, 6 older than 7 days.
+  const requests = names.map((name, i) => ({ id: `q${i}`, person: { userId: `u_q${i}`, name, photo: null }, createdAt: ago(i < 8 ? (i + 1) * HOUR : (8 + i) * DAY) }))
+  const recentRows = requests.slice(0, 8).map((r) => item({ id: `n_${r.id}`, kind: 'friend_request', title: 'New friend request', createdAt: r.createdAt, data: { requestId: r.id } }))
+  const invites = ['k1', 'k2'].map((crewId, i) => ({ crewId, name: `Crew ${crewId}`, bio: null, emblemSeed: `seed-${crewId}`, tags: [], size: 3, invitedBy: 'Asha', invitedAt: ago((9 + i) * DAY) }))
+
+  function Counts() {
+    const friends = useFriendRequestsState().incoming.total
+    const crews = useCrewInvites().total
+    return <Text testID="counts">{`${friends}:${crews}`}</Text>
+  }
+  function FriendsPage() {
+    const { incoming, respond } = useFriendRequests()
+    return (
+      <View>
+        {incoming.map((r) => (
+          <Pressable key={r.id} accessibilityRole="button" accessibilityLabel={`Friends accept ${r.id}`} onPress={() => void respond(r, 'accept')} />
+        ))}
+      </View>
+    )
+  }
+  const Surfaces = () => (
+    <View>
+      <Screen />
+      <Counts />
+      <FriendsPage />
+    </View>
+  )
+
+  beforeEach(() => {
+    api.getNotifications.mockResolvedValue(feed([...recentRows, match]) as never)
+    api.getFriendRequests.mockResolvedValue({ success: true, data: { incoming: requests, outgoing: [] } } as never)
+    ;(crewsApi.myCrews as jest.Mock).mockResolvedValue({ success: true, data: { crews: [], invites: [] } })
+  })
+
+  it('14 waiting, 6 of them older than 7 days: Waiting on you says 14, as Friends does, and See all lists all 14', async () => {
+    await render(<Surfaces />)
+    await waitFor(() => expect(screen.getByTestId('counts').props.children).toBe('14:0'))
+    expect(await screen.findByRole('header', { name: 'Waiting on you, 14' })).toBeTruthy()
+    fireEvent.press(screen.getByRole('button', { name: 'See all 14' }))
+    await waitFor(() => expect(screen.getAllByRole('button', { name: 'Accept' })).toHaveLength(14))
+    // The oldest is there, by name, though the feed has no row for it.
+    expect(screen.getByText('Dev wants to be friends')).toBeTruthy()
+  })
+
+  it('a feed with no request rows at all (cleared, swept) still waits on all of them', async () => {
+    api.getNotifications.mockResolvedValue(feed([match]) as never)
+    await render(<Surfaces />)
+    expect(await screen.findByRole('header', { name: 'Waiting on you, 14' })).toBeTruthy()
+  })
+
+  it('crew invites older than 7 days follow the same rule: on Crews, so in Waiting on you, counted once', async () => {
+    api.getNotifications.mockResolvedValue(feed([match]) as never)
+    api.getFriendRequests.mockResolvedValue({ success: true, data: { incoming: [], outgoing: [] } } as never)
+    ;(crewsApi.myCrews as jest.Mock).mockResolvedValue({ success: true, data: { crews: [], invites } })
+    await render(<Surfaces />)
+    await waitFor(() => expect(screen.getByTestId('counts').props.children).toBe('0:2'))
+    expect(await screen.findByRole('header', { name: 'Waiting on you, 2' })).toBeTruthy()
+    expect(screen.getAllByRole('button', { name: 'Join' })).toHaveLength(2)
+    expect(screen.getByText('Crew k1')).toBeTruthy()
+  })
+
+  it('an Accept in Waiting on you on a request older than 7 days leaves both counts at 13', async () => {
+    api.respondToFriendRequest.mockResolvedValue({ success: true } as never)
+    await render(<Surfaces />)
+    await screen.findByRole('header', { name: 'Waiting on you, 14' })
+    fireEvent.press(screen.getByRole('button', { name: 'See all 14' }))
+    await waitFor(() => expect(screen.getAllByRole('button', { name: 'Accept' })).toHaveLength(14))
+    const oldest = screen.getByTestId('notification-friend_request:q13')
+    await act(async () => fireEvent.press(within(oldest).getByRole('button', { name: 'Accept' })))
+    expect(api.respondToFriendRequest).toHaveBeenCalledWith('q13', 'accept')
+    expect(await screen.findByText('You’re friends now')).toBeTruthy()
+    expect(screen.getByTestId('counts').props.children).toBe('13:0')
+    expect(screen.getByRole('header', { name: 'Waiting on you, 13' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Friends accept q13' })).toBeNull()
+    await waitFor(() => expect(screen.queryByText('You’re friends now')).toBeNull(), { timeout: DONE_DWELL_MS + 1000 })
+    expect(screen.getAllByRole('button', { name: 'Accept' })).toHaveLength(13)
+  })
+
+  it('an Accept on Friends of a request older than 7 days takes it out of Waiting on you at once', async () => {
+    api.respondToFriendRequest.mockResolvedValue({ success: true } as never)
+    await render(<Surfaces />)
+    await screen.findByRole('header', { name: 'Waiting on you, 14' })
+    await act(async () => fireEvent.press(screen.getByRole('button', { name: 'Friends accept q12' })))
+    expect(screen.getByTestId('counts').props.children).toBe('13:0')
+    expect(screen.getByRole('header', { name: 'Waiting on you, 13' })).toBeTruthy()
+    expect(screen.queryByTestId('notification-friend_request:q12')).toBeNull()
+  })
+
+  it('a list past its first page counts the server’s total and pages on with See all', async () => {
+    const page1 = requests.slice(0, 10)
+    api.getFriendRequests.mockImplementation(
+      async (opts?: { cursor?: string }) =>
+        ({
+          success: true,
+          data: opts?.cursor
+            ? { incoming: requests.slice(10), outgoing: [], pagination: { incoming: { limit: 10, hasMore: false, nextCursor: null, totalCount: 14 } } }
+            : { incoming: page1, outgoing: [], pagination: { incoming: { limit: 10, hasMore: true, nextCursor: 'p2', totalCount: 14 } } },
+        }) as never
+    )
+    await render(<Surfaces />)
+    expect(await screen.findByRole('header', { name: 'Waiting on you, 14' })).toBeTruthy()
+    fireEvent.press(screen.getByRole('button', { name: 'See all 14' }))
+    await waitFor(() => expect(screen.getAllByRole('button', { name: 'Accept' })).toHaveLength(14))
+    expect(api.getFriendRequests).toHaveBeenCalledWith({ side: 'incoming', cursor: 'p2' })
+  })
+})
+
+describe('Flow 9 A · empty, cleared, failed (SCRUM-1075)', () => {
+  afterEach(async () => {
+    await act(async () => markOnline())
+  })
+
+  it('empty has one way on: a neutral Notification settings button', async () => {
+    api.getNotifications.mockResolvedValue(feed([]) as never)
+    await render(<Screen />)
+    fireEvent.press(await screen.findByRole('button', { name: 'Notification settings' }))
+    expect(router.push).toHaveBeenCalledWith('/notification-settings')
+  })
+
+  it('failed: Try again is the screen’s one hero, with no banner over it', async () => {
+    permissions.mockResolvedValue({ status: 'denied', canAskAgain: false })
+    api.getNotifications.mockResolvedValue({ success: false, error: 'offline' } as never)
+    await act(async () => markOffline())
+    await render(<Screen />)
+    await screen.findByText('Couldn’t load notifications')
+    // The hero's glow is the primary's alone (button direction C).
+    expect(screen.getByTestId('notifications-retry-glow', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.queryByTestId('notifications-offline')).toBeNull()
+    expect(screen.queryByTestId('notifications-push-off')).toBeNull()
+  })
+
+  it('offline over nothing cached says nothing about “what you had”', async () => {
+    api.getNotifications.mockResolvedValue(feed([]) as never)
+    await act(async () => markOffline())
+    await render(<Screen />)
+    await screen.findByText('Quiet for now')
+    expect(screen.queryByText('Offline. Showing what you had.')).toBeNull()
+  })
+
+  it('negative control: offline over rows keeps the banner', async () => {
+    await act(async () => markOffline())
+    await render(<Screen />)
+    await screen.findByText('New friend request')
+    expect(screen.getByText('Offline. Showing what you had.')).toBeTruthy()
+  })
+
+  it('after Clear all the open requests stay and one line says what happened; no retention footnote', async () => {
+    await render(<Screen />)
+    await screen.findByText('You have a new match')
+    // Negative control: before the clear the footnote is the foot.
+    expect(screen.getByText(/That’s everything we keep/)).toBeTruthy()
+    fireEvent.press(await screen.findByRole('button', { name: 'More' }))
+    fireEvent.press(await screen.findByRole('button', { name: 'Clear all' }))
+    await screen.findByText('Clear all notifications?')
+    fireEvent.press(screen.getAllByText('Clear all').slice(-1)[0])
+    expect(await screen.findByText('Cleared. Requests waiting on you stay until you answer them.')).toBeTruthy()
+    expect(screen.getByRole('header', { name: 'Waiting on you, 1' })).toBeTruthy()
+    expect(screen.queryByText(/That’s everything we keep/)).toBeNull()
+  })
+})
+
+describe('Flow 9 A · the landing lifts the request into view (SCRUM-1075)', () => {
+  const names = ['Asha', 'Ravi', 'Meera', 'Kabir', 'Isha', 'Arjun', 'Diya', 'Rohan', 'Tara', 'Vikram', 'Leela', 'Neel', 'Anaya', 'Dev']
+  const requests = names.map((name, i) => ({ id: `q${i}`, person: { userId: `u_q${i}`, name, photo: null }, createdAt: ago((i + 1) * HOUR) }))
+  const hidden = { includeHiddenElements: true }
+  beforeEach(() => {
+    // Cleared: the feed has no request rows, so Waiting on you is the shared list alone.
+    api.getNotifications.mockResolvedValue(feed([match]) as never)
+    api.getFriendRequests.mockResolvedValue({ success: true, data: { incoming: requests, outgoing: [] } } as never)
+  })
+
+  it('a link for the 11th request, while the screen is open, puts it first in Waiting on you and lights it', async () => {
+    const view = await render(<Screen />)
+    expect(await screen.findByRole('header', { name: 'Waiting on you, 14' })).toBeTruthy()
+    // Negative control: behind See all, before the link.
+    expect(screen.queryByText('Leela wants to be friends')).toBeNull()
+    mockParams.type = 'friend_request'
+    mockParams.requestId = 'q10'
+    mockParams.at = '1'
+    await view.rerender(<Screen />)
+    await waitFor(() => expect(screen.getByTestId('landing-friend_request:q10', hidden)).toBeTruthy())
+    const card = within(screen.getByTestId('notifications-waiting-card'))
+    expect(card.getAllByText(/wants to be friends$/).map((t) => t.props.children)).toEqual(['Leela wants to be friends', 'Asha wants to be friends', 'Ravi wants to be friends'])
+  })
+
+  it('a named person with no photo is their initial in the card', async () => {
+    await render(<Screen />)
+    await screen.findByText('Asha wants to be friends')
+    expect(within(screen.getByTestId('notification-friend_request:q0')).getByText('A', hidden)).toBeTruthy()
   })
 })

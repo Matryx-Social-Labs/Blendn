@@ -2,9 +2,9 @@ import {
   JUST_ARRIVED_MS,
   REASON_MAX,
   everyoneHead,
-  hereNowStack,
   meetNext,
   pickTonight,
+  tonightDeck,
   reasonLine,
   shuffleCountdownLabel,
   startsLabel,
@@ -33,8 +33,8 @@ describe('reasonLine', () => {
   it('then plans, then history, in the Grid card order', () => {
     expect(reasonLine({ sharedPlans: 2, sharedEvents: 3 }, NOW)).toBe('2 plans in common')
     expect(reasonLine({ sharedPlans: 1 }, NOW)).toBe('1 plan in common')
-    expect(reasonLine({ sharedEvents: 3, interests: ['Jazz'] }, NOW)).toBe('Both at 3 nights')
-    expect(reasonLine({ sharedEvents: 1 }, NOW)).toBe('Both at 1 night')
+    expect(reasonLine({ sharedEvents: 3, interests: ['Jazz'] }, NOW)).toBe('3 events with you')
+    expect(reasonLine({ sharedEvents: 1 }, NOW)).toBe('1 event with you')
   })
 
   it('never claims two people met', () => {
@@ -83,7 +83,7 @@ describe('reasonLine', () => {
     // Under every face at 360 dp (RC audit B-R7): the longest fixed line, the same words as the overlap line.
     expect(REASON_MAX).toBeLessThanOrEqual('Both open to dating'.length)
     expect(reasonLine({ sharedPlans: 12 }, NOW)).toBe('12 plans in common')
-    expect(reasonLine({ sharedEvents: 99 }, NOW)).toBe('Both at 99 nights')
+    expect(reasonLine({ sharedEvents: 99 }, NOW)).toBe('99 events with you')
     expect(reasonLine({ interests: ['Classical and Carnatic'] }, NOW)).toBe('1 shared · Classic…')
   })
 
@@ -165,21 +165,6 @@ describe('who is here now', () => {
   const left = (id: string) => ({ id, insideNow: false })
   const ids = (xs: { id: string }[]) => xs.map((p) => p.id)
 
-  it('puts only people inside under "here now", arrivals first, without repeats', () => {
-    const stack = hereNowStack([here('x'), here('a'), left('b')], [left('c'), here('a'), here('d')], 5)
-    expect(ids(stack)).toEqual(['x', 'a', 'd'])
-  })
-
-  it('fills the stack from people inside, however many ahead of them left', () => {
-    const people = [left('a'), left('b'), here('c'), left('d'), left('e'), here('f'), here('g')]
-    expect(ids(hereNowStack([], people, 3))).toEqual(['c', 'f', 'g'])
-  })
-
-  it('counts somebody presence says nothing about as inside', () => {
-    expect(ids(hereNowStack([], [{ id: 'a' }], 3))).toEqual(['a'])
-    expect(everyoneHead([{}], { hasMore: false, hereCount: 2 }).title).toBe('Everyone here')
-  })
-
   it('never suggests meeting somebody who has left, and still finds three who are here', () => {
     // Eight who left rank above four who are here: the rotation's pool of nine
     // must be nine people inside, not nine people with one inside among them.
@@ -194,9 +179,9 @@ describe('who is here now', () => {
 
   it('calls the grid "Everyone here" only while everyone in it is', () => {
     const head = (people: { insideNow?: boolean }[]) => everyoneHead(people, { hasMore: false, hereCount: 9 })
-    // "Everyone here" is the room's number (9), not the faces drawn: friends and "show online" off are counted, not listed.
-    expect(head([here('a'), here('b')])).toEqual({ title: 'Everyone here', count: 9 })
-    expect(head([])).toEqual({ title: 'Everyone here', count: 9 })
+    // The heading counts the cards under it: friends and "show online" off are in the room's 9, not in the grid.
+    expect(head([here('a'), here('b')])).toEqual({ title: 'Everyone here', count: 2 })
+    expect(head([])).toEqual({ title: 'Everyone here', count: 0 })
     expect(head([here('a'), left('b')])).toEqual({ title: 'Everyone who came', count: 2 })
   })
 
@@ -212,10 +197,10 @@ describe('who is here now', () => {
 })
 
 describe('one number for the room (RC drive 3)', () => {
-  it('says the Room’s number, you included: 483, not 482 (minus you) or the 100 faces loaded', () => {
+  it('counts the cards once the grid is whole (a hidden friend is not a card), the Room’s number while pages remain', () => {
     const faces = Array.from({ length: 100 }, (_, i) => ({ id: `p${i}`, insideNow: true }))
     expect(everyoneHead(faces, { hasMore: true, hereCount: 483 })).toEqual({ title: 'Everyone here', count: 483 })
-    expect(everyoneHead(faces, { hasMore: false, hereCount: 483 })).toEqual({ title: 'Everyone here', count: 483 })
+    expect(everyoneHead(faces, { hasMore: false, hereCount: 483 })).toEqual({ title: 'Everyone here', count: 100 })
   })
 })
 
@@ -319,5 +304,33 @@ describe('pickTonight', () => {
   it('does not keep an event with no end time live for ever', () => {
     expect(pickTonight([ev('open', -60, null, 1)], NOW)).toHaveLength(1)
     expect(pickTonight([ev('stale', -7 * 60, null, 1)], NOW)).toHaveLength(0)
+  })
+})
+
+describe('tonightDeck (SCRUM-971: the disc’s target is in the deck it opens, in front)', () => {
+  const ev = (id: string, startMin: number, endMin: number, distanceKm: number | null, going = false) => ({
+    id,
+    startsAt: minutesFromNow(startMin),
+    endsAt: minutesFromNow(endMin),
+    distanceKm,
+    going,
+  })
+
+  it('keeps an event of yours today that starts past the six-hour horizon, and puts it in front', () => {
+    // 23.5 h away is "tonight" in its own zone, and the disc points at it; the near ones are only the horizon's.
+    const late = ev('late', 23 * 60, 25 * 60, 40, true)
+    const deck = tonightDeck([ev('near', 10, 200, 0.5), ev('live', -30, 120, 1), late], NOW, ['late']).map((e) => e.id)
+    expect(deck).toEqual(['late', 'near', 'live'])
+  })
+
+  it('is pickTonight with no disc target, and ignores a target the feed does not have', () => {
+    const events = [ev('a', 10, 200, 1), ev('b', 60, 200, 2)]
+    expect(tonightDeck(events, NOW, [])).toEqual(pickTonight(events, NOW))
+    expect(tonightDeck(events, NOW, ['gone'])).toEqual(pickTonight(events, NOW))
+  })
+
+  it('lists a target that is also within the horizon once, in front', () => {
+    const events = [ev('a', 10, 200, 0.1, true), ev('b', 60, 200, 2)]
+    expect(tonightDeck(events, NOW, ['b']).map((e) => e.id)).toEqual(['b', 'a'])
   })
 })

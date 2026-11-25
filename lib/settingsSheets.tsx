@@ -32,8 +32,24 @@ type SignOut = (revokeAll?: boolean) => Promise<{ success: boolean; error?: stri
 export const SIGNED_OUT_UNCONFIRMED =
   'Signed out on this phone. We couldn’t reach the server, so you may stay signed in elsewhere for a while.'
 
+/** What signing out costs, and what stays (Me + settings A 07). */
+export const SIGN_OUT_COST = 'You’ll stop getting notifications on this phone. Your nights and friends stay.'
+
 /**
- * "Sign out?" asks first (one stray tap used to end the session). The affirmative is the sheet's white button, not red:
+ * Why registration details outlive a deleted account, by the account's country (ISO code, from the home city). India's is the
+ * DPDP rule the policy names; anywhere else, Canada included, says only that the law requires it.
+ * TODO(legal): placeholder approved by the owner 2026-11-18 (SCRUM-1076) until the lawyer confirms the per-country wording
+ * (PIPEDA in Canada); ROADMAP § Legal. An unknown country gets the neutral line, which is true everywhere.
+ */
+export const deletionRetention = (country: string | null | undefined): string =>
+  country === 'IN' ? 'as Indian law requires' : 'as the law requires where you live'
+
+/** "Delete your account?" (Me + settings A 07): what goes now, what stays, and why some of it is kept. One paragraph. */
+export const deleteExplainMessage = (country: string | null | undefined): string =>
+  `Your profile, photos, friends and sign-in go now. Messages you sent stay, under “Deleted account”. Registration details are kept 180 days, ${deletionRetention(country)}.`
+
+/**
+ * "Sign out?" asks first (one stray tap used to end the session). The affirmative is the neutral button, not red:
  * Sign out is routine and reversible. It plays `H.primary` on press-in (Flow 7 frame 11) and nothing on the sign-out
  * itself. Local state is gone either way; a server that did not confirm is a toast on the landing the guard moves to.
  */
@@ -43,11 +59,12 @@ export function signOutSheet({ signOut, showToast }: { signOut: SignOut; showToa
     hue: 'violet',
     icon: 'log-out',
     title: 'Sign out?',
-    message: 'You’ll need to sign in again to see your events, friends and messages.',
+    message: SIGN_OUT_COST,
     actions: [
       {
         label: 'Sign out',
-        variant: 'primary',
+        // Neutral (Me + settings A 07): routine and reversible, so neither lit nor red.
+        variant: 'secondary',
         pressHaptic: () => H.primary(),
         /*
          * Not held on the server (RC drive D1): `signOut` clears this phone before its first await and the guard routes to

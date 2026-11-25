@@ -15,6 +15,8 @@ export const SWIPE_ACTION_WIDTH = 72
 /** Past the tray the row follows at half speed; a release this fast opens or closes whatever the distance. */
 const RUBBER = 0.5
 const FLING_VELOCITY = 800
+/** With `onFullSwipe`: a drag past this share of the row commits the last action (Mail's long swipe). */
+const FULL_SWIPE = 0.6
 
 export type SwipeAction = {
   icon: IconName
@@ -34,6 +36,12 @@ export type SwipeRowProps = {
   /** Controlled when given: the row rests where this says, sliding back if a drag's answer is not taken. A tap elsewhere closing it is the list's job. */
   open?: boolean
   onOpenChange?: (open: boolean) => void
+  /**
+   * A long swipe (past 60% of the row) runs this: the last, destructive action, with no tap (Going's "Can’t go", SCRUM-1074).
+   * The row follows the finger past the tray instead of stretching, ticks once more at the line, and goes back closed for the
+   * owner to collapse. Without it a row never commits on a swipe (Banter).
+   */
+  onFullSwipe?: () => void
   /** The row as drawn (the Banter row): opaque, it covers the tray. */
   children: ReactNode
   testID?: string
@@ -52,7 +60,7 @@ export type SwipeRowProps = {
  * Motion: the drag is kept (direct manipulation) and it snaps without the
  * spring. The page's shadow on the open row is not drawn: surfaces are flat.
  */
-export function SwipeRow({ actions, onPress, accessibilityLabel, open, onOpenChange, children, testID }: SwipeRowProps) {
+export function SwipeRow({ actions, onPress, accessibilityLabel, open, onOpenChange, onFullSwipe, children, testID }: SwipeRowProps) {
   const bold = useBoldText()
   const reduceMotion = useReducedMotion()
   const width = actions.length * SWIPE_ACTION_WIDTH
@@ -101,6 +109,10 @@ export function SwipeRow({ actions, onPress, accessibilityLabel, open, onOpenCha
 
   // A gesture crossing its threshold is H.threshold; H.detent is a sheet catching a detent.
   const tick = useCallback(() => H.threshold(), [])
+  const rowWidth = useSharedValue(0)
+  const full = useSharedValue(false)
+  const fullOn = !!onFullSwipe
+  const commit = useCallback(() => onFullSwipe?.(), [onFullSwipe])
   const swipe = Gesture.Pan()
     .activeOffsetX([-SPACE.md, SPACE.md])
     .failOffsetY([-SPACE.sm, SPACE.sm])
@@ -108,8 +120,15 @@ export function SwipeRow({ actions, onPress, accessibilityLabel, open, onOpenCha
     .onUpdate((e) => {
       const raw = start.get() + e.translationX
       // Past the closed edge it stretches a little and pulls back (rubber band), never a wall.
-      const next = raw > 0 ? raw * RUBBER * RUBBER : raw < -width ? -width + (raw + width) * RUBBER : raw
+      const next = raw > 0 ? raw * RUBBER * RUBBER : raw < -width && !fullOn ? -width + (raw + width) * RUBBER : raw
       x.set(next)
+      if (fullOn && rowWidth.get() > 0) {
+        const pastFull = -next >= rowWidth.get() * FULL_SWIPE
+        if (pastFull !== full.get()) {
+          full.set(pastFull)
+          scheduleOnRN(tick)
+        }
+      }
       const beyond = -next >= width / 2
       if (beyond === past.get()) return
       past.set(beyond)
@@ -118,7 +137,15 @@ export function SwipeRow({ actions, onPress, accessibilityLabel, open, onOpenCha
     .onEnd((e, success) => {
       // A cancelled drag (a system interrupt) goes back to where it began and answers nothing.
       if (!success) {
+        full.set(false)
         slide(start.get() < -width / 2, 0, true)
+        return
+      }
+      if (full.get()) {
+        full.set(false)
+        slide(false, e.velocityX, true)
+        scheduleOnRN(report, false)
+        scheduleOnRN(commit)
         return
       }
       const opened = e.velocityX < -FLING_VELOCITY ? true : e.velocityX > FLING_VELOCITY ? false : -x.get() >= width / 2
@@ -131,7 +158,7 @@ export function SwipeRow({ actions, onPress, accessibilityLabel, open, onOpenCha
   const byName = (e: AccessibilityActionEvent) => actions.find((a) => a.label === e.nativeEvent.actionName)?.onPress()
 
   return (
-    <View testID={testID} style={styles.clip}>
+    <View testID={testID} style={styles.clip} onLayout={fullOn ? (e) => rowWidth.set(e.nativeEvent.layout.width) : undefined}>
       <View style={styles.tray} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
         {actions.map((action, i) => (
           <Pressable

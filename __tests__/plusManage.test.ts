@@ -31,6 +31,18 @@ describe('what the server says today', () => {
     expect(card({ state: 'active' })?.sentence).toMatch(/^Renews .*Nov.* · Google Play$/)
   })
 
+  it('a store subscription carries its plan when the server names one (SCRUM-1082), and only then', () => {
+    expect(card({ state: 'active', plan: 'yearly' })).toMatchObject({ status: 'active', plan: 'yearly' })
+    expect(card({ plan: 'monthly' })).toMatchObject({ status: 'active', plan: 'monthly' })
+    expect(card({ plan: null })).not.toHaveProperty('plan')
+    expect(card({})).not.toHaveProperty('plan')
+    // A plan says nothing about a state that is not "on": a cancelled card keeps its own title.
+    expect(card({ state: 'cancelled', plan: 'yearly' })).not.toHaveProperty('plan')
+    // Not a store subscription: a grant and a Night Pass have no plan, whatever arrives.
+    expect(card({ source: 'grant', plan: 'yearly' })).not.toHaveProperty('plan')
+    expect(card({ product: 'night_pass', plan: 'yearly' })).not.toHaveProperty('plan')
+  })
+
   it('a subscription with no date still says it is on', () => {
     expect(card({ expiresAt: null, source: null })).toEqual({ status: 'active', sentence: 'Blend’n+ is on', store: 'android' })
   })
@@ -41,10 +53,12 @@ describe('what the server says today', () => {
     expect(c?.sentence).toBe('Until 9:42 PM tomorrow. It doesn’t renew; another one adds 24 hours.')
   })
 
-  it('a gift we cannot tell apart is not called a trial: until its date, nothing renews', () => {
+  // remaining-screens 03 A: "a gift from Blend’n", once (the duplicated grant line is gone). Negative control: the old 'active' card fails it.
+  it('a gift we cannot tell apart is not called a trial: a gift, until its date, nothing renews, nothing to pay', () => {
     const c = card({ source: 'grant', expiresAt: '2026-10-29T12:00:00' })
-    expect(c?.status).toBe('active')
-    expect(c?.sentence).toMatch(/^Blend’n\+ until .*29.* · nothing renews$/)
+    expect(c?.status).toBe('gift')
+    expect(c?.sentence).toMatch(/^Until .*29.* · nothing renews, nothing to pay$/)
+    expect(card({ source: 'grant', expiresAt: null })?.sentence).toBe('For now · nothing renews, nothing to pay')
   })
 
   it('a launch season: free for everybody, nothing renews', () => {
@@ -122,5 +136,14 @@ describe('a Night Pass names the day, as the frame does', () => {
     expect(pass('2026-10-23T21:42:00')).toMatch(/^Until 9:42 PM tomorrow\. It doesn’t renew; another one adds 24 hours\.$/)
     expect(pass('2026-10-22T23:30:00')).toMatch(/^Until 11:30 PM today\./)
     expect(pass('2026-10-25T21:42:00')).toMatch(/^Until .*25.*, 9:42 PM\./)
+  })
+})
+
+describe('Blend’n+ bought outside the app (Razorpay; OD-5, SYS-17)', () => {
+  it('names no store, says it is managed outside the app, and carries no link', () => {
+    const c = card({ source: 'razorpay', state: 'cancelled' }, 'ios')
+    expect(c).toEqual({ status: 'active', sentence: expect.stringMatching(/^Blend’n\+ until .*Nov.* · Managed outside the app$/), store: 'ios' })
+    expect(c?.sentence).not.toMatch(/App Store|Google Play|store/i)
+    expect(card({ source: 'razorpay', expiresAt: null })?.sentence).toBe('Blend’n+ is on · Managed outside the app')
   })
 })

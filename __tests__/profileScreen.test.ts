@@ -33,6 +33,23 @@ describe('the screen never re-decides the identity gate', () => {
     expect(src).not.toContain('theyRevealed')
   })
 
+  it('titles by the room’s pseudonym only from the handle read itself, never from the fallback (SCRUM-1046)', () => {
+    const src = SCREEN()
+    expect(src).toContain('profileIdentity(profile, { pseudonym, roomSeed, roomName: profile?.roomName })')
+    // Set once, from `getPublicProfile`'s own answer...
+    expect(src.match(/roomName: roomNameFrom\(id, data\)/g)).toHaveLength(1)
+    const fallback = src.slice(src.indexOf('apiClient.getProfile(id)'), src.indexOf('withheldUnlessVisible(nextProfile)'))
+    expect(src.indexOf('roomName: roomNameFrom(id, data)')).toBeLessThan(src.indexOf('apiClient.getProfile(id)'))
+    // ...and the `/profiles/:id` fallback never carries one.
+    expect(fallback).not.toContain('roomName')
+  })
+
+  it('reads the fallback’s photos from the nested profile, which is where /profiles/:id puts them (YOU-13)', () => {
+    const src = SCREEN()
+    expect(src).toContain('photos: p.photos ?? []')
+    expect(src).toContain('age: p.age')
+  })
+
   it('draws a missing field as absent, never as an error', () => {
     /*
      * "No bio" and "not allowed to see the bio" are identical in the payload by
@@ -116,7 +133,7 @@ describe('the hero pager advances by itself until the first swipe', () => {
      */
     const src = stripComments(read('components/profile/ProfileHeroPager.tsx'))
     expect(src).toContain('onScrollBeginDrag={() => setManual(true)}')
-    expect(src).toContain('const auto = !manual && !reduceMotion && count > 1')
+    expect(src).toContain('const auto = !manual && !reduceMotion && !screenReader && count > 1')
   })
 
   it('does not repeat the hero’s first photo in the gallery', () => {
@@ -127,24 +144,18 @@ describe('the hero pager advances by itself until the first swipe', () => {
 })
 
 describe('the profile carries the Grid\'s two actions', () => {
-  it('offers Like and Connect, with the same meanings', () => {
-    /*
-     * They are the same two things and arriving here should not change what
-     * they mean: Like is private until mutual and stays pseudonymous; Connect
-     * is a message request and reveals your name and photo.
-     *
-     * This also settles the collision that "Connect" had two meanings on
-     * adjacent screens -- the Grid's like and the profile's request.
-     */
-    expect(SCREEN()).toContain('{eventId ? (')
-    expect(SCREEN()).toContain('onPress={handleLike}')
+  it('offers Wave and Message from the room, and no Like anywhere (Wave replaced it, SCRUM-1042)', () => {
+    // Wave is anonymous and recorded; Message is a request that reveals your name and photo.
+    expect(SCREEN()).toContain('onPress={() => void handleWave()}')
+    expect(SCREEN()).not.toContain('handleLike')
+    expect(SCREEN()).not.toContain('likeAtEvent')
   })
 
-  it('hides Like when there is no event to like within', () => {
+  it('hides Wave when there is no event to wave within', () => {
     /*
-     * `event_likes` is keyed on an event. Opened from a notification, the
-     * Banter or a deep link there is no context, and a Like there would be
-     * broken rather than merely useless. Connect still works: the server gates
+     * A wave is keyed on an event. Opened from a notification, the Banter or a
+     * deep link there is no context, and a Wave there would be broken rather
+     * than merely useless. Connect still works: the server gates
      * a request on `haveSharedAnEvent` and resolves it itself.
      */
     expect(SCREEN()).toMatch(/useLocalSearchParams<\{\s*id: string\s*eventId\?: string/)
@@ -154,32 +165,33 @@ describe('the profile carries the Grid\'s two actions', () => {
     )
   })
 
-  it('keeps the like prominent here too', () => {
-    // The safe, reversible action is the easy one on every surface: the one
-    // gradient primary, before Connect, which publishes your identity (and is lit, not the gradient).
+  it('keeps Wave, the anonymous action, prominent here too: lit, Wave back the same lit (board C, no flip to the gradient), before Message', () => {
     const src = SCREEN()
-    expect(src.indexOf("kind={liked ? 'lit' : 'primary'}")).toBeGreaterThan(-1)
-    expect(src.indexOf("kind={liked ? 'lit' : 'primary'}")).toBeLessThan(src.indexOf("kind={ctaLit ? 'lit' : 'secondary'}"))
+    const wave = src.indexOf("kind={wave === 'waved' ? 'secondary' : 'lit'}")
+    expect(wave).toBeGreaterThan(-1)
+    expect(wave).toBeLessThan(src.indexOf("kind={ctaLit ? 'lit' : 'secondary'}"))
   })
 
-  it('rolls a failed like back, and never a failed request', () => {
+  it('rolls a failed wave back, and never a failed request', () => {
     /*
-     * A like that did not land can simply be sent again. A request cannot --
+     * A wave that did not land can simply be sent again. A request cannot --
      * `@@unique([sender_id, recipient_id])` means the failure may be *because*
      * one exists, and re-offering would invite an attempt that can never
      * succeed.
      */
     const src = SCREEN()
-    const like = src.slice(src.indexOf('const handleLike'), src.indexOf('const sendConnect'))
-    expect(like).toContain('setLiked(false)')
+    const wave = src.slice(src.indexOf('const handleWave'), src.indexOf('useEffect', src.indexOf('const handleWave')))
+    // A failed answer clears this page's opinion (`waveStateAfter` → undefined), and a throw does too.
+    expect(wave).toContain('setWaveLocal(waveStateAfter(')
+    expect(wave).toContain('setWaveLocal(undefined)')
     const connect = src.slice(src.indexOf('const sendConnect'), src.indexOf('const openSafety'))
     expect(connect).not.toContain('setCtaMode(\'connect\')')
   })
 
   it('names them the way the server does in the sheet', () => {
     // Same rule as the Grid: the disclosure uses the resolved display name, so
-    // an unrevealed person is named by their pseudonym.
-    expect(SCREEN()).toContain('displayName={heroTitle}')
+    // an unrevealed person is named by their pseudonym. The name alone, never the hero's "name, age" (SCRUM-1042 drive).
+    expect(SCREEN()).toContain('displayName={identity.name}')
   })
 })
 
@@ -194,7 +206,7 @@ describe('what the frame draws and the product cannot back', () => {
     const src = SCREEN()
     expect(src).not.toContain('PRO MEMBER')
     expect(src).not.toContain('@blendn')
-    expect(src).toContain("[profile?.workField, profile?.location].filter(Boolean).join(' · ')")
+    expect(src).toContain("[workFieldLabel(profile?.workField, workFields), profile?.location].filter(Boolean).join(' · ')")
   })
 
   it('ships no Appreciate button', () => {

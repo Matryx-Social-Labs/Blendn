@@ -54,7 +54,7 @@ describe('the opener only greets an actual match', () => {
      * this one exists. A row that arrived because two people chose each other
      * should say so before it is opened.
      */
-    expect(matchRowPreview({ fromMatch: true })).toBe('You matched — start the conversation')
+    expect(matchRowPreview({ fromMatch: true })).toBe('You both waved — start the conversation')
   })
 })
 
@@ -110,7 +110,8 @@ describe('the match moment shows only faces that were earned', () => {
     expect(src).not.toContain('profile_photos')
     expect(src).not.toContain('OptimizedImage')
     expect(src).not.toContain('avatarUrl')
-    expect(SCREEN()).toContain("them={matchPerson?.photo ? { kind: 'photo', uri: matchPerson.photo } : { kind: 'creature', pseudonym: room.match.name }}")
+    // Through `personFace` on the server's `revealed` (SCRUM-1067): the roster's photo only for somebody named.
+    expect(SCREEN()).toContain("them={matchPerson ? faceOf(matchPerson) : personFace({ named: false, name: room.match.name })}")
     // …and the roster's photo is exactly what the server sent, never fetched.
     expect(ROOM()).toContain('photo: a.profile_photos?.[0] ?? null')
   })
@@ -121,8 +122,10 @@ describe('the match moment shows only faces that were earned', () => {
      * Unrevealed, you are the mark they know you by.
      */
     expect(SCREEN()).toContain(
-      "you={controls.revealed && myPhoto ? { kind: 'photo', uri: myPhoto } : { kind: 'creature', pseudonym: room.match.you ?? myPseudonym ?? myName }}"
+      "you={myRoomFace({ revealed: controls.revealed, name: user?.name ?? null, photo: myPhoto, pseudonym: room.match.you ?? myPseudonym, eventId })}"
     )
+    // ...and that function is the gate: a photo only when named (ROOM-01), else the creature.
+    expect(readFileSync(join(__dirname, '..', 'lib', 'roomState.ts'), 'utf8')).toContain('if (input.revealed && input.photo) return { kind: \'photo\', uri: input.photo, name: \'\' }')
   })
 
   it('draws the creature for anybody without a photo', () => {
@@ -156,7 +159,7 @@ describe('the moment paints without a second request', () => {
   it('falls back to the card’s name, which is also the pseudonym', () => {
     // Pre-reveal `attendee.name` IS the pseudonym — `rankMatches` enforces it —
     // so the fallback cannot leak a real name.
-    expect(ROOM()).toContain('result.data?.pseudonyms?.them || displayName(attendee.name)')
+    expect(ROOM()).toContain('result.data?.pseudonyms?.them || (attendee ? displayName(attendee.name) : answering?.name)')
   })
 })
 

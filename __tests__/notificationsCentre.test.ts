@@ -94,6 +94,8 @@ describe('every kind the server can send goes somewhere', () => {
     'rating_request',
     'board_request',
     'board_request_accepted',
+    'board_match', // was falling through (SCRUM-1026 6/6)
+    'board_host_post', // was falling through (SCRUM-1026 6/6)
   ]
 
   it('has a case in the switch for every kind', () => {
@@ -134,7 +136,8 @@ describe('every kind the server can send goes somewhere', () => {
     const req = src.slice(src.indexOf("case 'message_request':"))
     const block = codeOnly(req.slice(0, req.indexOf('break')))
     expect(block).not.toContain('/user/')
-    expect(block).toContain("target = '/(tabs)/chat'")
+    // Banter's Message requests, where it is answered (requests placement A).
+    expect(block).toContain("target = '/message-requests'")
   })
 })
 
@@ -169,7 +172,7 @@ describe('the Notifications screen reuses the push switch rather than copying it
 
   it('clears the badge on the tap, before the screen has asked the server anything', () => {
     // Optimistic: opening is what "seen" means, and the round trip is the slowest part of it.
-    expect(BELL()).toMatch(/setUnread\(0\)\s*\n\s*router\.push\('\/notifications'\)/)
+    expect(BELL()).toMatch(/markBellRead\(\)\s*\n\s*router\.push\('\/notifications'\)/)
   })
 
   it('does not poll, but does look when you look', () => {
@@ -244,16 +247,18 @@ describe('a tapped push lands where the request is answered (Flow 9, motion #50)
     }
   }
 
-  it('sends each request kind to the Notifications screen with the ids that name its row', () => {
+  it('sends each join-ask to the Notifications screen with the ids that name its row', () => {
     const { lib } = loadLib()
     expect(lib.landingTarget({ type: 'friend_request', requestId: 'r1' })).toEqual({ pathname: '/notifications', params: { type: 'friend_request', requestId: 'r1' } })
     expect(lib.landingTarget({ type: 'crew_invite', crewId: 'c1' })).toEqual({ pathname: '/notifications', params: { type: 'crew_invite', crewId: 'c1' } })
-    expect(lib.landingTarget({ type: 'board_request', eventId: 'e1', requestId: 'r2' })).toEqual({
-      pathname: '/notifications',
-      params: { type: 'board_request', eventId: 'e1', requestId: 'r2' },
-    })
-    expect(lib.landingTarget({ type: 'reveal_request', conversationId: 'v1' })).toEqual({ pathname: '/notifications', params: { type: 'reveal_request', conversationId: 'v1' } })
-    expect(lib.landingTarget({ type: 'message_request', requestId: 'm1' })).toMatchObject({ pathname: '/notifications' })
+  })
+
+  // Requests placement A (owner 2026-11-15): an ask that opens a chat is answered in Banter, so its push lands there.
+  it('sends each talk-ask to Banter, where it is answered: Message requests, the Lobby section, the chat', () => {
+    const { lib } = loadLib()
+    expect(lib.landingTarget({ type: 'message_request', requestId: 'm1' })).toBe('/message-requests')
+    expect(lib.landingTarget({ type: 'board_request', eventId: 'e1', requestId: 'r2' })).toBe('/(tabs)/chat')
+    expect(lib.landingTarget({ type: 'reveal_request', conversationId: 'v1' })).toEqual({ pathname: '/private-chat/[conversationId]', params: { conversationId: 'v1' } })
   })
 
   it('leaves every other kind going to its destination, and a request’s own View/Join too', () => {
@@ -299,5 +304,65 @@ describe('a tapped push lands where the request is answered (Flow 9, motion #50)
     expect(listener).not.toMatch(/navigateFromNotificationData/)
     const banner = readFileSync(join(__dirname, '..', 'components', 'notifications', 'ForegroundBanners.tsx'), 'utf8')
     expect(banner).toContain('landFromNotificationData(banner.data)')
+  })
+})
+
+describe('the Lobby’s pushes open the Lobby’s places (SCRUM-1026, 6/6)', () => {
+  const loadLib = () => {
+    jest.resetModules()
+    const responses: { last: unknown; listener: ((r: unknown) => void) | null } = { last: null, listener: null }
+    jest.doMock('expo-notifications', () => ({
+      setNotificationHandler: jest.fn(),
+      getLastNotificationResponseAsync: jest.fn(() => Promise.resolve(responses.last)),
+      addNotificationResponseReceivedListener: jest.fn((fn: (r: unknown) => void) => {
+        responses.listener = fn
+        return { remove: jest.fn() }
+      }),
+    }))
+    jest.doMock('expo-device', () => ({}))
+    jest.doMock('expo-constants', () => ({}))
+    jest.doMock('../lib/apiClient', () => ({ apiClient: {}, TokenStorage: {} }))
+    jest.doMock('../lib/logger', () => ({ Logger: { debug: jest.fn(), warn: jest.fn(), error: jest.fn(), info: jest.fn() } }))
+    const open = jest.fn()
+    jest.doMock('../lib/pendingRoute', () => ({ openWhenReady: open }))
+    jest.doMock('expo-router', () => ({ router: { push: jest.fn(), setParams: jest.fn() }, useFocusEffect: jest.fn() }))
+    return { lib: require('../lib/notifications') as typeof import('../lib/notifications'), open, responses }
+  }
+  const tap = (data: object) => ({ notification: { request: { identifier: 'n1', content: { data } } } })
+  const POST = { pathname: '/board/[eventId]', params: { eventId: 'e1', post: 'p1' } }
+
+  it('opens the post somebody offered, the Lobby at the host’s note, and the 1:1 a yes opened', () => {
+    const { lib } = loadLib()
+    expect(lib.landingTarget({ type: 'board_match', eventId: 'e1', postId: 'p1' })).toEqual(POST)
+    // The note is pinned first on All: the Lobby itself, with no post to scroll to.
+    expect(lib.landingTarget({ type: 'board_host_post', eventId: 'e1', hostPostId: 'h1' })).toEqual({ pathname: '/board/[eventId]', params: { eventId: 'e1' } })
+    expect(lib.landingTarget({ type: 'board_request_accepted', conversationId: 'c1', eventId: 'e1' })).toEqual({
+      pathname: '/private-chat/[conversationId]',
+      params: { conversationId: 'c1' },
+    })
+    // An ask on your post is answered where Accept is: the Lobby section, in the Banter (requests placement A).
+    expect(lib.landingTarget({ type: 'board_request', eventId: 'e1', requestId: 'r1' })).toBe('/(tabs)/chat')
+    expect(lib.notificationTarget({ type: 'board_request', eventId: 'e1', requestId: 'r1' })).toBe('/(tabs)/chat')
+  })
+
+  it('opens the Lobby, not a post, when a match names no post, and nothing without an event', () => {
+    const { lib } = loadLib()
+    expect(lib.landingTarget({ type: 'board_match', eventId: 'e1' })).toEqual({ pathname: '/board/[eventId]', params: { eventId: 'e1' } })
+    expect(lib.landingTarget({ type: 'board_match' })).toBe('/(tabs)/chat')
+    expect(lib.landingTarget({ type: 'board_host_post' })).toBe('/(tabs)/chat')
+    // A payload id is a path segment: one that is not an id is not passed on.
+    expect(lib.landingTarget({ type: 'board_match', eventId: 'e1', postId: '../x' })).toEqual({ pathname: '/board/[eventId]', params: { eventId: 'e1' } })
+  })
+
+  it('lands the same from a cold start and a warm tap', async () => {
+    const { lib, open, responses } = loadLib()
+    responses.last = tap({ type: 'board_match', eventId: 'e1', postId: 'p1' })
+    lib.setupNotificationResponseListener()
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(open).toHaveBeenLastCalledWith(POST)
+    responses.listener!(tap({ type: 'board_host_post', eventId: 'e2' }))
+    expect(open).toHaveBeenLastCalledWith({ pathname: '/board/[eventId]', params: { eventId: 'e2' } })
+    expect(open).toHaveBeenCalledTimes(2)
   })
 })

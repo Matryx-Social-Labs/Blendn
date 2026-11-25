@@ -8,11 +8,13 @@
  * redirects, and a redirect hands the tap to the browser instead of the app. The id is the event's id, never its slug:
  * a link is a frozen snapshot forwarded to strangers, and a slug names the thing.
  *
- * Inbound: `/e/`, `/v/` and `/f/` AND `/event/` / `/venue/`, whatever `WEB_PAGES_LIVE` says (links already sent, the Android
+ * Inbound: `/e/`, `/v/`, `/f/` and `/c/` (a crew's link, S7: the server mints its whole URL) AND `/event/` / `/venue/`, whatever `WEB_PAGES_LIVE` says (links already sent, the Android
  * intent filters and an organiser's QR code all use them). The
  * file routes are `app/event/[id]`, `app/venue/[id]` and `app/f/[token]`, so `/e/` and `/v/` are rewritten to them by
  * `app/+native-intent.tsx` before the router sees them.
  */
+
+import { pseudonymFromParam } from './roomState'
 
 export const SHARE_HOST = 'www.blendn.app'
 export const SHARE_ORIGIN = `https://${SHARE_HOST}`
@@ -21,7 +23,7 @@ const OUR_HOSTS: ReadonlySet<string> = new Set([SHARE_HOST, 'blendn.app'])
 /** An id or token as it may appear in a path: what the server mints, nothing that could climb out of one segment. */
 const SEGMENT = /^[A-Za-z0-9_-]{1,64}$/
 
-export type LinkKind = 'event' | 'venue' | 'invite'
+export type LinkKind = 'event' | 'venue' | 'invite' | 'crew'
 export type LinkTarget = { kind: LinkKind; id: string }
 
 /**
@@ -34,6 +36,13 @@ export type LinkTarget = { kind: LinkKind; id: string }
  */
 export const WEB_PAGES_LIVE = false
 
+/**
+ * What a venue's tray sends while the pages are off (E12, SYS-04): the words alone. `venueLink` is the site's front
+ * page then, and a card that names a place above a link that opens the homepage promises what the link cannot honour.
+ * Null once the pages are live: the link goes with the words (`shareText`).
+ */
+export const venueTextOnly = (name: string): string | null => (WEB_PAGES_LIVE ? null : `${name} on Blend’n`)
+
 export const eventLink = (id: string): string => `${SHARE_ORIGIN}/${WEB_PAGES_LIVE ? 'e' : 'event'}/${id}`
 export const venueLink = (id: string): string => (WEB_PAGES_LIVE ? `${SHARE_ORIGIN}/v/${id}` : SHARE_ORIGIN)
 export const inviteLink = (token: string): string => `${SHARE_ORIGIN}/f/${token}`
@@ -42,10 +51,11 @@ export const inviteLink = (token: string): string => `${SHARE_ORIGIN}/f/${token}
 export function routeFor({ kind, id }: LinkTarget): string {
   if (kind === 'event') return `/event/${id}`
   if (kind === 'venue') return `/venue/${id}`
+  if (kind === 'crew') return `/c/${id}`
   return `/f/${id}`
 }
 
-const KIND_OF_PREFIX: Record<string, LinkKind> = { e: 'event', event: 'event', v: 'venue', venue: 'venue', f: 'invite' }
+const KIND_OF_PREFIX: Record<string, LinkKind> = { e: 'event', event: 'event', v: 'venue', venue: 'venue', f: 'invite', c: 'crew' }
 
 /**
  * Reduces a URL or path to what could name a route, and does it in ONE place: both `parseLink` (what is this link?) and
@@ -103,7 +113,7 @@ const KEEPS_ITS_QUERY: readonly RegExp[] = [/^exp\+blendn:\/\/expo-development-c
 
 /**
  * The path the router gets for an incoming system URL (`redirectSystemPath`). Fail closed: every external URL loses its
- * query and fragment (but a room link's checked `eventId` and `opensAt`, `chatQuery`), so no screen can be handed a param by a link (a DM's `draft` and `otherUserName`, sign-in's
+ * query and fragment (but the few checked params a room link and the event preferences keep, `linkQuery`), so no screen can be handed a param by a link (a DM's `draft` and `otherUserName`, sign-in's
  * `notice`, forgot-password's `email`, the Scene's title and cover). A link to an event, a venue or an invite is rebuilt
  * from its validated id (`/e/` and `/v/` have no screen of their own and become the event's and the venue's); an https
  * link on another host goes to the root; any other path keeps only its own segments.
@@ -113,12 +123,66 @@ export function nativeIntentPath(path: string): string {
   if (__DEV__ && KEEPS_ITS_QUERY.some((re) => re.test(path))) return path
   const n = normalise(path)
   if (n.host !== null && !OUR_HOSTS.has(n.host)) return '/'
+  if (n.segments.length === 1 && n.segments[0].toLowerCase() === 'nearby-events') return nearbyRedirect(path)
   const target = targetOf(n)
-  return target ? routeFor(target) : `/${n.segments.join('/')}${chatQuery(n.segments, path)}`
+  if (target) return routeFor(target)
+  return lobbyPostPath(n.segments) ?? wavesPath(n.segments) ?? `/${n.segments.join('/')}${linkQuery(n.segments, path)}`
+}
+
+/** An id as a link carries it: the shape the server mints, checked before it rides into a route. */
+export const isLinkId = (value: unknown): value is string => typeof value === 'string' && SEGMENT.test(value)
+
+/**
+ * A Lobby post's link (SCRUM-1026, 6/6): `/board/<event>/<post>` is the Lobby scrolled to that post, `?post=` its one
+ * param, each id checked. A post id that is not one leaves the Lobby alone, and nothing else in the link rides along.
+ */
+/**
+ * "Waved at you" (`/waves/<event>`, Wave PR (b)): the event id is checked before it rides into the route, whose screen
+ * builds an authenticated API path from it (security review). Anything else under `/waves` goes to the root.
+ */
+function wavesPath(segments: string[]): string | null {
+  if (segments[0]?.toLowerCase() !== 'waves') return null
+  let id = ''
+  try {
+    id = segments.length === 2 ? decodeURIComponent(segments[1]) : ''
+  } catch {
+    id = ''
+  }
+  return isLinkId(id) ? `/waves/${id}` : '/'
+}
+
+function lobbyPostPath(segments: string[]): string | null {
+  if (segments[0]?.toLowerCase() !== 'board' || (segments.length !== 2 && segments.length !== 3)) return null
+  const [eventId, postId] = segments.slice(1).map((s) => {
+    try {
+      return decodeURIComponent(s)
+    } catch {
+      return ''
+    }
+  })
+  if (!isLinkId(eventId)) return '/'
+  return isLinkId(postId) ? `/board/${eventId}?post=${postId}` : `/board/${eventId}`
+}
+
+/** The See-all questions the old Nearby screen took as `filter` (Flow 3b · N1: it is a Pulse chip now, SCRUM-1022). */
+const SEE_ALL_KINDS: ReadonlySet<string> = new Set(['live', 'tonight', 'nearby', 'forYou', 'weekend'])
+const SLUG = /^[a-z0-9][a-z0-9-]{0,63}$/
+
+/**
+ * `/nearby-events?filter=…` (an old link, a push, an installed build's See all) lands on the Pulse with that chip on:
+ * `/events?seeAll=<kind>`, plus the interest's slug for For you. Only these two values ride along, each checked; an
+ * unknown filter is Near me, the old screen's own default.
+ */
+function nearbyRedirect(path: string): string {
+  const query = new URLSearchParams(path.split('#', 1)[0].split('?')[1] ?? '')
+  const filter = query.get('filter') ?? ''
+  const kind = SEE_ALL_KINDS.has(filter) ? filter : 'nearby'
+  const slug = query.get('categorySlug') ?? ''
+  return `/events?seeAll=${kind}${kind === 'forYou' && SLUG.test(slug) ? `&categorySlug=${slug}` : ''}`
 }
 
 /**
- * The one query a link keeps (R6-5): a room link (`/chat/<id>`) keeps `eventId` and `opensAt`, so a room that has not opened
+ * A room link (`/chat/<id>`, R6-5) keeps `eventId` and `opensAt`, so a room that has not opened
  * yet counts down to the server's own time, and a crew's or a Blend's `kind` with its `crewId` or `blendId` (rc7). Both are checked here (an id's shape, an instant that parses) and again by the
  * chat, which uses `opensAt` only when the link names the event and drops it when the server's door says otherwise. Nothing
  * else: a room's name and title come from the server, never from a link.
@@ -135,8 +199,24 @@ const CHAT_LINK_PARAMS: Readonly<Record<string, (value: string) => boolean>> = {
   crewId: (v) => SEGMENT.test(v),
   blendId: (v) => SEGMENT.test(v),
 }
-function chatQuery(segments: string[], path: string): string {
-  if (segments.length !== 2 || segments[0].toLowerCase() !== 'chat' || !SEGMENT.test(segments[1])) return ''
+/**
+ * The event preferences (SCRUM-1034): the room's pseudonym for the anonymous card, only in the server's shape
+ * (`pseudonymFromParam`), and `askIntent=1`, the first-door question. Not `revealed`: a link must not open the cards on Named.
+ */
+const PREFERENCES_LINK_PARAMS: Readonly<Record<string, (value: string) => boolean>> = {
+  pseudonym: (v) => pseudonymFromParam(v) === v,
+  askIntent: (v) => v === '1',
+}
+
+/** The params each route keeps from a link, by its first segment; a route not here keeps none. */
+const LINK_PARAMS: Readonly<Record<string, Readonly<Record<string, (value: string) => boolean>>>> = {
+  chat: CHAT_LINK_PARAMS,
+  'event-preferences': PREFERENCES_LINK_PARAMS,
+}
+
+function linkQuery(segments: string[], path: string): string {
+  const allowed = segments.length === 2 && SEGMENT.test(segments[1]) ? LINK_PARAMS[segments[0].toLowerCase()] : undefined
+  if (!allowed) return ''
   const query = path.split('#', 1)[0].split('?')[1] ?? ''
   const kept: string[] = []
   for (const pair of query.split('&')) {
@@ -147,7 +227,7 @@ function chatQuery(segments: string[], path: string): string {
     } catch {
       continue
     }
-    if (CHAT_LINK_PARAMS[key]?.(value) && !kept.some((k) => k.startsWith(`${key}=`))) kept.push(`${key}=${encodeURIComponent(value)}`)
+    if (Object.prototype.hasOwnProperty.call(allowed, key) && allowed[key](value) && !kept.some((k) => k.startsWith(`${key}=`))) kept.push(`${key}=${encodeURIComponent(value)}`)
   }
   return kept.length ? `?${kept.join('&')}` : ''
 }

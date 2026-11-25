@@ -16,9 +16,12 @@ jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
 }))
 jest.mock('../lib/apiClient', () => ({
-  apiClient: { getFriend: jest.fn(), openFriendConversation: jest.fn(), removeFriend: jest.fn() },
+  apiClient: { getFriend: jest.fn(), openFriendConversation: jest.fn(), removeFriend: jest.fn(), getWorkFields: jest.fn() },
 }))
-jest.mock('../lib/safetyUtils', () => ({ showUserSafetyActions: jest.fn() }))
+jest.mock('../lib/safetyUtils', () => {
+  const actual = jest.requireActual('../lib/safetyUtils')
+  return { showUserSafetyActions: jest.fn(), blockStep: actual.blockStep, userReportStep: actual.userReportStep }
+})
 jest.mock('../lib/sheet', () => ({ showSheet: jest.fn() }))
 const mockShowToast = jest.fn()
 jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: mockShowToast }) }))
@@ -28,8 +31,16 @@ jest.mock('../components/profile/ProfileHeroStage', () => {
   const { Text } = require('react-native')
   return {
     heroHeightFor: (w: number) => Math.round(w * 1.3),
-    ProfileHeroStage: (p: { name: string; age?: number | null }) => React.createElement(Text, null, p.age ? `${p.name}, ${p.age}` : p.name),
+    ProfileHeroStage: (p: { name: string; age?: number | null; subtitle?: string | null }) =>
+      React.createElement(React.Fragment, null, React.createElement(Text, null, p.age ? `${p.name}, ${p.age}` : p.name), p.subtitle ? React.createElement(Text, { testID: 'hero-subtitle' }, p.subtitle) : null),
   }
+})
+// The page's body is the real `ProfileBody`, so the real `ProfileInterests` runs and draws `InterestChip`s; the chip is
+// read through its `shared` prop (the outline) instead of through pixels.
+jest.mock('../components/ds/Chip', () => {
+  const React = require('react')
+  const { Text } = require('react-native')
+  return { ...jest.requireActual('../components/ds/Chip'), InterestChip: (p: { label: string; shared?: boolean }) => React.createElement(Text, null, p.shared ? `${p.label} (outlined)` : p.label) }
 })
 jest.mock('../components/profile/ProfileSections', () => {
   const React = require('react')
@@ -40,11 +51,11 @@ jest.mock('../components/profile/ProfileSections', () => {
   return {
     ...jest.requireActual('../components/profile/ProfileSections'),
     SECTION_GAP: 28,
-    ProfileSection: (p: { title: string; children: unknown }) => React.createElement(View, null, React.createElement(Text, null, p.title), p.children),
     ProfileBio: stub('bio'),
     ProfileDetail: stub('detail'),
     ProfileGallery: (p: { photos: string[] }) => React.createElement(Text, null, `gallery: ${p.photos.join(',')}`),
     ProfileInterests: stub('interests'),
+    ProfileSection: (p: { title: string; children: unknown }) => React.createElement(View, null, React.createElement(Text, null, p.title), p.children),
   }
 })
 
@@ -54,6 +65,7 @@ import { showSheet } from '../lib/sheet'
 import FriendProfileScreen from '../app/friends/[userId]'
 import { PROFILE_EMPTY } from '../components/profile/ProfileSections'
 import { SELECTION } from '../components/ds/shared'
+import { isLitControl } from './helpers/lit'
 
 const api = apiClient as jest.Mocked<typeof apiClient>
 const BEN = {
@@ -71,6 +83,28 @@ const BEN = {
 }
 
 beforeEach(() => jest.clearAllMocks())
+
+describe('shared interests (SCRUM-896): one person looks the same from both doors, as /user/[id] draws them', () => {
+  const interests = [
+    { id: 'c1', name: 'Exhibitions', slug: 'exhibitions', icon: null },
+    { id: 'c2', name: 'Coffee', slug: 'coffee', icon: null },
+  ]
+
+  it('outlines the ones you share and says how many, from the payload\'s sharedInterests', async () => {
+    api.getFriend.mockResolvedValue({ success: true, data: { ...BEN, interests, sharedInterests: ['Exhibitions'] } })
+    await render(<FriendProfileScreen />)
+    expect(await screen.findByText('Exhibitions (outlined)')).toBeTruthy()
+    expect(screen.getByText('Coffee')).toBeTruthy()
+    expect(screen.getByText('1 shared')).toBeTruthy()
+  })
+
+  it('draws the plain list, with no count, when the server (or an older one) shares none', async () => {
+    api.getFriend.mockResolvedValue({ success: true, data: { ...BEN, interests } })
+    await render(<FriendProfileScreen />)
+    expect(await screen.findByText('Exhibitions')).toBeTruthy()
+    expect(screen.queryByText(/outlined|shared/)).toBeNull()
+  })
+})
 
 it('goes straight to an open DM without asking for a new one', async () => {
   api.getFriend.mockResolvedValue({ success: true, data: { ...BEN, conversationId: 'conv-1' } })
@@ -113,6 +147,30 @@ it('asks in the app’s sheet, and stays on the profile saying so when removing 
   expect(router.back).not.toHaveBeenCalled()
 })
 
+/*
+ * Flow 7 5-A, one weight per consequence: the menu is rows under the friend's face and one-line name; Remove friend is plain with
+ * "They won’t be told", only Block is red, with "Also removes them as a friend"; the confirms say a first name. Negative
+ * control: the old menu (title only, Remove friend and Block both destructive, Block's stranger copy) fails it.
+ */
+it('the menu: face and name as the head, Remove friend plain, only Block red, and Block says it ends the friendship', async () => {
+  const marc = { ...BEN, userId: 'u_marc', name: 'Marc-André Lefebvre-Desrosiers' }
+  api.getFriend.mockResolvedValue({ success: true, data: marc })
+  await render(<FriendProfileScreen />)
+  fireEvent.press(await screen.findByLabelText('More'))
+  const sheet = menu()
+  expect(sheet).toMatchObject({ layout: 'rows', person: { name: 'Marc-André Lefebvre-Desrosiers' } })
+  const rows = sheet.actions.filter((a: { cancel?: boolean }) => !a.cancel)
+  expect(rows.map((a: { label: string; variant?: string; detail?: string }) => [a.label, a.variant ?? 'plain', a.detail ?? null])).toEqual([
+    ['Remove friend', 'plain', 'They won’t be told'],
+    ['Block', 'destructive', 'Also removes them as a friend'],
+    ['Report', 'plain', null],
+  ])
+  const block = rows[1].next()
+  expect(block.title).toBe('Block Marc-André?')
+  expect(block.message).toBe('They won’t be told. You won’t see each other in rooms, and they’re no longer your friend. Your messages are hidden.')
+  expect(rows[0].next()).toMatchObject({ title: 'Remove Marc-André?', message: 'They won’t be told. Your messages stay, and you can add each other again with a link.' })
+})
+
 it('leaves once the server agreed', async () => {
   api.getFriend.mockResolvedValue({ success: true, data: BEN })
   api.removeFriend.mockResolvedValue({ success: true, data: {} } as never)
@@ -134,7 +192,7 @@ it('does not repeat the hero’s first photo in the gallery', async () => {
 it('says plainly when they are no longer a friend', async () => {
   api.getFriend.mockResolvedValue({ success: false, error: 'Not found', errorCode: 'NOT_FOUND' })
   await render(<FriendProfileScreen />)
-  expect(await screen.findByText('You’re not friends with this person any more.')).toBeTruthy()
+  expect(await screen.findByText('You’re no longer friends')).toBeTruthy()
 })
 
 it('does not call a failed load an unfriending, and tries again', async () => {
@@ -142,7 +200,7 @@ it('does not call a failed load an unfriending, and tries again', async () => {
   api.getFriend.mockResolvedValueOnce({ success: false, error: 'No internet connection. Check your network and try again.' })
   await render(<FriendProfileScreen />)
   expect(await screen.findByText('This profile didn’t load')).toBeTruthy()
-  expect(screen.queryByText('You’re not friends with this person any more.')).toBeNull()
+  expect(screen.queryByText('You’re no longer friends')).toBeNull()
   // And the way out is there, since the hero's top bar never drew.
   expect(screen.getByLabelText('Back')).toBeTruthy()
 
@@ -160,9 +218,60 @@ it('Message is lit, Remove friend is in the corner menu, and an empty profile sa
   api.getFriend.mockResolvedValue({ success: true, data: BEN })
   await render(<FriendProfileScreen />)
   await screen.findByTestId('friend-message')
-  expect(StyleSheet.flatten(screen.getByTestId('friend-message').props.style).backgroundColor).toBe(SELECTION.rose.fill)
+  expect(isLitControl(screen.getByTestId('friend-message'))).toBe(true)
   expect(screen.queryByText('Remove friend')).toBeNull()
   expect(screen.getByText(PROFILE_EMPTY)).toBeTruthy()
   fireEvent.press(screen.getByLabelText('More'))
   expect(menu().actions.map((a: { label: string }) => a.label)).toEqual(['Remove friend', 'Block', 'Report', 'Cancel'])
+})
+
+describe('the about line and the badges (YOU-04): what GET /friends/:id sends, as /user/[id] draws it', () => {
+  const FRIEND = {
+    ...BEN,
+    work_field: 'Design',
+    languages: ['Tamil', 'English'],
+    homeState: 'Tamil Nadu',
+    sign: 'Leo ♌',
+    badges: [{ kind: 'shows_up', label: 'Shows up' }],
+  }
+
+  it('draws the about line and the badges', async () => {
+    api.getFriend.mockResolvedValue({ success: true, data: FRIEND })
+    await render(<FriendProfileScreen />)
+    expect(await screen.findByLabelText('Badge: Shows up')).toBeTruthy()
+    expect(screen.getByLabelText(/Speaks Tamil, English · From Tamil Nadu · Leo/)).toBeTruthy()
+  })
+
+  it('an older server that sends none draws neither, and the page stands', async () => {
+    api.getFriend.mockResolvedValue({ success: true, data: BEN })
+    await render(<FriendProfileScreen />)
+    await screen.findByText('Message')
+    expect(screen.queryByLabelText(/^Badge:/)).toBeNull()
+    expect(screen.queryByLabelText(/Speaks/)).toBeNull()
+  })
+
+  it('badges turned off (key absent) draw no Badges section', async () => {
+    api.getFriend.mockResolvedValue({ success: true, data: { ...FRIEND, badges: undefined } })
+    await render(<FriendProfileScreen />)
+    await screen.findByText('Message')
+    expect(screen.queryByText('Badges')).toBeNull()
+  })
+})
+
+describe('the work field is a label, never the stored code (MED-1)', () => {
+  beforeEach(() => api.getWorkFields.mockResolvedValue({ success: true, data: { workFields: [{ slug: 'data_ai', label: 'Data & AI' }] } } as never))
+
+  it('maps data_ai to “Data & AI” in the hero line', async () => {
+    api.getFriend.mockResolvedValue({ success: true, data: { ...BEN, work_field: 'data_ai' } })
+    await render(<FriendProfileScreen />)
+    expect(await screen.findByText('Data & AI · Bengaluru')).toBeTruthy()
+    expect(screen.queryByText(/data_ai/)).toBeNull()
+  })
+
+  it('a code it cannot map is left out, never shown raw', async () => {
+    api.getFriend.mockResolvedValue({ success: true, data: { ...BEN, work_field: 'mystery_code' } })
+    await render(<FriendProfileScreen />)
+    await screen.findByText('Message')
+    expect(screen.queryByText(/mystery_code/)).toBeNull()
+  })
 })

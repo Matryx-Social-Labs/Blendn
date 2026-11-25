@@ -2,14 +2,15 @@ import { BAR_BOTTOM, barCircle, barHeight, barTop } from '../../lib/barGeometry'
 import { useBanterPress } from './pressGuard'
 import { Image } from 'expo-image'
 import type { ReactNode } from 'react'
-import { Platform, Pressable, StyleSheet, Text, View } from 'react-native'
-import Animated, { Easing, FadeOut, withTiming } from 'react-native-reanimated'
+import { Platform, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native'
+import Animated, { Easing, FadeIn, FadeOut, withTiming } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { COLOR, DURATION, EASING, FONT_FAMILY, ICON, MAX_FONT_SCALE, RADIUS, SIZE, SPACE, TYPE } from '../../lib/design/tokens'
 import { useReducedMotion } from '../../lib/motion'
 import { OPACITY } from '../../lib/theme'
 import { clockTime, unbroken } from '../../lib/time'
+import { personFace } from '../../lib/personFace'
 import { Avatar } from '../ds/Avatar'
 import { Button } from '../ds/Button'
 import { CrewEmblem } from '../ds/CrewEmblem'
@@ -17,10 +18,9 @@ import { IconButton } from '../ds/IconButton'
 import { CategoryPlate } from '../ds/EventCard'
 import { Badge, monoCaption, MonoRun, PresenceDot, ScrimPill, TimeBadge } from '../ds/MonoFamily'
 import { RollingNumber } from '../ds/RollingNumber'
-import { CONTROL_FONT_CAP, font, GroundProvider, useBoldText, useLargeText, useSelection, useTwoLineNames } from '../ds/shared'
+import { CONTROL_FONT_CAP, font, GroundProvider, SELECTION, useAnnounced, useBoldText, useLargeText, useSelection, useTwoLineNames } from '../ds/shared'
 import { Icon, type IconName } from '../ui/Icon'
 import { Material } from '../ui/Material'
-import { glassContentsIn, glassRiseIn } from '../motion/presence'
 import { PhotoScrim } from '../ui/GradientFill'
 
 /** The Banter's rows: 52 pt avatars on a 64 pt row (Flow 5 Banter frames). */
@@ -67,11 +67,19 @@ export function BanterHeader({
       <View style={styles.actions}>
         {bell}
         <IconButton icon="search" accessibilityLabel="Search conversations" selected={searching} onPress={onSearch} testID="banter-search-toggle" />
-        <IconButton icon="check-check" accessibilityLabel="Mark all read" disabled={!canMarkAll} onPress={onMarkAll} testID="banter-mark-all" />
+        {/* Only when something is unread (Flow 9 A · 4): an action that does nothing is not drawn. It fades in with the first unread. */}
+        {canMarkAll ? (
+          <Animated.View entering={MARK_ALL_IN} exiting={MARK_ALL_OUT}>
+            <IconButton icon="check-check" accessibilityLabel="Mark all read" onPress={onMarkAll} testID="banter-mark-all" />
+          </Animated.View>
+        ) : null}
       </View>
     </Material>
   )
 }
+
+const MARK_ALL_IN = FadeIn.duration(DURATION.quick).easing(Easing.bezier(...EASING.entrance))
+const MARK_ALL_OUT = FadeOut.duration(DURATION.quick).easing(Easing.bezier(...EASING.exit))
 
 /** The header's height under the status bar: the frames' 116 on a 402 pt iPhone, 120 on Android's 48 dp circles. */
 export const banterHeaderHeight = (insetTop: number, android: boolean) => barHeight(insetTop, android)
@@ -219,13 +227,27 @@ export function BlendLiveCard({
  * card, the asker and their note verbatim in two lines, the time, ⋯, then
  * Decline and Accept (or Join, for a crew invite) at 48 — Decline first.
  */
+/** A quiet line with an eye: what an answer will show (the Lobby's names-on-accept, `NAMES_ON_ACCEPT`). */
+export function EyeNote({ text, testID, style }: { text: string; testID?: string; style?: StyleProp<ViewStyle> }) {
+  const bold = useBoldText()
+  return (
+    <View testID={testID} style={[styles.eyeNote, style]}>
+      <Icon name="eye" size={ICON.inline} color={COLOR.textSecondary} />
+      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary, styles.grow]}>
+        {text}
+      </Text>
+    </View>
+  )
+}
+
 export function RequestCard({
   face,
   name,
+  met,
   note,
+  consent,
   foot,
   time,
-  accept = 'Accept',
   pending = false,
   onAccept,
   onDecline,
@@ -235,11 +257,14 @@ export function RequestCard({
 }: {
   face: ReactNode
   name: string
+  /** Where you met ("Met in the room at …", `metInLine`), on its own line in the world's light (Flow 5 · B-A rq). */
+  met?: string | null
   note: string
+  /** What saying yes will show, said above Decline / Accept (`EyeNote`). */
+  consent?: string
   /** A quiet line under the answers: what became of one that did not go through. */
   foot?: string
   time: string
-  accept?: string
   pending?: boolean
   onAccept: () => void
   onDecline: () => void
@@ -253,8 +278,11 @@ export function RequestCard({
   onMore = useBanterPress(onMore)
   onOpen = useBanterPress(onOpen)
   const bold = useBoldText()
+  // A failed answer appears in place (M24): said on iOS, a live region on Android.
+  useAnnounced(foot)
   const largeText = useLargeText()
   const twoLines = useTwoLineNames()
+  const sel = useSelection()
   return (
     // The card is a surface: its "…" draws the solid disc in the card's chip tone, not glass with nothing to refract (C20).
     <GroundProvider value="surface">
@@ -264,7 +292,7 @@ export function RequestCard({
             onPress={onOpen}
             disabled={!onOpen}
             accessibilityRole={onOpen ? 'button' : 'text'}
-            accessibilityLabel={`${name}. ${note}`}
+            accessibilityLabel={[name, met, note, time].filter(Boolean).join('. ')}
             accessibilityHint={onOpen ? 'Opens their profile' : undefined}
             style={styles.requestWho}
           >
@@ -277,21 +305,30 @@ export function RequestCard({
               <Text numberOfLines={twoLines ? 2 : 1} maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink]}>
                 {name}
               </Text>
+              {met ? (
+                <Text testID={testID && `${testID}-met`} numberOfLines={largeText ? 2 : 1} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: sel.glyph }]}>
+                  {met}
+                </Text>
+              ) : null}
               <Text numberOfLines={largeText ? 4 : 2} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>
                 {note}
               </Text>
             </View>
           </Pressable>
-          {/* The time is a tag beside the row's control, as the Banter row's: it stops where a control does. */}
-          <TimeTag time={time} />
+          {/* The time is a tag beside the row's control, as the Banter row's: it stops where a control does. Read in the card's label, not a stop alone. */}
+          <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+            <TimeTag time={time} />
+          </View>
           {onMore ? <IconButton icon="ellipsis" accessibilityLabel={`More options for the request from ${name}`} onPress={onMore} testID={testID && `${testID}-more`} /> : null}
         </View>
+        {/* Board 06 (L-A): the line stands apart from the row above and the answer below (20 / 22 pt with the card's gap). */}
+        {consent ? <EyeNote text={consent} testID={testID && `${testID}-consent`} style={styles.requestConsent} /> : null}
         <View style={styles.requestActions}>
           <Button
             kind="secondary"
             size="md"
             label="Decline"
-            accessibilityLabel={`Decline the ${accept === 'Join' ? 'invite to' : 'request from'} ${name}`}
+            accessibilityLabel={`Decline the request from ${name}`}
             disabled={pending}
             onPress={onDecline}
             style={styles.grow}
@@ -301,9 +338,9 @@ export function RequestCard({
           <Button
             kind="lit"
             size="md"
-            icon={accept === 'Join' ? 'users' : 'user-check'}
-            label={accept}
-            accessibilityLabel={accept === 'Join' ? `Join ${name}` : `Accept the request from ${name}`}
+            icon="user-check"
+            label="Accept"
+            accessibilityLabel={`Accept the request from ${name}`}
             loading={pending}
             pressHaptic={false}
             onPress={onAccept}
@@ -312,7 +349,7 @@ export function RequestCard({
           />
         </View>
         {foot ? (
-          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} accessibilityLiveRegion="polite" style={[font('meta', bold), styles.secondary]}>
             {foot}
           </Text>
         ) : null}
@@ -321,23 +358,23 @@ export function RequestCard({
   )
 }
 
-/** A request's 40 pt face: a person round, a crew its emblem. */
-export function RequestFace({ photo, pseudonym, emblemSeed }: { photo?: string | null; pseudonym?: string; emblemSeed?: string }) {
-  if (emblemSeed) {
-    return (
-      <View style={[styles.square, { width: REQUEST_FACE, height: REQUEST_FACE }]}>
-        <CrewEmblem seed={emblemSeed} size={REQUEST_FACE} />
-      </View>
-    )
-  }
-  return photo ? <Avatar size={REQUEST_FACE} kind="photo" uri={photo} /> : <Avatar size={REQUEST_FACE} kind="creature" pseudonym={pseudonym ?? 'Someone'} />
+/**
+ * A request's 40 pt face: a named sender (a message request carries their name) by `personFace`, their photo or initial; an
+ * anonymous asker (a Lobby ask) their creature on `pseudonym`.
+ */
+export function RequestFace({ photo, name, pseudonym }: { photo?: string | null; name?: string; pseudonym?: string }) {
+  const face = name !== undefined ? personFace({ named: true, name, photo }) : personFace({ named: false, name: pseudonym ?? 'Someone' })
+  return <Avatar size={REQUEST_FACE} {...face} />
 }
 
 export type RowFace =
-  | { kind: 'person'; photo?: string | null; pseudonym: string }
+  /** `named`: the server shows who they are (a revealed DM, an accepted request); `personFace` picks the picture. */
+  | { kind: 'person'; named: boolean; name: string; photo?: string | null }
   | { kind: 'room'; cover?: string | null }
   | { kind: 'crew'; seed: string | null }
   | { kind: 'pair'; seeds: [string | null, string | null] }
+  /** A Lobby room (Flow 5 C5 B-A): what its post is about, on the rose tile, as the Lobby's own kind pill draws it. */
+  | { kind: 'glyph'; icon: IconName }
 
 /** What line 2 says (precedence: a status chip, then not sent, then a draft, then the last message). */
 export type RowLine =
@@ -388,7 +425,10 @@ export function BanterRow({
       testID={testID}
       onPress={onPress}
       disabled={!onPress}
+      // Unlabelled, a SwipeRow around it is the element: no stop of its own (Android focuses a bare Pressable, so TalkBack stopped twice).
       accessible={!!accessibilityLabel}
+      focusable={!!accessibilityLabel}
+      importantForAccessibility={accessibilityLabel ? 'auto' : 'no'}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
       style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
@@ -508,7 +548,7 @@ function Line({ line, unread, lines }: { line: RowLine; unread: boolean; lines: 
 function RowAvatar({ face }: { face: RowFace }) {
   switch (face.kind) {
     case 'person':
-      return face.photo ? <Avatar size={ROW_AVATAR} kind="photo" uri={face.photo} /> : <Avatar size={ROW_AVATAR} kind="creature" pseudonym={face.pseudonym} />
+      return <Avatar size={ROW_AVATAR} {...personFace({ named: face.named, name: face.name, photo: face.photo })} />
     case 'room':
       return face.cover ? (
         <Image source={{ uri: face.cover }} recyclingKey={face.cover} contentFit="cover" accessible={false} style={styles.squareFace} />
@@ -529,6 +569,12 @@ function RowAvatar({ face }: { face: RowFace }) {
       )
     case 'pair':
       return <PairEmblem seeds={face.seeds} ring={COLOR.ink} />
+    case 'glyph':
+      return (
+        <View style={[styles.squareFace, styles.centre, styles.glyphFace]}>
+          <Icon name={face.icon} size={ICON.control} color={SELECTION.rose.glyph} />
+        </View>
+      )
   }
 }
 
@@ -550,7 +596,7 @@ function PairEmblem({ seeds, ring }: { seeds: [string | null, string | null]; ri
 /** Loading (Flow 5 #01): four rows at the real geometry — round, square, round, round. Still. */
 export function BanterSkeleton() {
   return (
-    <View testID="banter-skeleton" accessibilityLabel="Loading your chats">
+    <View accessible testID="banter-skeleton" accessibilityLabel="Loading your chats">
       {[true, false, true, true].map((round, i) => (
         <View key={i} style={styles.row}>
           <View style={[styles.block, { width: ROW_AVATAR, height: ROW_AVATAR, borderRadius: round ? RADIUS.capsule : SQUARE_RADIUS }]} />
@@ -566,22 +612,6 @@ export function BanterSkeleton() {
 const LINE_SHORT = 140
 const LINE_LONG = 220
 
-/** #27: a message landed while your finger was down — "↑ New" instead of moving the rows under it. */
-export function NewAbovePill({ top, onPress }: { top: number; onPress: () => void }) {
-  const bold = useBoldText()
-  return (
-    <Animated.View entering={glassRiseIn} exiting={FadeOut.duration(DURATION.quick)} style={[styles.newPlace, { top }]}>
-      <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel="New messages above">
-        <Material role="control" style={styles.newPill}>
-          <Animated.View entering={glassContentsIn} style={styles.newPillContents}>
-            <Icon name="arrow-up" size={ICON.inline} />
-            <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('caption', bold), styles.ink]}>New</Text>
-          </Animated.View>
-        </Material>
-      </Pressable>
-    </Animated.View>
-  )
-}
 
 const styles = StyleSheet.create({
   header: {
@@ -634,7 +664,8 @@ const styles = StyleSheet.create({
   requestHead: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
   requestWho: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
   requestActions: { flexDirection: 'row', gap: SPACE.sm },
-  square: { borderRadius: SPACE.sm + SPACE.xxs, overflow: 'hidden' },
+  requestConsent: { marginTop: SPACE.md, marginBottom: SPACE.md + SPACE.xxs },
+  eyeNote: { flexDirection: 'row', alignItems: 'flex-start', gap: SPACE.xs },
   row: { minHeight: ROW_HEIGHT, flexDirection: 'row', alignItems: 'center', gap: SPACE.md, backgroundColor: COLOR.ink },
   rowPressed: { backgroundColor: COLOR.surfaceSunken },
   rowText: { flex: 1, minWidth: 0, gap: SPACE.xxs },
@@ -651,6 +682,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLOR.surface,
   },
   chipWarn: { backgroundColor: COLOR.warningTint },
+  glyphFace: { backgroundColor: SELECTION.rose.fill },
   squareFace: { width: ROW_AVATAR, height: ROW_AVATAR, borderRadius: SQUARE_RADIUS, overflow: 'hidden', backgroundColor: COLOR.surface },
   pair: { width: ROW_AVATAR, height: ROW_AVATAR },
   pairTile: {
@@ -669,7 +701,4 @@ const styles = StyleSheet.create({
   skeletonLines: { flex: 1, gap: SPACE.sm },
   lineShort: { width: LINE_SHORT, height: SPACE.lg },
   lineLong: { width: LINE_LONG, height: SPACE.md + SPACE.xxs },
-  newPlace: { position: 'absolute', alignSelf: 'center', zIndex: 3 },
-  newPillContents: { flexDirection: 'row', alignItems: 'center', gap: SPACE.xs },
-  newPill: { flexDirection: 'row', alignItems: 'center', gap: SPACE.xs, height: SPACE.xxl - SPACE.xs, paddingHorizontal: SPACE.md, borderRadius: RADIUS.capsule },
 })

@@ -3,7 +3,7 @@ import { ScrollView, StyleSheet, Text, useWindowDimensions, View, type StyleProp
 import { SafeAreaInsetsContext, useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { Button } from '../../components/ds/Button'
-import { CrewEmblem, EMBLEM_MOTIFS, EMBLEM_PALETTES, emblemFor, type EmblemMotif } from '../../components/ds/CrewEmblem'
+import { CREW_SCENES, CrewEmblem, huddleKey, type CrewScene } from '../../components/ds/CrewEmblem'
 import { Grain } from '../../components/ds/Grain'
 import { MomentBlend, type MomentBlendProps } from '../../components/ds/MomentBlend'
 import { MomentMatch } from '../../components/ds/MomentMatch'
@@ -12,6 +12,7 @@ import { MomentReady } from '../../components/ds/MomentReady'
 import { MomentRecap, type MomentRecapProps } from '../../components/ds/MomentRecap'
 import type { MomentFace } from '../../components/ds/MomentStage'
 import { Orbs, type OrbSet, type OrbTime } from '../../components/ds/Orbs'
+import { Title } from '../../components/ds/Title'
 import { COLOR, RADIUS, SPACE, TYPE } from '../../lib/design/tokens'
 
 /**
@@ -29,11 +30,11 @@ import { COLOR, RADIUS, SPACE, TYPE } from '../../lib/design/tokens'
  */
 const PHOTO = 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=256'
 const PHOTO_THEM = 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=256'
-const ME: MomentFace = { kind: 'photo', uri: PHOTO }
+const ME: MomentFace = { kind: 'photo', uri: PHOTO, name: 'Asha' }
 const NO_INSETS = { top: 0, bottom: 0, left: 0, right: 0 }
 
 const MATCHES: Record<string, { you: MomentFace; them: MomentFace; name: string }> = {
-  'photo-photo': { you: ME, them: { kind: 'photo', uri: PHOTO_THEM }, name: 'Priya' },
+  'photo-photo': { you: ME, them: { kind: 'photo', uri: PHOTO_THEM, name: 'Priya' }, name: 'Priya' },
   'photo-creature': { you: ME, them: { kind: 'creature', pseudonym: 'Velvet Heron' }, name: 'Velvet Heron' },
   'creature-creature': { you: { kind: 'creature', pseudonym: 'Cosmic Panda' }, them: { kind: 'creature', pseudonym: 'Velvet Heron' }, name: 'Velvet Heron' },
 }
@@ -75,22 +76,23 @@ const ORB_CELLS: [OrbSet, OrbTime][] = [
 ]
 
 /** A seed for every palette × motif, found by trying `seed-0`, `seed-1`, … (the emblem takes only a seed). */
-const SEEDS = (() => {
-  const found = new Map<string, string>()
-  for (let i = 0; found.size < EMBLEM_PALETTES.length * EMBLEM_MOTIFS.length; i++) {
-    const { palette, motif } = emblemFor(`seed-${i}`)
-    const key = `${palette}/${motif}`
-    if (!found.has(key)) found.set(key, `seed-${i}`)
+/** Crews with each of the eight hues (the server's seeds are 16 hex; these are fixed so a screenshot is comparable). */
+const HUE_SEEDS = (() => {
+  const found = new Map<number, string>()
+  for (let i = 0; found.size < 8; i++) {
+    const seed = (i * 2654435761 >>> 0).toString(16).padStart(16, '0')
+    const { hue } = huddleKey(seed)
+    if (!found.has(hue)) found.set(hue, seed)
   }
-  return found
+  return [...found.entries()].sort(([a], [b]) => a - b).map(([, s]) => s)
 })()
-const seedFor = (palette: number, motif: EmblemMotif) => SEEDS.get(`${palette}/${motif}`) as string
 const EMBLEM_SIZES = [24, 40, 56, 96, 160]
 
 export default function DsP5Preview() {
   const insets = useSafeAreaInsets()
   const [moment, setMoment] = useState<{ play: (typeof PLAYS)[number]; key: number } | null>(null)
   const [recapRound, setRecapRound] = useState(0)
+  const [scene, setScene] = useState<{ scene: CrewScene; key: number } | null>(null)
   const close = () => setMoment(null)
 
   return (
@@ -98,7 +100,7 @@ export default function DsP5Preview() {
       <ScrollView contentContainerStyle={[styles.scroll, { paddingTop: insets.top + SPACE.xl, paddingBottom: insets.bottom + SPACE.xxl }]}>
         <Text style={styles.display}>P5 · sets and moments</Text>
 
-        <Section title="Moments" note="Each plays once from its button; tap anywhere to skip. Say hi, Keep looking, Open the Blend and Later close it.">
+        <Section title="Moments" note="Each plays once from its button; tap anywhere to skip. Say hi, Keep looking, Open the Mix and Later close it.">
           {PLAYS.map((play) => (
             <Button key={play} testID={`ds-play-${play}`} label={`Play: ${play}`} kind="secondary" size="md" onPress={() => setMoment({ play, key: Date.now() })} />
           ))}
@@ -120,7 +122,7 @@ export default function DsP5Preview() {
             <Cell key={`${set}-${time}`} label={`${set} · ${time}`} testID={`ds-orbs-${set}-${time}`} style={styles.backdrop}>
               <Orbs set={set} time={time} />
               <Grain />
-              <Text style={styles.title}>Tonight</Text>
+              <Title style={styles.title}>Tonight</Title>
             </Cell>
           ))}
           <Cell label="the clock’s set, drifting" testID="ds-orbs-clock" style={styles.backdrop}>
@@ -141,32 +143,33 @@ export default function DsP5Preview() {
           </Cell>
         </Section>
 
-        <Section title="Crew emblems · 12 motifs, field and glyph">
-          {EMBLEM_MOTIFS.map((motif, i) => (
-            <View key={motif} style={styles.row}>
-              {(['field', 'glyph'] as const).map((variant) => (
-                <View key={variant} testID={`ds-emblem-${motif}-${variant}`}>
-                  <CrewEmblem seed={seedFor(i % EMBLEM_PALETTES.length, motif)} size={56} variant={variant} />
-                </View>
-              ))}
-              <Text style={styles.caption}>{motif}</Text>
-            </View>
-          ))}
-        </Section>
-        <Section title="Crew emblems · 12 palettes">
+        <Section
+          title="Crew emblems · scenes"
+          note="Dev harness for the moments not built yet (crew check-in, Wave for {crew}, Wave back, the Mix room closing): one plays at a time"
+        >
           <View style={styles.wrap}>
-            {EMBLEM_PALETTES.map((_, palette) => (
-              <View key={palette} testID={`ds-emblem-palette-${palette}`}>
-                <CrewEmblem seed={seedFor(palette, 'crescent')} size={40} />
+            {CREW_SCENES.map((scene) => (
+              <Button key={scene} testID={`ds-scene-${scene}`} label={`Play: ${scene}`} kind="secondary" size="sm" onPress={() => setScene({ scene, key: Date.now() })} />
+            ))}
+          </View>
+          <View testID="ds-scene-stage" style={styles.bottom}>
+            <CrewEmblem key={scene?.key} seed={HUE_SEEDS[5]} size={160} scene={scene?.scene} />
+          </View>
+        </Section>
+        <Section title="Crew emblems · eight hues">
+          <View style={styles.wrap}>
+            {HUE_SEEDS.map((seed, hue) => (
+              <View key={seed} testID={`ds-emblem-hue-${hue}`}>
+                <CrewEmblem seed={seed} size={40} />
               </View>
             ))}
           </View>
         </Section>
-        <Section title="Crew emblems · sizes" note="24 chip · 40 row · 56 Banter · 96 card · 160 detail and the Blend">
+        <Section title="Crew emblems · the ladder" note="24 chip (two faces) · 40 row · 56 Banter (three) · 96 card · 160 detail and the Mix (scene)">
           <View style={[styles.wrap, styles.bottom]}>
             {EMBLEM_SIZES.map((size) => (
               <View key={size} testID={`ds-emblem-size-${size}`}>
-                <CrewEmblem seed="nebula" size={size} />
+                <CrewEmblem seed={HUE_SEEDS[0]} size={size} />
               </View>
             ))}
           </View>
@@ -181,7 +184,7 @@ export default function DsP5Preview() {
 function Moment({ play, onEnd }: { play: (typeof PLAYS)[number]; onEnd: () => void }) {
   if (play.startsWith('match-')) {
     const m = MATCHES[play.slice('match-'.length)]
-    return <MomentMatch testID="ds-moment-match" {...m} reason="Both into live music" opener="Which set are you here for?" onSayHi={onEnd} onClose={onEnd} />
+    return <MomentMatch testID="ds-moment-match" {...m} tonight={{ question: 'What are you hoping to find tonight?', answer: 'Someone to split a cab back to Koramangala' }} opener="Which set are you here for?" onSayHi={onEnd} onClose={onEnd} />
   }
   if (play.startsWith('blend-')) {
     return <MomentBlend testID="ds-moment-blend" {...BLENDS[play.slice('blend-'.length)]} onOpen={onEnd} onLater={onEnd} />
@@ -236,7 +239,7 @@ const styles = StyleSheet.create({
   cells: { gap: SPACE.lg },
   cell: { gap: SPACE.sm, maxWidth: CELL_WIDTH },
   caption: { ...TYPE.label, color: COLOR.textTertiary },
-  title: { ...TYPE.title, color: COLOR.textPrimary, margin: SPACE.lg },
+  title: { color: COLOR.textPrimary, margin: SPACE.lg },
   stage: { borderRadius: RADIUS.rowInCard, borderWidth: StyleSheet.hairlineWidth, borderColor: COLOR.hairline, overflow: 'hidden' },
   backdrop: { height: BACKDROP_HEIGHT, backgroundColor: COLOR.ink },
   tall: { height: RECAP_HEIGHT },

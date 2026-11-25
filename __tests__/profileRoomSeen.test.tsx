@@ -1,0 +1,153 @@
+/**
+ * A profile opened from a room knows what the room knows (SCRUM-953): one you both waved with reads "Message", not
+ * "Connect" — the card said so, the profile asked nobody. There is no person Like anywhere (Wave replaced it, SCRUM-1042);
+ * the page's Wave is the lens dock's, tested in profileLensPage.
+ */
+import { act, render, screen } from '@testing-library/react-native'
+import { Dimensions, StyleSheet } from 'react-native'
+
+let mockParams: Record<string, string> = { id: 'u_ben' }
+const mockUser = { id: 'u_me' }
+
+jest.mock('expo-router', () => ({
+  router: { back: jest.fn(), push: jest.fn() },
+  useLocalSearchParams: () => mockParams,
+}))
+jest.mock('react-native-safe-area-context', () => ({
+  useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
+}))
+jest.mock('../lib/useAuth', () => ({ useAuth: () => ({ user: mockUser }) }))
+jest.mock('../lib/apiClient', () => ({
+  apiClient: {
+    getPublicProfile: jest.fn(),
+    getProfile: jest.fn(),
+    getConversations: jest.fn(),
+    getMessageRequests: jest.fn(),
+    createMessageRequest: jest.fn(),
+    respondToMessageRequest: jest.fn(),
+    sendFriendRequest: jest.fn(),
+  },
+}))
+let mockMatchHandler: ((d: { eventId: string; otherUserId: string; conversationId: string; name: string }) => void) | null = null
+jest.mock('../lib/socketClient', () => ({
+  ...jest.requireActual('../lib/socketClient'),
+  subscribeToRoomMatch: (cb: typeof mockMatchHandler) => {
+    mockMatchHandler = cb
+    return () => { mockMatchHandler = null }
+  },
+}))
+jest.mock('../lib/logger', () => ({ Logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn(), journey: jest.fn() } }))
+jest.mock('../lib/safetyUtils', () => ({ showUserSafetyActions: jest.fn() }))
+const mockShowToast = jest.fn()
+jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: mockShowToast }) }))
+jest.mock('../components/profile/PhotoViewer', () => ({ PhotoViewer: () => null }))
+jest.mock('../components/Skeleton', () => ({ SkeletonBlock: () => null, SkeletonLine: () => null }))
+// Open, it is one button that sends "hi" — enough to drive what the screen does with the answer.
+jest.mock('../components/grid/ConnectSheet', () => ({
+  ConnectSheet: (p: { visible: boolean; onSend: (m: string) => void }) => {
+    const React = require('react')
+    const { Pressable, Text } = require('react-native')
+    return p.visible
+      ? React.createElement(Pressable, { onPress: () => p.onSend('hi') }, React.createElement(Text, null, 'Send request'))
+      : null
+  },
+}))
+jest.mock('../components/ds/MomentMatch', () => ({
+  MomentMatch: (p: { name: string; onSayHi: () => void; testID?: string }) => {
+    const React = require('react')
+    const { Pressable, Text } = require('react-native')
+    return React.createElement(Pressable, { onPress: p.onSayHi, testID: p.testID }, React.createElement(Text, null, `You and ${p.name} both waved`))
+  },
+}))
+jest.mock('../components/profile/ProfileHeroStage', () => {
+  const React = require('react')
+  const { Text } = require('react-native')
+  return {
+    heroHeightFor: (w: number) => Math.round(w * 1.3),
+    ProfileHeroStage: function HeroStub(p: { name: string; age?: number | null }) {
+      return React.createElement(Text, null, p.age ? `${p.name}, ${p.age}` : p.name)
+    },
+  }
+})
+jest.mock('../components/profile/ProfileSections', () => {
+  const React = require('react')
+  const { Text, View } = require('react-native')
+  // eslint-disable-next-line react/display-name
+  const stub = (label: string) => (p: { title?: string }) => React.createElement(Text, null, p.title ?? label)
+  // The real `ProfileBody` (the one body both profile pages draw, D26) over the stubbed pieces is not possible across a module
+  // boundary, so the real module is kept and only its leaf pieces below stand in where a test reads them.
+  return {
+    ...jest.requireActual('../components/profile/ProfileSections'),
+    SECTION_GAP: 28,
+    ProfileSection: (p: { title: string; children: unknown }) => React.createElement(View, null, React.createElement(Text, null, p.title), p.children),
+    ProfileBio: stub('bio'),
+    ProfileDetail: stub('detail'),
+    ProfileGallery: stub('gallery'),
+    ProfileInterests: stub('interests'),
+  }
+})
+
+import { apiClient } from '../lib/apiClient'
+import UserProfile from '../app/user/[id]'
+
+/** Message as a request (C7: "Connect" retired): the dock's label is Message either way; only the ask says what it sends. */
+const ASK = /^Message .+\. Sends a request and shows them your name and photo$/
+
+
+const api = apiClient as jest.Mocked<typeof apiClient>
+const BEN = { id: 'u_ben', name: 'Ben', photos: ['https://cdn/ben.jpg'], bio: 'Hi', identityVisible: false }
+
+const open = async (params: Record<string, string>) => {
+  mockParams = { id: 'rh_ben', eventId: 'e1', pseudonym: 'Dancing Gecko', roomSeed: 'e1:rh_ben', ...params }
+  api.getPublicProfile.mockResolvedValue({ success: true, data: BEN })
+  api.getConversations.mockResolvedValue({ success: true, data: [] } as never)
+  api.getMessageRequests.mockResolvedValue({ success: true, data: { requests: [] } } as never)
+  await render(<UserProfile />)
+  await screen.findByText('Dancing Gecko')
+  // The page's own CTA lookup has settled; a match is what changes it after that.
+  await act(async () => { await new Promise((r) => setTimeout(r, 0)) })
+}
+
+it('offers no Like, even opened from a room', async () => {
+  await open({})
+  expect(screen.queryByText('Like')).toBeNull()
+  expect(screen.queryByText('Liked')).toBeNull()
+})
+
+it('offers Message, not a request, when the room says you both waved', async () => {
+  await open({ conversationId: 'c1' })
+  expect(screen.getByText('Message')).toBeTruthy()
+  expect(screen.queryByLabelText(ASK)).toBeNull()
+})
+
+describe('a match that arrives while the profile is open (SCRUM-960)', () => {
+  const match = (over: Partial<{ eventId: string; otherUserId: string }> = {}) =>
+    act(async () => mockMatchHandler?.({ eventId: 'e1', otherUserId: 'rh_ben', conversationId: 'c9', name: 'Dancing Gecko', ...over }))
+
+  it('flips an open profile from a request to Message', async () => {
+    await open({})
+    expect(screen.getByLabelText(ASK)).toBeTruthy()
+    await match()
+    expect(await screen.findByText('Message')).toBeTruthy()
+    expect(screen.queryByLabelText(ASK)).toBeNull()
+  })
+
+  it.each([
+    ['another person', { otherUserId: 'rh_other' }],
+    ['another room', { eventId: 'e2' }],
+  ])('ignores a match with %s', async (_n, over) => {
+    await open({})
+    await match(over)
+    expect(screen.getByLabelText(ASK)).toBeTruthy()
+  })
+})
+
+it('the Room card hands what it knows to the profile it opens', () => {
+  const fs = require('fs')
+  const screenSrc: string = fs.readFileSync(require('path').join(__dirname, '../components/blendn/BlendnScreen.tsx'), 'utf8')
+  const openProfile = screenSrc.slice(screenSrc.indexOf('const openProfile'), screenSrc.indexOf('const sayHi'))
+  expect(openProfile).not.toContain('liked')
+  expect(openProfile).toContain('wave: waved')
+  expect(openProfile).toContain('conversationId: seen.conversationId')
+  expect(screenSrc).toContain('openProfile(card, cardPerson ?? undefined)')
+})

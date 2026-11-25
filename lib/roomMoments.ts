@@ -10,7 +10,7 @@
  * sent, and when there is nothing true to say the fallback is presence.
  */
 
-import { fnv1a } from './pseudonymAvatar'
+import { fnv1a } from './creatureSeed'
 import { clockTime, eventClock } from './time'
 
 /**
@@ -45,6 +45,12 @@ export interface ReasonSource {
  * the variable part is always a single label ("Jazz", "Design"), and a word
  * boundary would drop it entirely.
  */
+/**
+ * You were both at N earlier events: plain words, the count first. The owner's pick read "At 3 events with you"; "At" is
+ * dropped because the line must fit REASON_MAX under a face at 360 dp and "At 3 events with you" is 20.
+ */
+const eventsWithYou = (n: number) => `${n} ${n === 1 ? 'event' : 'events'} with you`
+
 function fit(text: string, max = REASON_MAX): string {
   return text.length <= max ? text : `${text.slice(0, max - 1).trimEnd()}…`
 }
@@ -64,7 +70,7 @@ export function reasonLines(p: ReasonSource & { overlaps?: readonly { text: stri
   const plans = p.sharedPlans ?? 0
   if (plans > 0) out.push(`Going to ${plans} more ${plans === 1 ? 'event' : 'events'} together`)
   const nights = p.sharedEvents ?? 0
-  if (nights > 0) out.push(`Both at ${nights} ${nights === 1 ? 'night' : 'nights'} before`)
+  if (nights > 0) out.push(eventsWithYou(nights))
   if (p.sharedWorkField && p.workField) out.push(`You both work in ${p.workField}`)
   for (const o of p.overlaps ?? []) out.push(o.text)
   return out
@@ -78,7 +84,7 @@ export function reasonLines(p: ReasonSource & { overlaps?: readonly { text: stri
  * appears when the server has already checked that it is mutual and it is the
  * one thing somebody would most want to know before crossing a room.
  *
- * History reads "Both at N nights before", never "Met at": the product exists
+ * History reads "N events with you" (audit C-2, owner 2026-11-11: "Both at 1 night" read as nothing), never "Met at": the product exists
  * because people in the same room do not meet, and claiming they did would be
  * the one sentence here that isn't true.
  */
@@ -91,7 +97,7 @@ export function reasonLine(p: ReasonSource, now: number = Date.now()): string {
   if (plans > 0) return fit(`${plans} ${plans === 1 ? 'plan' : 'plans'} in common`)
 
   const history = p.sharedEvents ?? 0
-  if (history > 0) return fit(`Both at ${history} ${history === 1 ? 'night' : 'nights'}`)
+  if (history > 0) return fit(eventsWithYou(history))
 
   const interests = (p.interests ?? []).filter((s) => s.trim().length > 0)
   if (interests.length > 0) {
@@ -118,30 +124,15 @@ export function reasonLine(p: ReasonSource, now: number = Date.now()): string {
 }
 
 /**
- * The faces under "N here now": arrivals first, then the rest, only people
- * inside. The pool keeps whoever checked out, and one of them sat under
- * "1 here now" in place of the one person who was (SCRUM-495).
- */
-export function hereNowStack<T extends { id: string; insideNow?: boolean }>(
-  arrivals: readonly T[],
-  people: readonly T[],
-  size: number
-): T[] {
-  const seen = new Set(arrivals.map((a) => a.id))
-  return [...arrivals, ...people.filter((p) => !seen.has(p.id))]
-    .filter((p) => p.insideNow !== false)
-    .slice(0, size)
-}
-
-/**
  * The face grid's heading and its number.
  *
- * "Everyone here" is the room's number, inside now (`hereCount`, you
- * included): the one the Room's headline, the chat header and Room info all
- * say (RC drive 3 had 482, 515 and 450 for one room of 483). Not the faces
- * loaded, and not the room minus you — the grid leaves out friends (their own
- * section) and "show online" off (counted, not listed), so its length was
- * never the room.
+ * A heading over cards counts the cards (Room count ruling, SCRUM-376): the
+ * grid leaves out friends (their own section) and "show online" off (counted,
+ * not listed), so the room's number over it said five over four faces. While
+ * more pages remain the cards cannot be counted, so "Everyone here" says the
+ * room's number (`hereCount`, you included — the one the headline, the chat
+ * header and Room info's hero say); the headline "N here now" stays that
+ * aggregate.
  *
  * "Everyone here" stops being true once somebody in it has left: then it is
  * "Everyone who came", counted by its faces only when they are all loaded
@@ -153,7 +144,7 @@ export function everyoneHead(
 ): { title: string; count: number } {
   const allHere = people.every((p) => p.insideNow !== false)
   if (!allHere) return { title: 'Everyone who came', count: hasMore ? 0 : people.length }
-  return { title: 'Everyone here', count: hereCount }
+  return { title: 'Everyone here', count: hasMore ? hereCount : people.length }
 }
 
 /* -------------------------------------------------------------------------- */
@@ -331,4 +322,13 @@ export function pickTonight<T extends TonightCandidate>(
       if (da !== db) return da - db
       return new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime()
     })
+}
+
+/**
+ * Tonight's deck: `pickTonight`, with the events the centre button points at (`todayIds`, yours and today in their own zone,
+ * soonest first) kept even past the horizon and leading it (SCRUM-971): the disc and the deck are one answer to "what's tonight".
+ */
+export function tonightDeck<T extends TonightCandidate>(events: readonly T[], now: number, todayIds: readonly string[] = []): T[] {
+  const today = todayIds.flatMap((id) => events.filter((e) => e.id === id))
+  return [...today, ...pickTonight(events, now).filter((e) => !todayIds.includes(e.id))]
 }

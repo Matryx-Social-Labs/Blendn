@@ -9,8 +9,9 @@ import { act, fireEvent, render, screen } from '@testing-library/react-native'
 import React from 'react'
 import { AccessibilityInfo, Text } from 'react-native'
 
-import { ChatDock } from '../components/blendn/ChatDock'
 import { RoomView, type RoomViewProps } from '../components/blendn/RoomView'
+import { RoomYouCard } from '../components/blendn/RoomSections'
+import type { Visibility } from '../components/ds/Banner'
 import type { RoomPerson } from '../lib/useRoom'
 
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
@@ -22,8 +23,22 @@ jest.mock('expo-linear-gradient', () => {
   const { View } = jest.requireActual('react-native')
   return { LinearGradient: (props: object) => <View {...props} /> }
 })
+const mockStage = { scrolled: false, atTop: jest.fn() }
+const mockMaterialMounts = { count: 0 }
+jest.mock('../components/ui/Material', () => {
+  const { useEffect } = jest.requireActual('react')
+  const { View } = jest.requireActual('react-native')
+  return {
+    Material: ({ role: _role, ...rest }: Record<string, unknown>) => {
+      useEffect(() => {
+        mockMaterialMounts.count += 1
+      }, [])
+      return <View {...rest} />
+    },
+  }
+})
 jest.mock('../components/blendn/RoomStage', () => ({
-  useStageScroll: () => ({ onScroll: undefined, native: {}, scrollEventThrottle: 16 }),
+  useStageScroll: () => ({ onScroll: undefined, native: {}, scrollEventThrottle: 16, scrolled: mockStage.scrolled, atTop: mockStage.atTop }),
 }))
 let mockNetwork = 'online'
 jest.mock('../lib/networkStatus', () => ({ getNetworkState: () => mockNetwork, subscribeNetworkState: () => () => {} }))
@@ -57,28 +72,22 @@ const person = (id: string, o: Partial<RoomPerson> = {}): RoomPerson =>
     badges: [],
     insideNow: true,
     arrivedAt: null,
-    liked: false,
+    wave: 'none',
+    wavedAt: null,
     matched: false,
     conversationId: null,
     requested: false,
-    pending: false,
     reason: '',
     raw: {} as never,
     ...o,
   }) as RoomPerson
 
-const room = (props: Partial<RoomViewProps> = {}) =>
-  render(
+const roomElement = (props: Partial<RoomViewProps> = {}) => (
     <RoomView
-      title="Vinyl Night"
-      hereCount={14}
-      checkedInAt={new Date(Date.now() - 72 * 60_000).toISOString()}
-      me={{ kind: 'creature', pseudonym: 'Night Cat' }}
       people={Array.from({ length: 13 }, (_, i) => person(`p${i}`))}
-      arrivals={[]}
       connection={{ state: 'connected' } as never}
-      visibility={<Text>visibility line</Text>}
-      segments={false}
+      you={<Text>you card</Text>}
+      crewsHere={null}
       view="people"
       onView={jest.fn()}
       crewCards={[]}
@@ -95,16 +104,15 @@ const room = (props: Partial<RoomViewProps> = {}) =>
       waveKeys={{}}
       onOpen={jest.fn()}
       onLike={jest.fn()}
-      chatGroupId={null}
-      dockWave={null}
-      onOpenChat={jest.fn()}
-      onOpenPerson={jest.fn()}
+      onWave={jest.fn()}
+      onSayHi={jest.fn()}
       enter={false}
       topInset={124}
       bottomInset={34}
       {...props}
     />
-  )
+)
+const room = (props: Partial<RoomViewProps> = {}) => render(roomElement(props))
 
 beforeEach(() => {
   mockNetwork = 'online'
@@ -115,45 +123,150 @@ beforeEach(() => {
   jest.spyOn(AccessibilityInfo, 'isReduceTransparencyEnabled').mockResolvedValue(false)
 })
 
-describe('the hero (R3-0: the stack and the count, nothing names an arrival)', () => {
-  it('Live, the title, the count with "here now", your time in the ring', async () => {
-    await room()
-    expect(screen.getByText('Live')).toBeTruthy()
-    expect(screen.getByText('Vinyl Night')).toBeTruthy()
-    expect(screen.getByLabelText('14 people here now')).toBeTruthy()
-    expect(screen.getByLabelText('You, in the room 1h 12m')).toBeTruthy()
+describe('People, top down (Flow 5 R-A: no hero; the bar has the name and the count)', () => {
+  it('you first, then Meet next, the friends row, Everyone here', async () => {
+    await room({ friendsHere: <Text>friends row</Text> })
+    // getAllByText returns in tree order, which is the screen's order top down.
+    const order = screen.getAllByText(/^(you card|Meet next|friends row|Everyone here)$/).map((el) => el.props.children)
+    expect(order).toEqual(['you card', 'Meet next', 'friends row', 'Everyone here'])
+    expect(screen.queryByText('Live')).toBeNull()
   })
 
-  it('the stack is six faces and "+N"; no line names who walked in', async () => {
-    const p = person('new', { arrivedAt: new Date().toISOString() })
-    await room({ arrivals: [p] })
-    expect(screen.getByText('+7', HIDDEN)).toBeTruthy()
-    expect(screen.queryByText(/walked in/, HIDDEN)).toBeNull()
-  })
-
-  it('just you: "here now · just you" and the empty room (#02)', async () => {
-    await room({ hereCount: 1, people: [], picks: [], everyoneCount: 0 })
-    expect(screen.getByText('here now · just you')).toBeTruthy()
+  it('just you: the you-card and the empty room (#02), no Meet next', async () => {
+    await room({ people: [], picks: [], everyoneCount: 0 })
+    expect(screen.getByText('you card')).toBeTruthy()
     expect(screen.getByText('Nobody else is here yet')).toBeTruthy()
+    expect(screen.queryByText('Meet next')).toBeNull()
     // "Show more" never offers a page of nobody.
     expect(screen.queryByTestId('room-show-more')).toBeNull()
   })
 })
 
+describe('the you-card (R-A youCard merged with the old hero: you, your time in, who is here; Change goes to Room settings)', () => {
+  const T0 = Date.parse('2026-11-11T18:00:00Z')
+  const others = [
+    { kind: 'creature', pseudonym: 'Lunar Fox' },
+    { kind: 'photo', uri: 'https://x/p2.jpg', name: 'Asha' },
+  ] as const
+  const you = (state: Visibility, extra: Partial<React.ComponentProps<typeof RoomYouCard>> = {}, onChange = jest.fn()) =>
+    render(
+      <RoomYouCard
+        face={{ kind: 'creature', pseudonym: 'Quiet Lynx' }}
+        name="Quiet Lynx"
+        self={{ name: 'Venkatalakshmi Subramaniam', face: { kind: 'photo', uri: 'https://x/me.jpg', name: 'Asha' } }}
+        checkedInAt={new Date(T0 - 80 * 60_000).toISOString()}
+        hereCount={12_480}
+        others={[...others]}
+        now={T0}
+        state={state}
+        onChange={onChange}
+        {...extra}
+      />
+    )
+
+  it('your own name and photo lead it, with your time in on the ring and who else is here', async () => {
+    await you('anon')
+    expect(screen.getByText('Venkatalakshmi Subramaniam')).toBeTruthy()
+    // The ring is decoration to a screen reader (its label says the time), so the face is under hidden elements.
+    expect(screen.getByTestId('room-you-face', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.getByLabelText('You, in the room 1h 20m')).toBeTruthy()
+    // Compact in the line, exact to a screen reader.
+    expect(screen.getByText('You and 12k others here')).toBeTruthy()
+    expect(screen.getByLabelText('You and 12,479 others here')).toBeTruthy()
+  })
+
+  it('anonymous: says what the others see, your room name, and Change', async () => {
+    const onChange = jest.fn()
+    await you('anon', {}, onChange)
+    expect(screen.getByLabelText('Others here see you as Quiet Lynx. Nobody here sees your name or photo.')).toBeTruthy()
+    await fireEvent.press(screen.getByRole('button', { name: 'Change your room name and who sees you' }))
+    expect(onChange).toHaveBeenCalledTimes(1)
+  })
+
+  it('named, and not listed: each says so; not listed offers Turn on', async () => {
+    await you('named', { name: 'Venkatalakshmi' })
+    expect(screen.getByText('Others here see your name and photo.')).toBeTruthy()
+    await you('hidden')
+    expect(screen.getByText('Turn on')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Turn on Show online status' })).toBeTruthy()
+  })
+
+  it('just you: no pile, and the line says so; no check-in time yet: the ring says In the room', async () => {
+    await you('anon', { hereCount: 1, others: [], checkedInAt: null })
+    expect(screen.getByText('Just you so far')).toBeTruthy()
+    expect(screen.queryByTestId('room-you-pile')).toBeNull()
+    expect(screen.getByLabelText('You, in the room')).toBeTruthy()
+  })
+
+  it('control: one other is "1 other", not "1 others"', async () => {
+    await you('anon', { hereCount: 2, others: [others[0]] })
+    expect(screen.getByText('You and 1 other here')).toBeTruthy()
+  })
+})
+
 describe('the sections', () => {
-  it('Meet next: three cards and the shared clock in its pill', async () => {
+  it('Meet next: three cards, "New picks in 4:12", the card opens them and the pill waves', async () => {
     const onOpen = jest.fn()
-    await room({ onOpen })
-    expect(screen.getByLabelText('Shuffles in 4:12')).toBeTruthy()
+    const onWave = jest.fn()
+    await room({ onOpen, onWave })
+    expect(screen.getByText('New picks in 4:12')).toBeTruthy()
     await fireEvent.press(screen.getByTestId('meet-next-1'))
     expect(onOpen).toHaveBeenCalledWith(expect.objectContaining({ id: 'p1' }))
+    await fireEvent.press(screen.getByTestId('meet-next-2-wave', HIDDEN))
+    expect(onWave).toHaveBeenCalledWith(expect.objectContaining({ id: 'p2' }))
+  })
+
+  it('Flow 5 P-A: a pick says their answer to tonight’s question, quoted; without one, what the lens leads with', async () => {
+    const work = { key: 'work', question: 'What are you working on?' }
+    await room({
+      lens: work,
+      picks: [
+        person('p0', { tonightAnswer: 'A map of every quiet café in Toronto' }),
+        person('p1', { workField: 'Product design', sharedIntents: ['networking'], workIntent: 'build' }),
+        person('p2', { reason: 'Just walked in' }),
+      ],
+    })
+    expect(screen.getByLabelText('Person p0, “A map of every quiet café in Toronto”')).toBeTruthy()
+    expect(screen.getByLabelText('Person p1, Product design · Here to build')).toBeTruthy()
+    // Nothing through the lens: the room's own reason line, as before.
+    expect(screen.getByTestId('meet-next-2').props.accessibilityLabel).not.toContain('·')
+  })
+
+  it('a screen reader waves through the card’s Wave action', async () => {
+    const onWave = jest.fn()
+    await room({ onWave })
+    await fireEvent(screen.getByTestId('meet-next-0'), 'accessibilityAction', { nativeEvent: { actionName: 'wave' } })
+    expect(onWave).toHaveBeenCalledWith(expect.objectContaining({ id: 'p0' }))
+  })
+
+  it('Wave → Wave back → ✓ Waved → Say hi on the cards; ✓ Waved never waves again', async () => {
+    const onWave = jest.fn()
+    const onSayHi = jest.fn()
+    await room({
+      onWave,
+      onSayHi,
+      picks: [person('p0', { wave: 'wavedAtYou' }), person('p1', { wave: 'waved' }), person('p2', { wave: 'mutual', matched: true, conversationId: 'c2' })],
+    })
+    expect(screen.getByText('Wave back', HIDDEN)).toBeTruthy()
+    await fireEvent.press(screen.getByTestId('meet-next-1-wave', HIDDEN))
+    expect(onWave).not.toHaveBeenCalled()
+    expect(screen.getByLabelText(/Person p1, .*waved$/)).toBeTruthy()
+    await fireEvent.press(screen.getByTestId('meet-next-2-wave', HIDDEN))
+    expect(onSayHi).toHaveBeenCalledWith(expect.objectContaining({ id: 'p2' }))
+    await fireEvent.press(screen.getByTestId('meet-next-0-wave', HIDDEN))
+    expect(onWave).toHaveBeenCalledWith(expect.objectContaining({ id: 'p0' }))
+  })
+
+  it('Everyone here says the exact count: 12,480, never 12k (the bar is where it is compact)', async () => {
+    await room({ everyoneCount: 12480 })
+    expect(screen.getByTestId('everyone-head-count')).toHaveTextContent('12,480')
   })
 
   it('Everyone here · 13, a face per person, tap opens the card', async () => {
     jest.useFakeTimers()
     const onOpen = jest.fn()
     await room({ onOpen, onLike: null })
-    expect(screen.getByLabelText('Everyone here, 13')).toBeTruthy()
+    expect(screen.getByTestId('everyone-head-count')).toHaveTextContent('13')
     await fireEvent.press(screen.getByTestId('room-face-4'))
     expect(onOpen).toHaveBeenCalledWith(expect.objectContaining({ id: 'p4' }))
     jest.useRealTimers()
@@ -172,20 +285,38 @@ describe('the sections', () => {
   })
 })
 
-describe('People | Crews (R2-D1)', () => {
-  it('only when a crew is here or you are in one', async () => {
-    await room()
+describe('Crews as a row, like friends here (audit A-1: one tab row in the room, never a second switch)', () => {
+  it('no second People | Crews switch, ever', async () => {
+    await room({ crewsHere: 3 })
     expect(screen.queryByTestId('room-segments')).toBeNull()
-    await room({ segments: true })
-    expect(screen.getByRole('tab', { name: 'People' })).toBeTruthy()
+    expect(screen.queryByRole('tab', { name: 'Crews' })).toBeNull()
   })
 
-  it('the Crews view replaces Meet next and Everyone here with the crews', async () => {
+  it('"3 crews here" opens the crews; control: no crew here and none of yours draws no row', async () => {
+    const onView = jest.fn()
+    await room({ crewsHere: 3, onView })
+    await fireEvent.press(screen.getByRole('button', { name: '3 crews here' }))
+    expect(onView).toHaveBeenCalledWith('crews')
+    await room({ crewsHere: null })
+    expect(screen.queryByTestId('room-crews-row')).toBeNull()
+  })
+
+  it('one crew is "1 crew here"; none here but yours elsewhere is just "Crews" (it opens "Crews here · 0")', async () => {
+    await room({ crewsHere: 1 })
+    expect(screen.getByRole('button', { name: '1 crew here' })).toBeTruthy()
+    await room({ crewsHere: 0 })
+    expect(screen.getByRole('button', { name: 'Crews' })).toBeTruthy()
+  })
+
+  it('the Crews view: its head and cards in place of Meet next, and a way back to everyone', async () => {
+    const onView = jest.fn()
     const card = { crewId: 'c1', name: 'Orbit' } as never
-    await room({ segments: true, view: 'crews', crewsHead: <Text>crews head</Text>, crewCards: [card], renderCrew: () => <Text>crew Orbit</Text> })
+    await room({ crewsHere: 1, view: 'crews', onView, crewsHead: <Text>crews head</Text>, crewCards: [card], renderCrew: () => <Text>crew Orbit</Text> })
     expect(screen.getByText('crews head')).toBeTruthy()
     expect(screen.getByText('crew Orbit')).toBeTruthy()
     expect(screen.queryByText('Meet next')).toBeNull()
+    await fireEvent.press(screen.getByRole('button', { name: 'Back to everyone here' }))
+    expect(onView).toHaveBeenCalledWith('people')
   })
 })
 
@@ -206,67 +337,26 @@ describe('the status banners (#12, #13)', () => {
   })
 })
 
-describe('the chat dock, one row (R3-0 02′, R3-D4 13′)', () => {
-  const dock = (props: Partial<React.ComponentProps<typeof ChatDock>> = {}) =>
-    render(<ChatDock chatGroupId="g1" myId="me" wave={null} onOpen={jest.fn()} onOpenPerson={jest.fn()} bottomInset={34} {...props} />)
-
-  it('quiet: "Nobody has said anything yet. Be the first."', async () => {
-    await dock()
-    expect(await screen.findByText('Nobody has said anything yet. Be the first.')).toBeTruthy()
-    expect(screen.getByText('Room chat')).toBeTruthy()
+describe('where the list holds its place (found in SCRUM-502)', () => {
+  it('at the top it does not, so a header that grows keeps the title on screen', async () => {
+    mockStage.scrolled = false
+    await room()
+    expect(screen.getByTestId('room').props.maintainVisibleContentPosition).toBeUndefined()
   })
-
-  it('the last message, "who: what"; a new one counts "1 new" until the chat opens', async () => {
-    mockHistory.mockResolvedValue({ success: true, data: [{ id: 'm1', user_id: 'x', user: { name: 'Cosmic Panda' }, content: 'Rumours side two. Fight me.', created_at: new Date().toISOString() }] })
-    const onOpen = jest.fn()
-    await dock({ onOpen })
-    expect(await screen.findByText('Cosmic Panda: Rumours side two. Fight me.')).toBeTruthy()
-    await act(async () => mockMessageListeners.forEach((fn) => fn({ chatGroupId: 'g1', message: { id: 'm2', userId: 'y', userName: 'Night Cat', content: 'Same', createdAt: new Date().toISOString() } })))
-    expect(screen.getByText('1 new', HIDDEN)).toBeTruthy()
-    await fireEvent.press(screen.getByTestId('room-dock'))
-    expect(onOpen).toHaveBeenCalled()
-    expect(screen.queryByText('1 new', HIDDEN)).toBeNull()
-  })
-
-  it('a wave to you is a row, white, with a chevron, that opens their card; the chat is still an action away', async () => {
-    const onOpenPerson = jest.fn()
-    const onOpen = jest.fn()
-    await dock({ wave: { kind: 'wave', id: 'w', fromUserId: 'nc', fromName: 'Night Cat', at: Date.now() }, onOpenPerson, onOpen })
-    expect(await screen.findByText('Night Cat waved at you')).toBeTruthy()
-    const row = screen.getByTestId('room-dock')
-    await fireEvent.press(row)
-    expect(onOpenPerson).toHaveBeenCalledWith('nc')
-    await fireEvent(row, 'accessibilityAction', { nativeEvent: { actionName: 'openChat' } })
-    expect(onOpen).toHaveBeenCalled()
-  })
-
-  it('failed: "Couldn’t load messages." with Try again, which asks again', async () => {
-    mockHistory.mockResolvedValue({ success: false })
-    await dock()
-    expect(await screen.findByText('Couldn’t load messages.')).toBeTruthy()
-    mockHistory.mockResolvedValue({ success: true, data: [] })
-    await fireEvent.press(screen.getByRole('button', { name: 'Try again' }))
-    expect(mockHistory).toHaveBeenCalledTimes(2)
-  })
-
-  it('left: "You left this chat. Open it to rejoin." with Rejoin, and asks the server nothing (#14)', async () => {
-    mockLeft = new Set(['g1'])
-    const onOpen = jest.fn()
-    await dock({ onOpen })
-    expect(screen.getByText('You left this chat. Open it to rejoin.')).toBeTruthy()
-    expect(mockHistory).not.toHaveBeenCalled()
-    await fireEvent.press(screen.getByRole('button', { name: 'Rejoin' }))
-    expect(onOpen).toHaveBeenCalled()
+  it('scrolled, it does: nothing moves under a thumb', async () => {
+    mockStage.scrolled = true
+    await room()
+    expect(screen.getByTestId('room').props.maintainVisibleContentPosition).toBeTruthy()
+    mockStage.scrolled = false
   })
 })
 
-describe('B8 (Prompt 10): the Room’s glass pills rise; the glass never fades', () => {
-  const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'components', 'blendn', 'BlendnScreen.tsx'), 'utf8') as string
-
-  it('enters as a 16 pt rise over base with the glass opaque throughout; only the contents fade', () => {
-    expect(src).toContain('const GLASS_RISE = SPACE.lg')
-    expect(src).toMatch(/withInitialValues\(\{ opacity: 1, transform: \[\{ translateY: GLASS_RISE \}\] \}\)/)
-    expect(src).toContain('entering={reduceMotion ? undefined : glassRise} style={styles.topActions}')
-    expect(src).toContain('<Animated.Text entering={glassContentsIn}')
+describe('switching People and Crews', () => {
+  it('reports the new list at its top, so the old offset does not count as scrolled', async () => {
+    const view = await room({ view: 'people' })
+    mockStage.atTop.mockClear()
+    await view.rerender(roomElement({ view: 'crews' }))
+    expect(mockStage.atTop).toHaveBeenCalledTimes(1)
   })
 })
+

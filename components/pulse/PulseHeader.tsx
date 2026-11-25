@@ -1,52 +1,23 @@
 import { useEffect, useRef, useState } from 'react'
-import { Dimensions, Keyboard, Platform, ScrollView, StyleSheet, TextInput, View } from 'react-native'
+import { Dimensions, Keyboard, Platform, StyleSheet, TextInput, View } from 'react-native'
 
-import { Chip } from '../ds/Chip'
-import { IconButton } from '../ds/IconButton'
-import { Badge } from '../ds/MonoFamily'
+import { Button } from '../ds/Button'
 import { SearchField } from '../ds/SearchField'
 import { SIZE, SPACE } from '../../lib/design/tokens'
 import { keyboardLeft } from '../../lib/home'
 
 /**
- * The search row of The Pulse (Flow 3 `home`): sticky under the title, the DS `SearchField`, the filter button with its
- * badge, and each applied filter as a removable chip. The same row Places draws, so the panes read as one.
+ * The Pulse's search, opened in place (Flow 3 · Pulse, Option C): the search icon beside the city chip becomes this row
+ * over Events | Places, focused, and the keyboard takes the drawer full (`snapOnKeyboard`). Cancel clears it and puts the
+ * tabs back. The field is the DS `SearchField`; the text is the shell's, so the list below reads the same value.
  */
-
-/**
- * The Pulse's header on home: the search row alone (the field and the filter circle, 48 pt). The title and the city are the
- * drawer's title tabs (`TitleTabs`).
- */
-export const PULSE_HEADER_HEIGHT = SIZE.control
-
-export type AppliedChip = { key: string; label: string; onRemove: () => void }
-
-type SearchProps = {
-  query: string
-  onChangeQuery: (next: string) => void
-  /** A search or filter refetch is in flight, quietly, against a list already on screen: the glyph becomes the spinner. */
-  searching?: boolean
-  /** Opens the filter sheet. */
-  onPressFilter?: () => void
-  activeFilterCount?: number
-  /** Each applied filter, removable: a filter you cannot see is one you forget you set. */
-  applied?: AppliedChip[]
-  /** "12 events": announced once when results settle. */
-  resultsLabel?: string
-}
-
-/**
- * The search field and the filter button: a row of the list of its own, sticky under the title, so a focused field is
- * never unmounted by a long scroll and the filter is always in reach.
- */
-export function PulseSearch({ query, onChangeQuery, searching = false, onPressFilter, activeFilterCount = 0, applied = [], resultsLabel }: SearchProps) {
+export function PulseSearchRow({ query, onChangeQuery, onCancel }: { query: string; onChangeQuery: (next: string) => void; onCancel: () => void }) {
   const [focused, setFocused] = useState(false)
   const input = useRef<TextInput>(null)
   /*
    * Android only: Back closes the keyboard and leaves the field focused, so a tap on it opened no keyboard. A keyboard
    * that actually left blurs it, and the next tap is a fresh focus. Never on iOS: there a hide can arrive while you type
-   * (a frame change), and blurring on it closed the keyboard after every character (drive 3). The text is the screen's
-   * (`query`), so it stays.
+   * (a frame change), and blurring on it closed the keyboard after every character (drive 3).
    */
   useEffect(() => {
     if (!focused || Platform.OS !== 'android') return
@@ -56,55 +27,26 @@ export function PulseSearch({ query, onChangeQuery, searching = false, onPressFi
     return () => sub.remove()
   }, [focused])
   return (
-    <View style={styles.searchWrap}>
-      <View style={styles.searchRow}>
-        <View style={styles.search}>
-          <SearchField
-            value={query}
-            onChangeText={onChangeQuery}
-            placeholder="Search events…"
-            busy={searching}
-            resultsLabel={resultsLabel}
-            inputRef={input}
-            onFocus={() => setFocused(true)}
-            onBlur={() => setFocused(false)}
-            testID="pulse-search"
-          />
-        </View>
-        {onPressFilter ? (
-          <View>
-            <IconButton
-              icon="sliders-horizontal"
-              accessibilityLabel="Filters"
-              accessibilityHint={activeFilterCount ? `${activeFilterCount} applied` : undefined}
-              onPress={onPressFilter}
-              testID="pulse-filter"
-            />
-            {activeFilterCount > 0 ? (
-              <View style={styles.badge} pointerEvents="none">
-                <Badge text={activeFilterCount} testID="pulse-filter-badge" />
-              </View>
-            ) : null}
-          </View>
-        ) : null}
+    <View style={styles.row}>
+      <View style={styles.field}>
+        <SearchField
+          value={query}
+          onChangeText={onChangeQuery}
+          placeholder="Search events…"
+          inputRef={input}
+          autoFocus
+          returnKeyType="search"
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          testID="pulse-search"
+        />
       </View>
-      {applied.length ? (
-        // Bled to the screen edges: the chips scroll under the gutter instead of wrapping.
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" style={styles.applied} contentContainerStyle={styles.appliedRow} testID="pulse-applied">
-          {applied.map((a) => (
-            <Chip key={a.key} label={a.label} selected onRemove={a.onRemove} testID={`pulse-applied-${a.key}`} />
-          ))}
-        </ScrollView>
-      ) : null}
+      <Button kind="tertiary" size="sm" label="Cancel" onPress={onCancel} testID="pulse-search-cancel" />
     </View>
   )
 }
 
 const styles = StyleSheet.create({
-  searchWrap: { paddingHorizontal: SPACE.gutter, gap: SPACE.md },
-  searchRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
-  search: { flex: 1 },
-  badge: { position: 'absolute', top: -SPACE.xs, right: -SPACE.xs },
-  applied: { marginHorizontal: -SPACE.gutter },
-  appliedRow: { paddingHorizontal: SPACE.gutter, gap: SPACE.sm },
+  row: { height: SIZE.control, flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
+  field: { flex: 1 },
 })

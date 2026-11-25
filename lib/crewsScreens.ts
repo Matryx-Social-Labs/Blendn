@@ -13,12 +13,14 @@ import {
   CREW_BIO_MAX,
   CREW_NAME_MAX,
   CREW_NAME_MIN,
+  tagText,
   type Blend,
   type BlendPerson,
   type BlendSide,
   type Crew,
   type CrewIntent,
   type CrewInvite,
+  type CrewMember,
 } from './crews'
 import { clockIn } from './time'
 
@@ -69,10 +71,49 @@ export function inviteSub(row: InviteRow, now: number = Date.now()): string {
   return ago ? `Crew of ${row.invite.size} · ${ago}` : `Crew of ${row.invite.size}`
 }
 
-/** "Aisha invited you · Crew of 6", the line under an invite's tags. */
-export function inviteWho(invite: Pick<CrewInvite, 'invitedBy' | 'size'>): string {
-  return `${invite.invitedBy} invited you · Crew of ${invite.size}`
+/** "Priya asked you in": the pill over the invite card (board 03 A). */
+export const askedYouIn = (invitedBy: string): string => `${invitedBy} asked you in`
+
+/** The invite's one centred line holds the first three tags, then "+N" (board crews/tags/01 · Invite card). */
+const INVITE_TAGS = 3
+
+/** "Crew of 25 · #sundayrunclub · #कैफ़ेहॉपिंग · #chai🍵 · +2": the crew in one line under its name. */
+export const inviteMeta = (invite: Pick<CrewInvite, 'size' | 'tags'>): string => {
+  const shown = invite.tags.slice(0, INVITE_TAGS).map((t) => `#${tagText(t)}`)
+  const more = invite.tags.length - shown.length
+  return [`Crew of ${invite.size}`, ...shown, ...(more > 0 ? [`+${more}`] : [])].join(' · ')
 }
+
+/** "Open for 5 more days": part of a day is a day; past it or unreadable, nothing is claimed. */
+export function openForLine(expiresAt: string | number, now: number = Date.now()): string | null {
+  const days = Math.ceil(((typeof expiresAt === 'number' ? expiresAt : Date.parse(expiresAt)) - now) / DAY_MS)
+  if (!Number.isFinite(days) || days <= 0) return null
+  return `Open for ${days} more ${days === 1 ? 'day' : 'days'}`
+}
+
+/**
+ * "Open for 13 more days · Priya isn't told if you say not now", under Not now. The days come from the server's `expiresAt`
+ * (an older server's invite: 14 days from `invitedAt`).
+ */
+export function inviteNote(invite: Pick<CrewInvite, 'invitedBy' | 'invitedAt' | 'expiresAt'>, now: number = Date.now()): string {
+  const open = openForLine(invite.expiresAt ?? Date.parse(invite.invitedAt) + INVITE_TTL_DAYS * DAY_MS, now)
+  const silent = `${invite.invitedBy} isn’t told if you say not now`
+  return open ? `${open} · ${silent}` : silent
+}
+
+/** What joining by a link also does, on the consent panel (advisor Z-B 2026-11-25). */
+export const friendsToo = (invitedBy: string): string => `Joining also makes you and ${invitedBy} friends.`
+
+/** The longest crew name a button names; past it the button says "the crew", so a 32-character name never cuts its words off. */
+const BUTTON_NAME_MAX = 12
+
+/** "Join Nebula", or "Join the crew" for a name too long for the button. Counted as the server counts (`characters`). */
+export const crewVerb = (verb: string, name: string): string =>
+  characters(name) <= BUTTON_NAME_MAX ? `${verb} ${name}` : `${verb} the crew`
+
+/** "Make Nebula · ask 3 friends": step 2's button, which is also the consent (board 02 A). */
+export const makeLabel = (name: string, invited: number): string =>
+  `${crewVerb('Make', name)} · ask ${invited} ${invited === 1 ? 'friend' : 'friends'}`
 
 /* -------------------------------------------------------------------------- */
 /* Rows                                                                       */
@@ -141,38 +182,37 @@ export function intentLine(intent: readonly CrewIntent[]): string | undefined {
   return intent.length ? intent.map((i) => INTENT_LABEL[i]).join(' · ') : undefined
 }
 
-/** The step line: "1 of 3 · Name and vibe". */
-export const MAKE_STEPS = ['Name and vibe', 'Invite friends', 'Consent'] as const
-export type MakeStep = 1 | 2 | 3
+/** The step line: "1 of 2 · Name and friends" (board 02 A: friends first, the vibe optional after). */
+export const MAKE_STEPS = ['Name and friends', 'Your crew’s vibe'] as const
+export type MakeStep = 1 | 2
 export const stepLine = (step: MakeStep): string => `${step} of ${MAKE_STEPS.length} · ${MAKE_STEPS[step - 1]}`
 
-/** The sheet's note beside "Make a crew": "1" in mono, then " of 3 · Name and vibe"; read as "Step 1 of 3, Name and vibe". */
+/** The sheet's note beside "Make a crew": "1" in mono, then " of 2 · Name and friends"; read as "Step 1 of 2, Name and friends". */
 export const stepNote = (step: MakeStep) => ({
   lead: String(step),
   text: ` of ${MAKE_STEPS.length} · ${MAKE_STEPS[step - 1]}`,
   label: `Step ${step} of ${MAKE_STEPS.length}, ${MAKE_STEPS[step - 1]}`,
 })
 
-/** "3 invited · Friendship · Dance floor, Techno heads": the summary under the consent. */
-export function makeSummary(args: { invited: number; intent: readonly CrewIntent[]; tags: readonly string[] }): string {
-  return [`${args.invited} invited`, intentLine(args.intent), args.tags.length ? args.tags.join(', ') : undefined]
-    .filter(Boolean)
-    .join(' · ')
-}
-
 /** The success line: "Your crew. 3 invited; it starts when someone joins." */
 export const madeLine = (invited: number): string =>
   invited > 0 ? `Your crew. ${invited} invited; it starts when someone joins.` : 'Your crew.'
+
+/** The form fields a refused text can stand under. */
+export type CrewTextField = 'name' | 'bio' | 'tags'
 
 /**
  * Which field a refused text is about. The server names it (`field`) when it can; failing that, only a
  * sentence that says "a crew's name" or "a crew's bio" is read. Anything else (the contact-details
  * sentence is about whichever field held the number) is the form's, not a guess at a field.
  */
-export function textFieldOf(message: string, field?: unknown): 'name' | 'bio' | null {
-  if (field === 'name' || field === 'bio') return field
+export function textFieldOf(message: string, field?: unknown): CrewTextField | null {
+  if (field === 'name' || field === 'bio' || field === 'tags') return field
+  // A validation error names the tag by its place (`tags.2`).
+  if (typeof field === 'string' && field.startsWith('tags.')) return 'tags'
   if (/crew(?:.s)? name/i.test(message)) return 'name'
   if (/crew(?:.s)? bio/i.test(message)) return 'bio'
+  if (/crew(?:.s)? tag/i.test(message)) return 'tags'
   return null
 }
 
@@ -205,22 +245,45 @@ export const isGate = (message: string, errorCode?: string | null): boolean => r
  */
 export const leavingClosesCrew = (crew: Pick<Crew, 'size'>): boolean => crew.size <= 2
 
-/**
- * "Leave Nebula?" with the body for a crew that would carry on, or close. The owner's words say where the crew goes:
- * the server hands it to the active member who has been in it longest (admin lib/crews/crews.ts `removeFromCrew`,
- * `settleLocked`). Not named here: the client cannot tell who is active, and members kept apart are off its list.
- */
-export function leaveSheet(crew: Pick<Crew, 'name' | 'size'> & { you?: Crew['you'] }): { title: string; message: string; action: string } {
+/** "Leave Nebula?" with the body for a crew that would carry on, or close. An owner's crew that carries on gets `ownerSheet`. */
+export function leaveSheet(crew: Pick<Crew, 'name' | 'size'>): { title: string; message: string; action: string } {
   const title = `Leave ${crew.name}?`
   if (leavingClosesCrew(crew)) return { title, message: 'Leaving will close the crew — there’ll be one of you left.', action: 'Leave and close the crew' }
-  if (crew.you?.role === 'owner') {
-    return {
-      title,
-      message: 'You leave the crew and its chat. It passes to whoever has been in it longest, who can then edit it and invite people.',
-      action: 'Leave crew',
-    }
-  }
   return { title, message: 'You leave the crew and its chat. Nobody is told you left; the crew just has one fewer.', action: 'Leave crew' }
+}
+
+/**
+ * Who an owner who leaves hands the crew to: the member who joined first. The server (admin lib/crews/crews.ts
+ * `settleLocked`) also passes over anyone suspended or already owning 3 crews, and a member kept apart from the owner is
+ * not on this list. ponytail: then the name is wrong; a server `heir` field fixes it if that ever matters.
+ */
+export function heirOf(crew: Pick<Crew, 'members'>): CrewMember | null {
+  const others = crew.members.filter((m) => m.role !== 'owner')
+  return others.reduce<CrewMember | null>((first, m) => (first && first.joinedAt <= m.joinedAt ? first : m), null)
+}
+
+/**
+ * Crews 5A (board 06-leave · A, owner): the owner's two doors, each saying what happens to the others. In a crew of two
+ * nobody takes it over: leaving closes it, in today's words.
+ */
+export function ownerSheet(crew: Pick<Crew, 'name' | 'size' | 'members'>): { title: string; message: string; leave: string; end: string } {
+  const heir = heirOf(crew)
+  return {
+    title: crew.name,
+    message: 'You own this crew.',
+    leave: leavingClosesCrew(crew) ? 'Leave and close the crew' : heir ? `Leave — ${heir.name} takes it over` : 'Leave — it passes on',
+    end: 'End the crew for everyone',
+  }
+}
+
+/** Crews 5A's confirm: exactly what `DELETE /crews/:crewId` ends (docs/api/API.md → End the crew), and that nobody is pushed. */
+export function endSheet(crew: Pick<Crew, 'name' | 'size'>): { title: string; message: string; action: string } {
+  const everyone = crew.size <= 1 ? 'you' : crew.size === 2 ? 'both of you' : `all ${crew.size} of you`
+  return {
+    title: `End ${crew.name}?`,
+    message: `The crew and its chat close for ${everyone}, and the chat can’t be opened again. Its invites are cancelled and open Mixes close. Your friendships stay. Nobody is notified. This can’t be undone.`,
+    action: `End ${crew.name}`,
+  }
 }
 
 /** "Remove Rohan from Nebula?" and what it does. */
@@ -257,7 +320,7 @@ export function clockOf(iso: string): string | null {
 /** "This Blend closes at 4 am". */
 export function closesAtLine(closesAt: string): string | null {
   const clock = clockOf(closesAt)
-  return clock ? `This Blend closes at ${clock}` : null
+  return clock ? `This Mix closes at ${clock}` : null
 }
 
 /** The first-open card's body: "Made at Toit · closes 4 am. Everyone here is on tonight’s names until they reveal." */
@@ -300,7 +363,7 @@ export function editOf(crew: Pick<Crew, 'name' | 'bio' | 'intent' | 'tags' | 'op
     name: crew.name,
     bio: crew.bio ?? '',
     choice: intentChoice(crew.intent),
-    tags: crew.tags.map((t) => t.slug),
+    tags: crew.tags.map(tagText),
     openToSolo: crew.openToSolo,
   }
 }
@@ -322,7 +385,7 @@ export function crewPatch(
   const bio = edit.bio.trim()
   if (bio !== (crew.bio ?? '')) patch.bio = bio || null
   if (edit.choice && edit.choice !== intentChoice(crew.intent)) patch.intent = intentOf(edit.choice)
-  if (!sameSet(edit.tags, crew.tags.map((t) => t.slug))) patch.tags = [...edit.tags]
+  if (!sameSet(edit.tags, crew.tags.map(tagText))) patch.tags = [...edit.tags]
   if (edit.openToSolo !== crew.openToSolo) patch.openToSolo = edit.openToSolo
   return Object.keys(patch).length ? patch : null
 }

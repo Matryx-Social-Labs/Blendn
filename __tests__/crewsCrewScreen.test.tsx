@@ -21,7 +21,7 @@ jest.mock('../lib/apiClient', () => ({
   apiClient: { getFriends: jest.fn(), muteChatGroup: jest.fn(), unmuteChatGroup: jest.fn() },
 }))
 jest.mock('../lib/crewsApi', () => ({
-  crewsApi: { crew: jest.fn(), update: jest.fn(), invite: jest.fn(), leave: jest.fn(), report: jest.fn(), setKeepMeAnonymous: jest.fn() },
+  crewsApi: { crew: jest.fn(), myCrews: jest.fn(), update: jest.fn(), invite: jest.fn(), leave: jest.fn(), end: jest.fn(), report: jest.fn(), setKeepMeAnonymous: jest.fn() },
 }))
 jest.mock('../lib/roomRow', () => ({ useRoomRow: () => null }))
 jest.mock('../lib/sheet', () => ({ showSheet: jest.fn() }))
@@ -79,7 +79,7 @@ describe('the page', () => {
     await render(<CrewScreen />)
     await waitFor(() => screen.getByText('Nebula'))
     expect(screen.getByText('Late sets, early trains.')).toBeTruthy()
-    expect(screen.getByText('Dance floor')).toBeTruthy()
+    expect(screen.getByText('#Dancefloor')).toBeTruthy()
     expect(screen.getByText('Friendship')).toBeTruthy()
     expect(screen.getByLabelText('Members, 3')).toBeTruthy()
     expect(screen.getByLabelText('You')).toBeTruthy()
@@ -88,6 +88,49 @@ describe('the page', () => {
     expect(screen.getByRole('switch', { name: new RegExp(KEEP_ANONYMOUS_LABEL) })).toBeTruthy()
     expect(screen.getByRole('switch', { name: /Mute the crew chat/ })).toBeTruthy()
     expect(screen.getByLabelText('Leave crew')).toBeTruthy()
+  })
+
+  // Crews of 25 (owner 2026-11-14, board crews/tags/02-size-25 · Crew page, recommended): the first 8 — you, then the owner,
+  // then by join — and "See all 25" for the rest.
+  it('a crew of 25: the first 8 (you, the owner, then by join) and See all 25 shows everyone', async () => {
+    const rest = Array.from({ length: 23 }, (_, i) => ({ ...member(`rh_${i}`, `Friend${i}`), joinedAt: `2026-10-${String(30 - i).padStart(2, '0')}T10:00:00Z` }))
+    const members = [...rest, member('rh_priya', 'Priya', 'owner'), member('me', 'Sam')]
+    crews.crew.mockResolvedValue({ success: true, data: crew('member', { size: 25, members }) })
+    await render(<CrewScreen />)
+    await waitFor(() => screen.getByText('Nebula'))
+    expect(screen.getByLabelText('Members, 25')).toBeTruthy()
+    const shown = within(screen.getByTestId('crew-members')).getAllByRole('button').map((b) => b.props.accessibilityLabel)
+    // You (not a button), the owner, then the six who joined first: Friend22 (Oct 8) … Friend17 (Oct 13).
+    expect(screen.getByLabelText('You')).toBeTruthy()
+    expect(shown.slice(0, 7)).toEqual(['Priya, owner', 'Friend22', 'Friend21', 'Friend20', 'Friend19', 'Friend18', 'Friend17'])
+    expect(screen.queryByLabelText('Friend16')).toBeNull()
+
+    await act(async () => fireEvent.press(screen.getByRole('button', { name: 'See all 25' })))
+    expect(screen.getByLabelText('Friend16')).toBeTruthy()
+    expect(screen.getByLabelText('Friend0')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'See all 25' })).toBeNull()
+  })
+
+  it('a crew of 8 or fewer has no See all (control for the cut at 8)', async () => {
+    const members = [member('me', 'Sam', 'owner'), ...Array.from({ length: 7 }, (_, i) => member(`rh_${i}`, `Friend${i}`))]
+    crews.crew.mockResolvedValue({ success: true, data: crew('owner', { size: 8, members }) })
+    await render(<CrewScreen />)
+    await waitFor(() => screen.getByText('Nebula'))
+    expect(screen.getByLabelText('Friend6')).toBeTruthy()
+    expect(screen.queryByText(/^See all/)).toBeNull()
+  })
+
+  it('a member row opens their room card (handle, first name); your own row does nothing', async () => {
+    crews.crew.mockResolvedValue({ success: true, data: crew('member') })
+    await render(<CrewScreen />)
+    await waitFor(() => screen.getByText('Nebula'))
+
+    await act(async () => fireEvent.press(screen.getByLabelText('Priya, owner')))
+    expect(router.push).toHaveBeenCalledWith({ pathname: '/user/[id]', params: { id: 'rh_priya', pseudonym: 'Priya', roomSeed: 'c2:rh_priya' } })
+
+    ;(router.push as jest.Mock).mockClear()
+    await act(async () => fireEvent.press(screen.getByLabelText('You')))
+    expect(router.push).not.toHaveBeenCalled()
   })
 
   // D-L14: the owner's Edit crew lists the fields it edits, not a setting. Negative control: the old hint fails it.
@@ -129,11 +172,28 @@ describe('the page', () => {
     expect(screen.queryByText(/Someone you’ve blocked/)).toBeNull()
   })
 
-  it('a full crew cannot ask anyone else in', async () => {
-    crews.crew.mockResolvedValue({ success: true, data: crew('owner', { size: 12 }) })
+  it('a full crew cannot ask anyone else in: 25 with no seatsLeft (an older server), or the server’s seatsLeft 0 at its own 12', async () => {
+    crews.crew.mockResolvedValue({ success: true, data: crew('owner', { size: 25 }) })
     await render(<CrewScreen />)
     await waitFor(() => screen.getByText('Nebula'))
     expect(screen.queryByLabelText('Invite friends')).toBeNull()
+    crews.crew.mockResolvedValue({ success: true, data: crew('owner', { size: 12, seatsLeft: 0 }) })
+    await render(<CrewScreen />)
+    await waitFor(() => screen.getByText('Nebula'))
+    expect(screen.queryByLabelText('Invite friends')).toBeNull()
+  })
+
+  it('open invites count against the seats: 10 members + 2 invites (seatsLeft 0) offers no Invite (YOU-12)', async () => {
+    crews.crew.mockResolvedValue({ success: true, data: crew('owner', { size: 10, seatsLeft: 0 }) })
+    await render(<CrewScreen />)
+    await waitFor(() => screen.getByText('Nebula'))
+    expect(screen.queryByLabelText('Invite friends')).toBeNull()
+  })
+
+  it('an older server with no seatsLeft still reads the members alone', async () => {
+    crews.crew.mockResolvedValue({ success: true, data: crew('owner', { size: 10 }) })
+    await render(<CrewScreen />)
+    await waitFor(() => screen.getByLabelText('Invite friends'))
   })
 
   it('has no Open crew chat: the room is reached from the Banter and the chat’s own header', async () => {
@@ -246,6 +306,21 @@ describe('inviting', () => {
     await fireEvent.press(screen.getByLabelText('Ask 2'))
     await waitFor(() => expect(crews.invite).toHaveBeenCalledWith('c2', ['u-Kavya', 'u-Meera']))
     expect(mockToast).toHaveBeenCalledWith('Asked 2 friends', 'success')
+  })
+
+  it('an invite that fills the crew takes Invite friends away at once (seatsLeft goes down by the number asked)', async () => {
+    crews.crew.mockResolvedValue({ success: true, data: crew('owner', { size: 10, seatsLeft: 2 }) })
+    api.getFriends.mockResolvedValue(friends('Kavya', 'Meera'))
+    crews.invite.mockResolvedValue({ success: true, data: { invited: 2 } })
+    await render(<CrewScreen />)
+    await waitFor(() => screen.getByLabelText('Invite friends'))
+    await fireEvent.press(screen.getByLabelText('Invite friends'))
+    await waitFor(() => screen.getByRole('checkbox', { name: 'Ask Kavya' }))
+    await fireEvent.press(screen.getByRole('checkbox', { name: 'Ask Kavya' }))
+    await fireEvent.press(screen.getByRole('checkbox', { name: 'Ask Meera' }))
+    await fireEvent.press(screen.getByLabelText('Ask 2'))
+    await waitFor(() => expect(crews.invite).toHaveBeenCalledWith('c2', ['u-Kavya', 'u-Meera']))
+    await waitFor(() => expect(screen.queryByLabelText('Invite friends')).toBeNull())
   })
 
   it('when every friend is in already, says so', async () => {
@@ -367,7 +442,7 @@ describe('leaving, removing and reporting', () => {
     expect(crews.leave).toHaveBeenCalledWith('c2', 'rh_rohan')
   })
 
-  it('the ⋯ menu reports the name or bio, with reasons in the design’s words, and tells nobody', async () => {
+  it('the ⋯ menu reports the name or bio, with reasons in the design’s words, and promises only that the crew is not told (SCRUM-987)', async () => {
     crews.crew.mockResolvedValue({ success: true, data: crew('member') })
     crews.report.mockResolvedValue({ success: true, data: { reported: true } })
     await render(<CrewScreen />)
@@ -377,6 +452,8 @@ describe('leaving, removing and reporting', () => {
     const sheet = sheetOf<ReasonSheet>()
     expect(sheet.kind).toBe('reasons')
     expect(sheet.title).toBe('Report Nebula')
+    // Our moderators do see who reported (the Reports queue names them); only the crew is never told.
+    expect(sheet.message).toBe('Only the crew’s name and bio are reported. The crew isn’t told who sent it.')
     expect(sheet.reasons.map((r) => r.label)).toEqual([
       'Hateful or abusive name',
       'Contact details or a handle',
@@ -384,7 +461,7 @@ describe('leaving, removing and reporting', () => {
       'Spam or a business',
       'Something else',
     ])
-    expect(await sheet.run('spam')).toEqual({ ok: true, toast: 'Reported. Thanks — nobody is told it was you.' })
+    expect(await sheet.run('spam')).toEqual({ ok: true, toast: 'Reported. Thanks — the crew isn’t told it was you.' })
     expect(crews.report).toHaveBeenCalledWith('c2', { reason: 'spam' })
   })
 
@@ -395,6 +472,89 @@ describe('leaving, removing and reporting', () => {
     await fireEvent.press(screen.getByLabelText('More'))
     await fireEvent.press(within(screen.getByTestId('crew-menu')).getByLabelText('Leave crew'))
     expect(sheetOf<ActionSheet>().title).toBe('Leave Nebula?')
+  })
+})
+
+// Crews 5A (board 06-leave · A, owner + confirm): the owner's Leave opens two doors; End confirms what ends, then ends.
+describe('ending the crew', () => {
+  const ownerDoors = async (over: Partial<Crew> = {}) => {
+    crews.crew.mockResolvedValue({ success: true, data: crew('owner', over) })
+    await render(<CrewScreen />)
+    await waitFor(() => screen.getByLabelText('Leave crew'))
+    await fireEvent.press(screen.getByLabelText('Leave crew'))
+    return sheetOf<ActionSheet>()
+  }
+  const endConfirm = (doors: ActionSheet) => (doors.actions.find((a) => a.label === 'End the crew for everyone') as { next: () => ActionSheet }).next()
+
+  it('the owner sees two doors in rows: Leave names who takes it over, End is the red one, then Cancel', async () => {
+    const doors = await ownerDoors()
+    expect(doors.title).toBe('Nebula')
+    expect(doors.message).toBe('You own this crew.')
+    expect(doors.layout).toBe('rows')
+    expect(doors.actions.map((a) => [a.label, a.variant ?? null])).toEqual([
+      ['Leave — Priya takes it over', null],
+      ['End the crew for everyone', 'destructive'],
+      ['Cancel', null],
+    ])
+    expect(crews.end).not.toHaveBeenCalled()
+  })
+
+  it('the owner’s Leave door leaves at once and hands the crew on', async () => {
+    crews.leave.mockResolvedValue({ success: true, data: { dissolved: false } })
+    const doors = await ownerDoors()
+    expect(await run(doors, 'Leave — Priya takes it over')).toEqual({ ok: true, toast: 'You left Nebula' })
+    expect(crews.leave).toHaveBeenCalledWith('c2', 'me')
+    expect(crews.end).not.toHaveBeenCalled()
+    expect(router.back).toHaveBeenCalled()
+  })
+
+  it('End confirms exactly what ends before anything is sent, then ends it for everyone', async () => {
+    crews.end.mockResolvedValue({ success: true, data: { ended: true } })
+    const confirm = endConfirm(await ownerDoors())
+    expect(confirm.title).toBe('End Nebula?')
+    expect(confirm.message).toBe(
+      'The crew and its chat close for all 3 of you, and the chat can’t be opened again. Its invites are cancelled and open Mixes close. Your friendships stay. Nobody is notified. This can’t be undone.'
+    )
+    expect(confirm.actions.map((a) => [a.label, a.variant ?? null])).toEqual([
+      ['End Nebula', 'destructive'],
+      ['Cancel', null],
+    ])
+    expect(crews.end).not.toHaveBeenCalled()
+    expect(await run(confirm, 'End Nebula')).toEqual({ ok: true, toast: 'Nebula has ended' })
+    expect(crews.end).toHaveBeenCalledWith('c2')
+    expect(crews.leave).not.toHaveBeenCalled()
+    expect(router.back).toHaveBeenCalled()
+  })
+
+  it('ended from the chat, the chat goes too', async () => {
+    mockParams.fromChat = '1'
+    crews.end.mockResolvedValue({ success: true, data: { ended: true } })
+    await run(endConfirm(await ownerDoors()), 'End Nebula')
+    expect(router.dismissTo).toHaveBeenCalledWith('/crews')
+    expect(router.back).not.toHaveBeenCalled()
+  })
+
+  it('an end that fails stays on the confirm and says why', async () => {
+    crews.end.mockResolvedValue({ success: false, error: 'Failed', errorCode: 'SERVER_ERROR' })
+    expect(await run(endConfirm(await ownerDoors()), 'End Nebula')).toEqual({ ok: false, error: 'Couldn’t end the crew. Try again.' })
+    expect(router.back).not.toHaveBeenCalled()
+  })
+
+  it('the owner of a crew of two can end it too; the Leave door says leaving closes it', async () => {
+    crews.leave.mockResolvedValue({ success: true, data: { dissolved: true } })
+    const doors = await ownerDoors({ size: 2, members: [member('me', 'Sam', 'owner'), member('rh_priya', 'Priya')] })
+    expect(doors.actions.map((a) => a.label)).toEqual(['Leave and close the crew', 'End the crew for everyone', 'Cancel'])
+    expect(endConfirm(doors).message).toContain('for both of you')
+    expect(await run(doors, 'Leave and close the crew')).toEqual({ ok: true, toast: 'Nebula has closed' })
+  })
+
+  it('a member never sees End', async () => {
+    crews.crew.mockResolvedValue({ success: true, data: crew('member') })
+    await render(<CrewScreen />)
+    await waitFor(() => screen.getByLabelText('More'))
+    await fireEvent.press(screen.getByLabelText('More'))
+    await fireEvent.press(within(screen.getByTestId('crew-menu')).getByLabelText('Leave crew'))
+    expect(sheetOf<ActionSheet>().actions.map((a) => a.label)).toEqual(['Leave crew', 'Cancel'])
   })
 })
 
@@ -450,6 +610,40 @@ describe('editing', () => {
     await waitFor(() => screen.getByText('This can’t be a crew’s name.'))
     await fireEvent.changeText(screen.getByTestId('make-name-input'), 'Better name')
     expect(screen.queryByText('This can’t be a crew’s name.')).toBeNull()
+  })
+
+  it('tags use Make’s input: yours removable, your own added, the whole set sent as typed', async () => {
+    crews.crew.mockResolvedValue({ success: true, data: crew('owner') })
+    crews.myCrews.mockResolvedValue({ success: true, data: { crews: [], invites: [], tagIdeas: ['runclub'] } } as never)
+    crews.update.mockResolvedValue({ success: true, data: crew('owner') })
+    await openEdit()
+    // An old slug reads as a hashtag with its spaces closed up.
+    expect(screen.getByLabelText('#Dancefloor, remove tag')).toBeTruthy()
+    await waitFor(() => screen.getByLabelText('#runclub'))
+    await fireEvent.changeText(screen.getByTestId('make-tag-input'), 'late night')
+    await fireEvent(screen.getByTestId('make-tag-input'), 'submitEditing')
+    await fireEvent.press(screen.getByLabelText('Save'))
+    await waitFor(() => expect(crews.update).toHaveBeenCalledWith('c2', { tags: ['Dancefloor', 'latenight'] }))
+  })
+
+  it('a tag the server will not take comes back under the tags, not as a toast, and goes once the tags change', async () => {
+    const said = 'This can’t be a crew’s tag.'
+    crews.crew.mockResolvedValue({ success: true, data: crew('owner') })
+    crews.update.mockResolvedValue({ success: false, error: said, errorCode: 'VALIDATION_FAILED', field: 'tags', errors: [{ field: 'tags', message: said }] } as never)
+    await openEdit()
+    await fireEvent.changeText(screen.getByTestId('make-tag-input'), 'rude,')
+    await fireEvent.press(screen.getByLabelText('Save'))
+    await waitFor(() => screen.getByText(said))
+    expect(mockToast).not.toHaveBeenCalled()
+    await fireEvent.press(screen.getByLabelText('#rude, remove tag'))
+    expect(screen.queryByText(said)).toBeNull()
+  })
+
+  it('the stranger’s-card preview counts the crew as it is, not one (drive 2026-11-14: "Crew of 1" on a crew of 13)', async () => {
+    crews.crew.mockResolvedValue({ success: true, data: crew('owner', { size: 13 }) })
+    await openEdit()
+    expect(screen.getByText('Crew of 13 · #Dancefloor')).toBeTruthy()
+    expect(screen.queryByText(/^Crew of 1 ·/)).toBeNull()
   })
 
   it('a refusal with no field is the form’s: a toast, nothing under the bio', async () => {

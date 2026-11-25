@@ -3,27 +3,27 @@ import * as Clipboard from 'expo-clipboard'
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Animated, AppState, Linking, Platform, StyleSheet, Text, View } from 'react-native'
+import Reanimated from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
+import { OfflineBanner } from '../../components/OfflineBanner'
 import { AmenityGrid } from '../../components/ds/AmenityTile'
 import { GoLiveSheet, type GoLiveChoice as DialChoice } from '../../components/ds/GoLiveSheet'
 import { IconButton } from '../../components/ds/IconButton'
 import { SectionHeader } from '../../components/ds/SectionHeader'
 import { Sheet, type SheetAction } from '../../components/ds/Sheet'
 import { SessionSheet } from '../../components/ds/SessionSheet'
+import { Title } from '../../components/ds/Title'
 import { announceOutcome, font, useBoldText } from '../../components/ds/shared'
 import { useToast } from '../../components/Toast'
 import { UpcomingSheet } from '../../components/venue/UpcomingSheet'
 import { VenueDock } from '../../components/venue/VenueDock'
-import { PAGE_WASH, PageWash } from '../../components/ui/GradientFill'
 import { Material } from '../../components/ui/Material'
 import { VenueHero, VENUE_HERO_HEIGHT } from '../../components/venue/VenueHero'
 import { VenueRegulars } from '../../components/venue/VenueRegulars'
 import {
   About,
   BoardRow,
-  ClaimLine,
-  EventOnCard,
   LiveCard,
   Section,
   TonightHere,
@@ -33,16 +33,17 @@ import {
 } from '../../components/venue/VenueSections'
 import { VenueGateScreen, VenueSkeleton } from '../../components/venue/VenueStates'
 import { apiClient, type VenueDetail } from '../../lib/apiClient'
-import { openBlendn } from '../../lib/blendnOverlay'
+import { openBlendn, useLiveEventId, useLiveTitle } from '../../lib/blendnOverlay'
 import { checkOutOf, subscribeCheckInChanged } from '../../lib/checkIn'
 import { claimUrlFrom } from '../../lib/claimLink'
+import { ClaimCard } from '../../components/scene/ClaimCard'
 import { COLOR, FONT_FAMILY, SIZE, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { EXTEND_CHOICE, oneTapChoice, readLiveSession, venueAction, type GoLiveChoice } from '../../lib/goLive'
 import { type ShowTray, type TrayButton, type TrayExtra } from '../../lib/locationFix'
 import { Logger } from '../../lib/logger'
 import { openInMaps } from '../../lib/openInMaps'
 import { openTonight } from '../../lib/paywall'
-import { guestTypeLabel, placeArea } from '../../lib/placesPane'
+import { guestTypeLabel, placeArea, plateFor, type DistanceReading } from '../../lib/placesPane'
 import { usePlusStatus } from '../../lib/plus'
 import { idParam } from '../../lib/routeParams'
 import { serverNow } from '../../lib/serverClock'
@@ -66,13 +67,12 @@ import {
   upcomingCount,
   upcomingRows,
   venueGate,
-  venueHero,
-  venueTiles,
-  washColor,
+  hoursLine,
   type VenueGate,
 } from '../../lib/venuePage'
+import { useSkeletonCrossfade } from '../../components/motion/useSkeletonCrossfade'
 
-type SheetKind = 'dial' | 'session' | 'leave' | 'claim' | 'upcoming'
+type SheetKind = 'dial' | 'session' | 'claim' | 'upcoming'
 type Tray = { visible: boolean; title: string; message: string; buttons: TrayButton[]; extra?: TrayExtra }
 
 /** The shield under the status bar and the back button fades in as the rows reach it. */
@@ -90,17 +90,18 @@ const DIAL_GONE_FALLBACK_MS = 800
  * not send yet is a tile, a section or a line that is not drawn (docs/PLACES.md).
  *
  * The hero is tonight's cover, else the type's plate. The dock holds one slot:
- * Go live (a dial, then the hold), Go live again in one tap, the live pill with
- * Open the room and Leave, the hand-off to an event's check-in, or the server's
- * sentence. The check-in area is never drawn, in any state. The room, Who's
+ * Go live (a dial, then the hold), Go live again in one tap, live (the
+ * checked-in line: its state opens the live sheet, beside Open the room), the
+ * hand-off to an event's check-in, or the server's sentence. The check-in area is never drawn, in any state. The room, Who's
  * here and the people are for the people live here; the claim link is the
  * server's, quiet, and leaves the app.
  */
 export default function VenueRoute() {
-  const params = useLocalSearchParams<{ id?: string; km?: string }>()
+  const params = useLocalSearchParams<{ id?: string; km?: string; reading?: string }>()
   const id = idParam(params.id)
   if (!id) return <MissingPlace />
-  return <VenueScreen id={id} km={kmParam(params.km)} />
+  // The list's own words for it: "about 1 km" when it was measured from an approximate fix (`openPlace`).
+  return <VenueScreen id={id} km={kmParam(params.km)} reading={params.reading === 'approximate' ? 'approximate' : 'exact'} />
 }
 
 /** The platform's own back glyph, as every bar draws it (Material: the arrow; iOS: the chevron). */
@@ -125,7 +126,6 @@ function SessionHost(props: {
   live: VenueDetail['live']
   venue: string
   visible: boolean
-  confirmFirst: boolean
   extended: boolean
   extending: boolean
   ending: boolean
@@ -146,7 +146,6 @@ function SessionHost(props: {
       ending={props.ending}
       onExtend={props.onExtend}
       onEnd={props.onEnd}
-      startConfirming={props.confirmFirst}
     />
   )
 }
@@ -155,7 +154,7 @@ function directionsTo(detail: VenueDetail) {
   openInMaps({ latitude: detail.venue.latitude, longitude: detail.venue.longitude, address: detail.venue.address, venue_name: detail.venue.name }).catch(() => {})
 }
 
-function VenueScreen({ id, km }: { id: string; km: number | null }) {
+function VenueScreen({ id, km, reading }: { id: string; km: number | null; reading: DistanceReading }) {
   const insets = useSafeAreaInsets()
   const bold = useBoldText()
   const { showToast } = useToast()
@@ -164,6 +163,7 @@ function VenueScreen({ id, km }: { id: string; km: number | null }) {
   const { status: plus } = usePlusStatus()
   const [detail, setDetail] = useState<VenueDetail | null>(null)
   const [gate, setGate] = useState<VenueGate | null>(null)
+  const arrive = useSkeletonCrossfade(!gate && (!detail || !detail.live))
   /** The window to repeat in one tap here, or null (`oneTapChoice`, PL-M05). */
   const [lastChoice, setLastChoice] = useState<GoLiveChoice | null>(null)
   const [sheet, setSheet] = useState<SheetKind | null>(null)
@@ -211,7 +211,7 @@ function VenueScreen({ id, km }: { id: string; km: number | null }) {
 
   /** The session sheet away, and its "Extended" line with it. */
   const closeSession = useCallback(() => {
-    setSheet((s) => (s === 'session' || s === 'leave' ? null : s))
+    setSheet((s) => (s === 'session' ? null : s))
     setExtended(false)
   }, [])
 
@@ -270,6 +270,10 @@ function VenueScreen({ id, km }: { id: string; km: number | null }) {
 
   const live = detail?.live
   const venueDayId = live?.venueDayId ?? null
+  // Checked in or live somewhere else: going live here leaves it, and the dial says so first (SCRUM-635).
+  const liveId = useLiveEventId()
+  const liveTitle = useLiveTitle()
+  const liveElsewhere = liveId && liveId !== venueDayId ? (liveTitle ?? 'your other event') : null
   // Your window ended here — expiry, an event starting, a switch: the server says so.
   useEffect(
     () =>
@@ -402,7 +406,7 @@ function VenueScreen({ id, km }: { id: string; km: number | null }) {
     if (!detail || !live?.chatGroupId) return
     router.push({
       pathname: '/chat/[id]',
-      params: { id: live.chatGroupId, roomName: detail.venue.name, eventTitle: detail.venue.name, venueId: detail.venue.id },
+      params: { id: live.chatGroupId, roomName: detail.venue.name, eventTitle: detail.venue.name, venueId: detail.venue.id, ...(venueDayId ? { eventId: venueDayId } : {}) },
     } as never)
   }
 
@@ -458,7 +462,9 @@ function VenueScreen({ id, km }: { id: string; km: number | null }) {
   const tonight = detail.tonight
   const handoffTitle = action.kind === 'handoff' && tonight?.id === action.eventId ? tonight.title : null
   const now = serverNow()
-  const tiles = venueTiles(detail, now).map((t) => ({ label: t.label, value: t.value, mono: t.mono }))
+  const area = placeArea(venue)
+  const typeArea = [guestTypeLabel(venue), area].filter(Boolean).join(' · ')
+  const hours = hoursLine(venue, now)
   const known = goodToKnow(venue.amenities)
   const upcoming = upcomingRows(venue.upcoming)
   const upcomingTotal = upcomingCount(venue, upcoming.length)
@@ -475,6 +481,7 @@ function VenueScreen({ id, km }: { id: string; km: number | null }) {
   return (
     <View style={styles.screen}>
       {controls}
+      <Reanimated.View entering={arrive} style={styles.fill}>
       <Animated.ScrollView
         testID="venue-scroll"
         contentContainerStyle={{ paddingBottom: dockHeight + SPACE.xl }}
@@ -485,27 +492,35 @@ function VenueScreen({ id, km }: { id: string; km: number | null }) {
         scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}
       >
-        <VenueHero
-          hero={venueHero(detail)}
-          name={venue.name}
-          typeLabel={guestTypeLabel(venue)}
-          area={placeArea(venue)}
-          km={km}
-          live={live}
-          onZero={load}
-          scrollY={scrollY}
-        />
-        <PageWash color={washColor(venueHero(detail))} pointerEvents="none" style={styles.wash} />
-        <View style={styles.body}>
-          {action.kind === 'handoff' ? (
-            <EventOnCard tonight={tonight?.id === action.eventId ? tonight : null} now={now} onPress={() => openEvent(action.eventId)} />
-          ) : action.kind === 'live' ? (
-            <LiveCard live={live} name={venue.name} onZero={load} />
-          ) : tiles.length ? (
-            <AmenityGrid tiles={tiles} testID="venue-tiles" />
+        <VenueHero latitude={venue.latitude} longitude={venue.longitude} plate={plateFor(venue.venueType)} onDirections={directions} />
+        {/* Flow 4 V-A: the name, then the type and area on their own line, then the hours in their own slot, only when known. */}
+        <View style={styles.head} accessible accessibilityRole="header" accessibilityLabel={[venue.name, typeArea, hours?.text].filter(Boolean).join('. ')} testID="venue-head">
+          <Title variant="page" testID="venue-name" numberOfLines={NAME_LINES} style={styles.name}>
+            {venue.name}
+          </Title>
+          {typeArea ? (
+            <Text testID="venue-type-area" numberOfLines={2} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('control', bold, FONT_FAMILY.brand[400]), styles.secondary, styles.typeArea]}>
+              {typeArea}
+            </Text>
           ) : null}
-
-          {action.kind === 'handoff' ? null : <TonightHere tonight={tonight} venue={venue.name} km={km} now={now} onOpen={openEvent} />}
+          {hours ? (
+            <Text testID="venue-hours" numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('control', bold), hours.open ? styles.open : styles.secondary, styles.hours]}>
+              {hours.text}
+            </Text>
+          ) : null}
+        </View>
+        <View style={styles.body}>
+          {/*
+           * "Nobody runs this place on Blend’n yet · Claim it" (going-lifecycle C1), under the name where an owner looks first.
+           * Leaves the app on purpose, through its sheet: the app refuses venue accounts, the claim page needs none (§7).
+           */}
+          {claimUrl ? (
+            <ClaimCard title="Nobody runs this place on Blend’n yet" before="Own it?" after="to post offers and see your nights." onPress={() => setSheet('claim')} testID="claim-venue-card" />
+          ) : null}
+          {/* Reads stay (the cached place); the dock's writes say why they wait. Flow 15 #15 · #16. */}
+          <OfflineBanner text="Offline. Showing what you had." testID="venue-offline" />
+          {action.kind === 'live' ? <LiveCard live={live} name={venue.name} onZero={load} /> : null}
+          <TonightHere tonight={tonight} liveNow={live.liveNow} now={now} onOpen={openEvent} />
           {upcoming.length ? <UpcomingList rows={upcoming} total={upcomingTotal} onOpen={openEvent} onSeeAll={() => setSheet('upcoming')} /> : null}
           <WhosHere live={live} onSeeWho={seeWhoIsHere} />
           {/* Only where somebody runs the place on Blendn: there is nobody to tell at an unclaimed one (step 12). */}
@@ -518,11 +533,11 @@ function VenueScreen({ id, km }: { id: string; km: number | null }) {
               <AmenityGrid tiles={known} testID="venue-good-to-know" />
             </Section>
           ) : null}
-          <Where venue={venue} km={km} onDirections={directions} onCopy={copyAddress} />
-          {/* Leaves the app on purpose: the app refuses venue accounts, the claim page needs none (§7). */}
-          {claimUrl ? <ClaimLine onPress={() => setSheet('claim')} /> : null}
+          {/* Flow 4 V-A: the map and its Directions are the hero; Where keeps the address and Copy. */}
+          <Where venue={venue} km={km} reading={reading} onCopy={copyAddress} />
         </View>
       </Animated.ScrollView>
+      </Reanimated.View>
 
       {/*
        * The status bar's and the back button's bar: nothing over the hero (the design draws the cover under the clock, behind its
@@ -541,11 +556,11 @@ function VenueScreen({ id, km }: { id: string; km: number | null }) {
         eventTitle={handoffTitle}
         busy={busy}
         onHeight={setDockHeight}
-        onGoLive={() => (mode.kind === 'goLive' && mode.again ? void goLive(mode.again) : openDial())}
+        // One tap goes live again, unless that would leave a room somewhere else: then the dial, which says so (SCRUM-635).
+        onGoLive={() => (mode.kind === 'goLive' && mode.again && !liveElsewhere ? void goLive(mode.again) : openDial())}
         onPickAnother={openDial}
         onOpenRoom={openRoom}
         onPill={() => setSheet('session')}
-        onLeave={() => setSheet('leave')}
         onEvent={() => action.kind === 'handoff' && openEvent(action.eventId)}
         onZero={load}
       />
@@ -568,13 +583,13 @@ function VenueScreen({ id, km }: { id: string; km: number | null }) {
         event={refusal?.eventId && tonight?.id === refusal.eventId ? tonight.title : ''}
         onRefusalAction={refusalAction}
         onRefusalAlt={refusalAlt}
+        leaving={liveElsewhere}
         testID="venue-dial"
       />
       <SessionHost
         live={live}
         venue={venue.name}
-        visible={sheet === 'session' || sheet === 'leave'}
-        confirmFirst={sheet === 'leave'}
+        visible={sheet === 'session'}
         extended={extended}
         extending={extending}
         ending={leaving}
@@ -627,11 +642,23 @@ function VenueScreen({ id, km }: { id: string; km: number | null }) {
   )
 }
 
+/** A seeded place's name can be a listing's whole SEO line: three lines, then the ellipsis (the header reads it whole). */
+const NAME_LINES = 3
+// design-exception: the board puts 28 above each section (`.sh4` margin-top), between SPACE.xl and SPACE.xxl.
+const SECTION_GAP = 28
+
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: COLOR.ink },
-  body: { paddingHorizontal: SPACE.gutter, paddingTop: SPACE.xl, gap: SPACE.sectionGap },
+  fill: { flex: 1 },
+  // `.col4` from 284: the name sits 16 up into the map's fade.
+  head: { paddingHorizontal: SPACE.gutter, marginTop: -SPACE.lg },
+  name: { color: COLOR.textPrimary },
+  typeArea: { marginTop: SPACE.xs },
+  hours: { marginTop: SPACE.xxs },
+  open: { color: COLOR.live },
+  // `.sh4` 28 above each section.
+  body: { paddingHorizontal: SPACE.gutter, paddingTop: SECTION_GAP, gap: SECTION_GAP },
   controls: { position: 'absolute', left: SPACE.lg, right: SPACE.lg, zIndex: 2, flexDirection: 'row', justifyContent: 'space-between' },
-  wash: { position: 'absolute', left: 0, right: 0, top: VENUE_HERO_HEIGHT - 1, height: PAGE_WASH.height },
   shield: { position: 'absolute', left: 0, right: 0, top: 0 },
   secondary: { color: COLOR.textSecondary },
 })

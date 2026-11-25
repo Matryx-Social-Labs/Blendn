@@ -6,8 +6,9 @@ import {
   settleDirectMessage,
   type PrivateMessage,
 } from '../lib/directThread'
-import { profileIdentity, withheldUnlessVisible } from '../lib/profileIdentity'
-import { markSeed, pseudonymAvatar } from '../lib/pseudonymAvatar'
+import { profileIdentity, roomNameFrom, withheldUnlessVisible } from '../lib/profileIdentity'
+import { creatureFor } from '../components/ds/Creature'
+import { markSeed } from '../lib/creatureSeed'
 import { userMessage } from '../lib/userMessage'
 
 /*
@@ -19,25 +20,24 @@ import { userMessage } from '../lib/userMessage'
 describe('one seed rule for a person’s mark', () => {
   it('draws the animal the pseudonym names', () => {
     // "Cosmic Panda" and "Quiet Otter" both drew a bee.
-    expect(pseudonymAvatar('Cosmic Panda').character).toBe('🐼')
-    expect(pseudonymAvatar('Quiet Otter').character).toBe('🦦')
-    expect(pseudonymAvatar('Amber Fox').character).toBe('🦊')
-    expect(pseudonymAvatar('Velvet Heron').character).toBe('🐦')
+    expect(creatureFor('Cosmic Panda').species).toBe('panda')
+    expect(creatureFor('Quiet Otter').species).toBe('otter')
+    expect(creatureFor('Amber Fox').species).toBe('fox')
     // A collision suffix does not hide the noun.
-    expect(pseudonymAvatar('Cosmic Panda 2').character).toBe('🐼')
+    expect(creatureFor('Cosmic Panda 2').species).toBe('panda')
   })
 
-  it('keeps the hashed cast for a noun that is not a creature', () => {
-    const a = pseudonymAvatar('Neon Comet')
-    expect(a.character).toBeTruthy()
-    expect(pseudonymAvatar('Neon Comet')).toEqual(a)
+  it('keeps the seeded cast for a noun that is not a creature', () => {
+    const a = creatureFor('Neon Comet')
+    expect(a.species).toBeTruthy()
+    expect(creatureFor('Neon Comet')).toEqual(a)
   })
 
   it('seeds on the pseudonym, so every surface that has the name agrees', () => {
-    // The Room grid's `Face` seeds `pseudonymAvatar(name)`; the chat now seeds
+    // The Room grid seeds the creature on the name; the chat seeds
     // `markSeed(senderName, room:sender)`, which is the same string.
     expect(markSeed('Cosmic Panda', 'g1:rh_x')).toBe('Cosmic Panda')
-    expect(pseudonymAvatar(markSeed('Cosmic Panda', 'g1:rh_x'))).toEqual(pseudonymAvatar('Cosmic Panda'))
+    expect(creatureFor(markSeed('Cosmic Panda', 'g1:rh_x'))).toEqual(creatureFor('Cosmic Panda'))
   })
 
   it('falls back per person and per room for a placeholder name, never to a bare id', () => {
@@ -61,21 +61,25 @@ describe('the DM says their name once, in one grammar', () => {
     expect(emptyThreadLine(undefined, '  ')).toBeNull()
   })
 
-  it('draws the pseudonym mark in the header until they reveal', () => {
+  it('draws their creature in the header until they reveal, then their photo', () => {
     const reveal = { displayName: 'Cosmic Panda', pseudonymous: true, theyRevealed: false }
-    expect(directHeaderAvatar(reveal, null)).toEqual({ kind: 'mark', seed: 'Cosmic Panda' })
-    expect(directHeaderAvatar({ ...reveal, theyRevealed: true }, 'https://cdn/them.jpg')).toEqual({
-      kind: 'photo',
-      url: 'https://cdn/them.jpg',
-    })
+    expect(directHeaderAvatar(reveal, null, 'Cosmic Panda')).toEqual({ kind: 'creature', pseudonym: 'Cosmic Panda' })
+    // A photo the server sent before a reveal is still not drawn.
+    expect(directHeaderAvatar(reveal, 'https://cdn/them.jpg', 'Cosmic Panda')).toEqual({ kind: 'creature', pseudonym: 'Cosmic Panda' })
+    expect(directHeaderAvatar({ ...reveal, displayName: 'Mika Rao', theyRevealed: true }, 'https://cdn/them.jpg', 'x')).toEqual({ kind: 'photo', uri: 'https://cdn/them.jpg', name: 'Mika Rao' })
+  })
+
+  it('a named person with no photo is their initial, never a creature (F1 B)', () => {
+    const named = { displayName: 'Mika', pseudonymous: false, theyRevealed: true }
+    expect(directHeaderAvatar(named, null, 'route name')).toEqual({ kind: 'initial', name: 'Mika' })
+    expect(directHeaderAvatar({ displayName: 'Mika Rao', pseudonymous: true, theyRevealed: true }, null, 'x')).toEqual({ kind: 'initial', name: 'Mika Rao' })
   })
 
   it('draws a photo only from the server’s answer: the creature until it lands', () => {
-    // A route URL is anybody's link (blendn://private-chat/x?otherUserAvatar=…); the helper takes none.
-    expect(directHeaderAvatar(null, null)).toEqual({ kind: 'initials' })
-    expect(directHeaderAvatar(null, 'https://cdn/them.jpg')).toEqual({ kind: 'initials' })
-    const named = { displayName: 'Mika', pseudonymous: false, theyRevealed: true }
-    expect(directHeaderAvatar(named, null)).toEqual({ kind: 'initials' })
+    // A route URL is anybody's link (blendn://private-chat/x?otherUserAvatar=…); the helper takes none. Until the server
+    // says who this is, the face fails closed: a creature on the route's name, never an initial that would claim "named".
+    expect(directHeaderAvatar(null, null, 'Amber Fox')).toEqual({ kind: 'creature', pseudonym: 'Amber Fox' })
+    expect(directHeaderAvatar(null, 'https://cdn/them.jpg', 'Amber Fox')).toEqual({ kind: 'creature', pseudonym: 'Amber Fox' })
   })
 })
 
@@ -131,6 +135,14 @@ describe('the attendee profile fails closed', () => {
     expect(withheldUnlessVisible({ ...leaked, identityVisible: true })).toMatchObject(leaked)
   })
 
+  it('drops interests and shared interests too (YOU-03): work field stays, by ruling OD-3', () => {
+    const withChips = { ...leaked, interests: ['Vinyl'], sharedInterests: ['Vinyl'] }
+    const shown = withheldUnlessVisible({ ...withChips, identityVisible: false })
+    expect(shown.interests).toEqual([])
+    expect(shown.sharedInterests).toEqual([])
+    expect(withheldUnlessVisible({ ...withChips, identityVisible: true }).interests).toEqual(['Vinyl'])
+  })
+
   it('titles them by the room’s pseudonym, never the leaked name or "Attendee"', () => {
     const who = profileIdentity({ ...leaked, identityVisible: false }, { pseudonym: 'Cosmic Panda', roomSeed: 'g1:rh_b' })
     expect(who).toEqual({ revealed: false, title: 'Cosmic Panda', name: 'Cosmic Panda', age: 29, seed: 'Cosmic Panda' })
@@ -145,6 +157,55 @@ describe('the attendee profile fails closed', () => {
 
   it('names them once the server says so', () => {
     expect(profileIdentity({ ...leaked, identityVisible: true }).title).toBe('Ben, 29')
+  })
+
+  /*
+   * SCRUM-1046: opened with no pseudonym in the link (a cold link, Room info), the page said "Someone" although the
+   * server, asked by a room handle, answers with that room's pseudonym. That answer is trusted only when it came from
+   * `GET /users/:handle` itself, in its `name` field: never from the `/profiles/:id` fallback, `display_name`, a
+   * failed read or a real id. With no trusted source the page fails closed to "Someone".
+   */
+  describe('the room pseudonym the server sends (SCRUM-1046)', () => {
+    // Admin #998: `pseudonym` is sent exactly when `name` IS a room pseudonym; the page reads that field, never `name`.
+    const roomAnswer = { name: 'Cosmic Panda', pseudonym: 'Cosmic Panda', age: 29, identityVisible: false }
+
+    it('is read from the answer’s `pseudonym`', () => {
+      expect(roomNameFrom('rh_abc', roomAnswer)).toBe('Cosmic Panda')
+    })
+
+    it('is never read from `name` or `display_name`: a name with no `pseudonym` is no room name', () => {
+      // Negative control: the old rule read `name` off a handle's answer.
+      expect(roomNameFrom('rh_abc', { name: 'Cosmic Panda', identityVisible: false })).toBeNull()
+      expect(roomNameFrom('rh_abc', { display_name: 'Ben Okafor', identityVisible: false })).toBeNull()
+      expect(roomNameFrom('rh_abc', { name: 'Attendee', identityVisible: false })).toBeNull()
+    })
+
+    it('is nothing when the read failed or the pseudonym is blank or not a string', () => {
+      expect(roomNameFrom('rh_abc', null)).toBeNull()
+      expect(roomNameFrom('rh_abc', undefined)).toBeNull()
+      expect(roomNameFrom('rh_abc', { pseudonym: '  ' })).toBeNull()
+      expect(roomNameFrom('rh_abc', { pseudonym: 7 })).toBeNull()
+    })
+
+    it('is nothing for a real id, whatever it carries', () => {
+      expect(roomNameFrom('cmb0realid', { name: 'Ben', pseudonym: 'Cosmic Panda', identityVisible: false })).toBeNull()
+    })
+
+    it('titles the page, over the profile’s own name', () => {
+      const who = profileIdentity({ ...roomAnswer, name: 'Ben' }, { roomName: 'Cosmic Panda', roomSeed: 'g1:rh_abc' })
+      expect(who).toEqual({ revealed: false, title: 'Cosmic Panda', name: 'Cosmic Panda', age: 29, seed: 'Cosmic Panda' })
+    })
+
+    it('comes after the link’s pseudonym: it is what the card that opened the page drew', () => {
+      expect(profileIdentity(roomAnswer, { pseudonym: 'Amber Fox', roomName: 'Cosmic Panda' }).title).toBe('Amber Fox')
+    })
+
+    it('fails closed without it: a fallback profile carrying a real name is still "Someone"', () => {
+      // What the `/profiles/:id` fallback builds for a handle: a name, no room source.
+      const fallback = profileIdentity({ ...leaked, identityVisible: false }, { roomSeed: 'g1:rh_abc' })
+      expect(fallback.title).toBe('Someone')
+      expect(fallback.seed).toBe('g1:rh_abc')
+    })
   })
 })
 

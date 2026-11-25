@@ -49,6 +49,7 @@ const fresh = (o: Partial<Extract<CheckInOutcome, { kind: 'checkedIn' }>> = {}):
   checkInId: 'c1',
   askIntent: false,
   revealSuggestion: false,
+  left: [],
   ...o,
 })
 
@@ -92,7 +93,8 @@ async function checkIn(outcome: CheckInOutcome) {
 describe('a check-in', () => {
   it('goes straight to the request: no rules tray, nothing to agree to', async () => {
     await checkIn(fresh())
-    expect(submit).toHaveBeenCalledWith('e1', { latitude: 12.97, longitude: 77.59, accuracy: 8 })
+    // No crew chip on: no `withCrewId` (crews 4-A2).
+    expect(submit).toHaveBeenCalledWith('e1', { latitude: 12.97, longitude: 77.59, accuracy: 8 }, undefined)
     // Nothing asked before the request, and nothing after it but the pour.
     expect(props.showTray).not.toHaveBeenCalled()
   })
@@ -108,6 +110,9 @@ describe('a check-in', () => {
     expect(props.onEnterRoom).toHaveBeenCalledTimes(1)
     expect(await done).toBe('checkedIn')
     expect(flow.youreIn).toBe(false)
+    // The Room takes over from it: the pour stays mounted to clear itself over the Room (SCRUM-977 clears only the rest).
+    expect(flow.pours).toBe(1)
+    expect(screen.getByTestId('pour', HIDDEN)).toBeTruthy()
     await advance(1000)
     // The pour's haptic is the check-in's only one: the hook plays none of its own.
     expect(success).toHaveBeenCalledTimes(1)
@@ -166,6 +171,34 @@ describe('a check-in', () => {
 
     expect(await done).toBe('checkedIn')
     expect(props.onEnterRoom).not.toHaveBeenCalled()
+    // SCRUM-977: no room comes to step aside onto, so the pour goes too, rather than leaving its scrim over the page.
+    expect(flow.pours).toBe(0)
+    expect(screen.queryByTestId('pour', HIDDEN)).toBeNull()
+  })
+
+  it('a pour whose check-in fails after it (the reveal offer throwing) clears too, leaving the failure sheet over the page', async () => {
+    offer.mockRejectedValueOnce(new Error('offline'))
+    const { done } = await checkIn(fresh({ revealSuggestion: true }))
+    await fireEvent.press(screen.getByTestId('pour-skip', HIDDEN))
+    await advance(DURATION.base)
+
+    expect(await done).toBe('failed')
+    expect(props.showTray).toHaveBeenCalledWith('Check-in failed', expect.any(String), expect.any(Array), expect.anything())
+    expect(screen.queryByTestId('pour', HIDDEN)).toBeNull()
+  })
+
+  it('the next pour after a cleared one counts on from it (a new key, so the Room wait starts again)', async () => {
+    const { done } = await checkIn(fresh({ askIntent: true }))
+    await fireEvent.press(screen.getByTestId('pour-skip', HIDDEN))
+    await advance(DURATION.base)
+    await act(async () => intentAnswered('abandoned'))
+    await done
+    submit.mockResolvedValue(fresh())
+    await act(async () => {
+      void flow.start()
+    })
+    expect(flow.pours).toBe(2)
+    expect(screen.getByTestId('pour', HIDDEN)).toBeTruthy()
   })
 
   it('offers the reveal after the pour has cleared, then the intent, then the room', async () => {
@@ -368,13 +401,16 @@ describe('every door is this flow', () => {
     }
   )
 
-  it('the event page’s "Blend in" opens this event’s pass, never a check-in of its own (Flow 3 #04–#06)', () => {
+  it('the event page’s "Blend in" is the hold: this flow, from the page, with no stop in Tonight (SCRUM-966)', () => {
     const src = read('components/screens/EventDetailScreen.tsx')
+    // The page itself still sends nothing: the hook is `useEventCheckIn`, which runs this one flow.
     expect(src).not.toContain('useCheckInFlow(')
     expect(src).not.toContain('submitCheckIn(')
-    expect(src).toMatch(/openThisPass = \(\) =>[\s\S]{0,120}openPass\(\{/)
+    expect(src).toContain('useEventCheckIn(')
+    expect(read('components/scene/useEventCheckIn.tsx')).toContain('useCheckInFlow({')
     // To the tabs first: the overlay is under the root stack.
     expect(src).toContain("router.dismissTo('/(tabs)/events')")
+    expect(read('components/scene/useEventCheckIn.tsx')).toContain("router.dismissTo('/(tabs)/events')")
   })
 
   it('the Pulse’s "Blend in" opens the Blend’n pass rather than checking in on its own', () => {

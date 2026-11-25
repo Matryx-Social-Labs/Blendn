@@ -19,9 +19,9 @@ import { initSocketWithAppState, cleanup as cleanupSocket, disconnect as disconn
 import { ONBOARDING_ROUTES, mayParticipate, resumeStep } from '../lib/onboarding';
 import { ReducedMotionFollower, useReducedMotion } from '../lib/motion';
 import { refreshPhoneZone } from '../lib/time';
-import { openWhenReady, setLinkNavigator, setRouteReady, takePendingRoute } from '../lib/pendingRoute';
+import { isInvitePath, openWhenReady, setLinkNavigator, setRouteReady, takePendingRoute } from '../lib/pendingRoute';
 import { readOnboarding } from '../lib/onboardingStorage';
-import { hasDeclinedPush } from '../lib/pushDecline';
+import { mayPromptAtStartUp } from '../lib/pushDecline';
 import { PresenceMonitor } from '../components/PresenceMonitor';
 import { LiveAtVenue } from '../components/LiveAtVenue';
 import { notePathname } from '../lib/paywall';
@@ -35,7 +35,7 @@ import { handleAndroidBack } from '../lib/androidBack';
 import { CoachMarkHost } from '../components/ds/CoachMarkHost';
 import { initSentry, Sentry } from '../lib/sentry';
 import { useFonts } from 'expo-font';
-import { EMBER_FONT_MODULES } from '../lib/fonts';
+import { FONT_MODULES } from '../lib/fonts';
 import { ONBOARDING_IMAGES, prefetchOnboardingImages } from '../lib/onboardingAssets';
 
 initSentry();
@@ -111,14 +111,14 @@ function RootLayout() {
    *
    * Weight comes from the family name, not from `fontWeight` — a custom font
    * on Android ignores `fontWeight` and silently renders regular, so
-   * `Manrope_400Regular` at `fontWeight: '700'` is bold on iOS and not bold on
+   * `Satoshi_400Regular` at `fontWeight: '700'` is bold on iOS and not bold on
    * Android from identical code. Every weight `TYPE` names is loaded.
    *
    * `useFonts` returns `[loaded, error]`, and a font that fails to load is not
    * a reason to hold the app behind the splash forever — the system font is a
    * bad but working fallback, so a failure counts as done below.
    */
-  const [fontsLoaded, fontError] = useFonts(EMBER_FONT_MODULES);
+  const [fontsLoaded, fontError] = useFonts(FONT_MODULES);
   const fontsReady = fontsLoaded || !!fontError;
   const assetsReady = imagesReady && fontsReady;
 
@@ -155,7 +155,7 @@ function RootLayout() {
    *
    * Fonts join the gate rather than loading in the background because the
    * alternative is visible: the first screen paints in the system font and
-   * reflows to Plus Jakarta Sans a beat later, and at 56pt with -2.8 tracking
+   * reflows to Satoshi a beat later, and at 56pt with -2.8 tracking
    * that reflow moves the headline by most of a line.
    *
    * Hiding the paint is not enough on its own, which is why no route renders
@@ -310,7 +310,7 @@ function RootLayout() {
            * in — after sign-in, or after onboarding for a new account. Without
            * this the link was lost at the sign-in screen.
            */
-          if (pathname.startsWith('/f/') || pathname.startsWith('/event/')) openWhenReady(pathname as Href);
+          if (isInvitePath(pathname) || pathname.startsWith('/event/')) openWhenReady(pathname as Href);
           replaceIfNeeded('/');
         }
         // Also remove push token best-effort. Not while the server is merely
@@ -350,7 +350,7 @@ function RootLayout() {
        *
        * What is different now:
        *
-       *  - The screens exist, all eight of them, and `resumeStep` cannot name
+       *  - The screens exist, all six of them, and `resumeStep` cannot name
        *    a route that does not — `ONBOARDING_ROUTES` is exhaustive over the
        *    step union, and a stored step this build does not recognise parses
        *    back to the first one rather than to a dead route.
@@ -418,7 +418,7 @@ function RootLayout() {
          * signed-out tap is held until sign-in. The link opens once they are
          * through. Other deep links keep the behaviour below.
          */
-        if (pathname.startsWith('/f/')) {
+        if (isInvitePath(pathname)) {
           const stored = user?.id ? await readOnboarding(user.id) : null;
           if (superseded) return;
           const resume = resumeStep({
@@ -447,21 +447,21 @@ function RootLayout() {
          *
          * `initializePushNotifications` asks the OS for permission. Run on
          * sign-in, it put the system dialog over onboarding's first screen,
-         * two seconds in, before the notifications step that exists to explain
-         * it had been reached, and iOS asks only once. Onboarding's step asks;
-         * this registers the token once somebody is through. For an account
+         * two seconds in, before anything had explained it, and iOS asks only
+         * once. This registers the token once somebody is through. For an account
          * already onboarded it is the same moment as before: the first screen
          * after sign-in, deferred so the UI renders first.
          *
-         * "Maybe later" on that step is respected: a declined account never
-         * sees the OS dialog from here (lib/pushDecline.ts). Settings asks.
+         * A declined account never sees the OS dialog from here, and nor does
+         * one that finished onboarding on a build without the notifications
+         * step: it is asked at its first "I'm going" (lib/pushDecline.ts).
          */
         if (!inOnboarding && !pushInitRef.current) {
           pushInitRef.current = true;
           const userId = user.id;
           setTimeout(() => {
-            hasDeclinedPush(userId)
-              .then((declined) => initializePushNotifications({ prompt: !declined }))
+            mayPromptAtStartUp(userId)
+              .then((prompt) => initializePushNotifications({ prompt }))
               .catch(() => {});
           }, 2000);
         }
@@ -531,7 +531,7 @@ function RootLayout() {
    *
    * Text is measured when it mounts, and React Native caches the measurement
    * by the family *name*, not by the font that name resolved to. A screen
-   * mounted under the splash before Plus Jakarta Sans registered was measured
+   * mounted under the splash before Satoshi registered was measured
    * in the system font, which is narrower, and every later text with the same
    * string and style was handed that cached box for the life of the process:
    * the wordmark drew as "Blend'r" and "I'm going" as "I'm goi…", on every
@@ -592,8 +592,13 @@ function RootLayout() {
         * The two signed-out screens. Both are also listed in `isAuthRoute`
         * above — without that they mount and are replaced on the next tick.
         */}
-      <Stack.Screen name="sign-in" options={{ headerShown: false }} />
-      <Stack.Screen name="forgot-password" options={{ headerShown: false }} />
+      {/*
+        Flow 1c, option C (owner's pick, 2026-11-04): over the landing, not in its place. Transparent modals with no
+        animation of their own: the landing keeps turning behind the glass sheet, which grows out of its Dock
+        (components/onboarding/EmailSheet.tsx). Forgot-password goes over sign-in the same way.
+      */}
+      <Stack.Screen name="sign-in" options={{ headerShown: false, presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
+      <Stack.Screen name="forgot-password" options={{ headerShown: false, presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
       {/* The unmatched route draws its own screen: without this the native stack titled it "+not-found" in a white header. */}
       <Stack.Screen name="+not-found" options={{ headerShown: false }} />
       <Stack.Screen
@@ -716,6 +721,8 @@ function RootLayout() {
         }} 
       />
       <Stack.Screen name="user/[id]" options={{ headerShown: false }} />
+      {/* A person's "You've both been to", all of it (SCRUM-1042): its own TopBar, like the page it opens from. */}
+      <Stack.Screen name="shared-events/[id]" options={{ headerShown: false }} />
       {/*
         `/room` only opens the Blend'n overlay (hosted by the tab layout) and
         steps back. No animation, so the hop is invisible.
@@ -727,7 +734,6 @@ function RootLayout() {
         `preview/profile` opened with a "< (tabs)" bar across its hero.
       */}
       <Stack.Screen name="preview" options={{ headerShown: false }} />
-      <Stack.Screen name="nearby-events" options={{ headerShown: false }} />
       {/* Notifications (the bell opens it) and its settings, from the ⋯ and from Settings. */}
       <Stack.Screen name="notifications" options={{ headerShown: false }} />
       <Stack.Screen name="message-requests" options={{ headerShown: false }} />
@@ -754,6 +760,8 @@ function RootLayout() {
       <Stack.Screen name="crews/index" options={{ headerShown: false }} />
       {/* Make a crew is a sheet over Crews (Flow 10 · 10.2): the route is transparent and draws the sheet itself. */}
       <Stack.Screen name="crews/new" options={{ headerShown: false, presentation: 'transparentModal', animation: 'none' }} />
+      {/* Waved at you (Wave PR (b), board 03 See all): a sheet over the Room or Banter; the route draws the sheet itself. */}
+      <Stack.Screen name="waves/[eventId]" options={{ headerShown: false, presentation: 'transparentModal', animation: 'none' }} />
       <Stack.Screen name="crews/invite/[crewId]" options={{ headerShown: false }} />
       <Stack.Screen name="crews/[crewId]" options={{ headerShown: false }} />
       {/* A place from the Places list. Placeholder until step 5 (docs/PLACEHOLDER_SCREENS.md §10). */}
@@ -772,6 +780,7 @@ function RootLayout() {
         exceeded" took the app down to the root boundary (RC drive 5; `__tests__/plusManageOverPlus.test.tsx`).
       */}
       <Stack.Screen name="plus-manage" options={{ headerShown: false }} />
+      <Stack.Screen name="c/[token]" options={{ headerShown: false, presentation: 'modal', animation: reduceMotion ? 'fade' : 'slide_from_bottom' }} />
       <Stack.Screen name="f/[token]" options={{ headerShown: false, presentation: 'modal', animation: reduceMotion ? 'fade' : 'slide_from_bottom' }} />
           </Stack>
           {/*

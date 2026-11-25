@@ -210,6 +210,8 @@ export function useTurnWatch(gate: TurnGate, modalUp: boolean, { animationMs = 0
   // Closed while it holds the screen: it is leaving, which a native screen opened now waits for (`holdTurnWhile`).
   useEffect(() => {
     if (queued && !wanted && holder === turn) leaving.add(turn)
+    // Wanted again before it went (re-opened mid-exit): it is staying, and what waits on it must not wait for its going.
+    else if (wanted) leaving.delete(turn)
   }, [queued, wanted, turn])
 
   // Not wanted and not drawn: the turn goes back once iOS says the Modal has gone (or at once if it never reached it).
@@ -269,6 +271,12 @@ export function useQueuedModal(wanted: boolean, options: { animationMs?: number;
 
 /** A native screen's own dismissal (the photo picker sliding down) is given this long before the next Modal asks. */
 export const NATIVE_GONE_MS = 350
+/**
+ * The longest a native page (the in-app browser) may hold the screen. It holds it until its promise settles, and one that never
+ * does (it was not presented, or never reported being closed) took every later sheet with it: "Delete account" went dead after
+ * "What's kept" until a relaunch (SCRUM-911). Past this, whoever is waiting asks again, and iOS refuses a Modal that has to wait.
+ */
+export const HOLD_MAX_MS = 90_000
 
 /**
  * A native screen that is not a Modal (the photo picker, the share sheet, the in-app browser) holds the screen while it
@@ -294,15 +302,25 @@ export async function holdTurnWhile<T>(
         clearTimeout(timer)
         resolve()
       }
-      const timer = setTimeout(done, waitMs)
+      // Out of patience with a Modal that stays up: presented over it. Never over one that is leaving: React Native's
+      // dismissal would close what was presented instead and leave the empty Modal on screen (SCRUM-994). Its own
+      // MODAL_GONE_FALLBACK_MS releases the turn if iOS never says it has gone.
+      // Checked again each `waitMs`, so a Modal re-opened mid-exit (no longer leaving) is presented over then.
+      const check = () => {
+        if (holder === waitingOn && leaving.has(waitingOn)) timer = setTimeout(check, waitMs)
+        else done()
+      }
+      let timer = setTimeout(check, waitMs)
       const off = subscribeTurns(() => {
         if (holder !== waitingOn) done()
       })
     })
   }
+  const cap = setTimeout(() => releaseTurn(turn), HOLD_MAX_MS)
   try {
     return await work()
   } finally {
+    clearTimeout(cap)
     setTimeout(() => releaseTurn(turn), NATIVE_GONE_MS)
   }
 }

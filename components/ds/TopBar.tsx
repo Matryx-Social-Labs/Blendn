@@ -1,14 +1,14 @@
 import { useState } from 'react'
-import { Platform, StyleSheet, Text, View } from 'react-native'
+import { Platform, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { type IconName } from '../ui/Icon'
 import { Material } from '../ui/Material'
 import { BAR_BOTTOM, barTop } from '../../lib/barGeometry'
-import { COLOR, FONT_FAMILY, MATERIAL, MAX_FONT_SCALE, SIZE, SPACE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, MATERIAL, MAX_FONT_SCALE, SIZE, SPACE, TYPE } from '../../lib/design/tokens'
 import { Button } from './Button'
 import { IconButton } from './IconButton'
-import { CONTROL_FONT_CAP, font, useBoldText, useIncreaseContrast } from './shared'
+import { CONTROL_FONT_CAP, font, useBoldText, useIncreaseContrast, useLargeText } from './shared'
 
 /** rest: no bar, straight on the body · scrolled: the bar glass behind · condensed: a 17 pt centred title. */
 export type TopBarState = 'rest' | 'scrolled' | 'condensed'
@@ -18,6 +18,8 @@ export type TopBarProps = {
   title?: string
   /** A line under the title ("4 people · 2 here now", "60 waiting"): a leading count is set in Geist Mono. */
   sub?: string
+  /** The sub's lines: two by default; one where the board ellipsizes it (the Lobby's event, L-A). */
+  subLines?: 1 | 2
   /** The screen decides from its scroll offset. */
   state?: TopBarState
   onBack: () => void
@@ -26,8 +28,9 @@ export type TopBarProps = {
   /** Glass circles on the right, named by what they do. */
   actions?: readonly { icon: IconName; label: string; onPress: () => void }[]
   /**
-   * Where you are in a short run of people ("2 of 5", Rate): Geist Mono in `meta`, `textSecondary`, at the right after the
-   * actions. Read as "Person 2 of 5". It is the type's cap that holds the bar's height, as the title's does.
+   * Where you are in a short run of steps ("2 of 3", Rate: the night, then each person): Geist Mono 13/20, `textSecondary`,
+   * centred in the circle row (Flow 4 `rate`, `.pg3`). Read as "Step 2 of 3". It is the type's cap that holds the bar's
+   * height, as the title's does.
    */
   progress?: string
   /** The Save pill: `H.primary` on press-in; `H.success` is the screen's, when the save lands. */
@@ -52,7 +55,7 @@ export type TopBarProps = {
  *
  * Save is the 48 pt `md` button: Button has no 44.
  */
-export function TopBar({ title, sub, state = 'rest', onBack, close = false, actions = [], progress, save, testID }: TopBarProps) {
+export function TopBar({ title, sub, subLines = 2, state = 'rest', onBack, close = false, actions = [], progress, save, testID }: TopBarProps) {
   const android = Platform.OS === 'android'
   const insets = useSafeAreaInsets()
   const bold = useBoldText()
@@ -64,6 +67,12 @@ export function TopBar({ title, sub, state = 'rest', onBack, close = false, acti
   // The condensed title is centred, so it keeps clear of the wider side on both: the back circle, or the actions and Save.
   const [rightWidth, setRightWidth] = useState(0)
   const inset = SPACE.lg + Math.max(circle, rightWidth) + SPACE.md
+  // At the large sizes the title and its sub outgrow the circle: the circle sits level with the title line, not
+  // mid-block (SCRUM-1059 A). The title is capped, so its line is the heading's at most 1.3×.
+  const { fontScale } = useWindowDimensions()
+  const large = useLargeText()
+  const titleLine = TYPE.heading.lineHeight * Math.min(fontScale, CONTROL_FONT_CAP)
+  const levelWithTitle = large ? { paddingTop: Math.max(0, (circle - titleLine) / 2) } : null
 
   return (
     <View testID={testID} style={[styles.header, { paddingTop: top }, !condensed && styles.roomBelow]}>
@@ -73,9 +82,9 @@ export function TopBar({ title, sub, state = 'rest', onBack, close = false, acti
           {contrast ? <View testID={testID && `${testID}-bar-contrast`} style={styles.contrast} /> : null}
         </View>
       ) : null}
-      <View style={[styles.row, { minHeight: circle }]}>
+      <View testID={testID && `${testID}-row`} style={[styles.row, { minHeight: circle }, large && styles.rowTop]}>
         <IconButton icon={close ? 'x' : android ? 'arrow-left' : 'chevron-left'} accessibilityLabel={close ? 'Close' : 'Back'} onPress={onBack} testID={testID && `${testID}-back`} />
-        <View style={styles.titles}>
+        <View testID={testID && `${testID}-titles`} style={[styles.titles, levelWithTitle]}>
           {condensed || !title ? null : (
             <>
               <Text
@@ -86,7 +95,7 @@ export function TopBar({ title, sub, state = 'rest', onBack, close = false, acti
               >
                 {title}
               </Text>
-              {sub ? <SubLine text={sub} bold={bold} /> : null}
+              {sub ? <SubLine text={sub} bold={bold} lines={subLines} /> : null}
             </>
           )}
         </View>
@@ -94,19 +103,21 @@ export function TopBar({ title, sub, state = 'rest', onBack, close = false, acti
           {actions.map((a) => (
             <IconButton key={a.label} icon={a.icon} accessibilityLabel={a.label} onPress={a.onPress} />
           ))}
-          {progress ? (
-            <Text
-              testID={testID && `${testID}-progress`}
-              accessibilityLabel={`Person ${progress}`}
-              maxFontSizeMultiplier={CONTROL_FONT_CAP}
-              style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.sub]}
-            >
-              {progress}
-            </Text>
-          ) : null}
           {save ? <Button label="Save" size={android ? "md" : "raised"} onPress={save.onPress} loading={save.saving} disabled={save.disabled} /> : null}
         </View>
       </View>
+      {progress ? (
+        <View pointerEvents="none" style={[styles.condensed, styles.pagerRow, { top, height: circle, left: inset, right: inset }]}>
+          <Text
+            testID={testID && `${testID}-progress`}
+            accessibilityLabel={`Step ${progress}`}
+            maxFontSizeMultiplier={CONTROL_FONT_CAP}
+            style={[font('note', bold, FONT_FAMILY.mono[500]), styles.sub, styles.centre, styles.pager]}
+          >
+            {progress}
+          </Text>
+        </View>
+      ) : null}
       {condensed && title ? (
         <View testID={testID && `${testID}-condensed`} pointerEvents="none" style={[styles.condensed, { top, height: circle, left: inset, right: inset }]}>
           <Text
@@ -126,10 +137,10 @@ export function TopBar({ title, sub, state = 'rest', onBack, close = false, acti
 /** A leading count ("60", "1,002"): the number in Geist Mono, the words after it in the sans. A whole word only, so an event title like "90s Night" stays in the sans. */
 const LEADING_COUNT = /^[\d,]+(?=\s|$)/
 
-function SubLine({ text, bold }: { text: string; bold: boolean }) {
+function SubLine({ text, bold, lines }: { text: string; bold: boolean; lines: 1 | 2 }) {
   const count = LEADING_COUNT.exec(text)?.[0]
   return (
-    <Text numberOfLines={2} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.sub]}>
+    <Text numberOfLines={lines} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.sub]}>
       {count ? <Text style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.tabular]}>{count}</Text> : null}
       {count ? text.slice(count.length) : text}
     </Text>
@@ -140,6 +151,7 @@ const styles = StyleSheet.create({
   header: { paddingHorizontal: SPACE.lg },
   roomBelow: { paddingBottom: BAR_BOTTOM },
   row: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md },
+  rowTop: { alignItems: 'flex-start' },
   titles: { flex: 1, minWidth: 0 },
   ink: { color: COLOR.textPrimary },
   sub: { color: COLOR.textSecondary },
@@ -147,5 +159,8 @@ const styles = StyleSheet.create({
   right: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
   condensed: { position: 'absolute', justifyContent: 'center' },
   centre: { textAlign: 'center' },
+  // design-exception: the board's pager is Geist Mono 13/20 (`.pg3`): `note`'s 13 in mono, on meta's 20 line
+  pager: { lineHeight: TYPE.meta.lineHeight },
+  pagerRow: { alignItems: 'center' },
   contrast: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 1, backgroundColor: MATERIAL.hairlineIncreaseContrast },
 })

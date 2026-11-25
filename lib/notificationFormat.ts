@@ -32,6 +32,10 @@ export type NotificationKind =
   | 'board_request'
   /** Your board ask was accepted. Carries `conversationId`. */
   | 'board_request_accepted'
+  /** Somebody offers what you are looking for (opt-in). Carries `eventId` and `postId`. */
+  | 'board_match'
+  /** The host's Lobby note went up or changed (opt-in). Carries `eventId` and `hostPostId`. */
+  | 'board_host_post'
   | 'friend_request'
   | 'friend_accepted'
   /** An event you checked in to has ended: rate it. Carries `eventId`. */
@@ -44,6 +48,10 @@ export type NotificationKind =
   | 'blend'
   /** A place sent its regulars an offer. Carries `offerId`. */
   | 'venue_offer'
+  /** A moderator or the automatic check took down your Board post. Carries `eventId` and `postId`. */
+  | 'board_post_removed'
+  /** The outcome of a report you made. Carries nothing to open. */
+  | 'report_actioned'
 
 /**
  * What the server adds to a row once it resolves the people and the event for the

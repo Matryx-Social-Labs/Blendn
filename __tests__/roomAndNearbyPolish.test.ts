@@ -3,30 +3,6 @@ import { join } from 'path'
 
 const read = (...p: string[]) => readFileSync(join(__dirname, '..', ...p), 'utf8')
 
-describe('Nearby events', () => {
-  const SRC = read('app', 'nearby-events.tsx')
-
-  it('says the day as well as the time on each card', () => {
-    // "9:00 PM" alone could be any night; the card's time is the one date grammar (`cardTime`: "Sat · 10:30 PM").
-    expect(SRC).toContain('homeCardProps(')
-    expect(SRC).not.toContain('formatTimeRange(')
-  })
-
-  it('tells a failed location fix apart from an empty city, with a Try again', () => {
-    expect(SRC).toContain('Location unavailable')
-    expect(SRC).toMatch(/onPress: retryLocation/)
-  })
-
-  it('tries again on returning from Settings while denied, without re-prompting', () => {
-    expect(SRC).toMatch(/AppState\.addEventListener\('change'/)
-    expect(SRC).toContain('Location.getForegroundPermissionsAsync()')
-  })
-
-  it('offers a way on from the empty state', () => {
-    expect(SRC).toContain('Browse events')
-  })
-})
-
 describe('Connect in the room', () => {
   const ROOM = read('lib', 'useRoom.ts')
   const SCREEN = read('components', 'blendn', 'BlendnScreen.tsx')

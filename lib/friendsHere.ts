@@ -5,6 +5,7 @@ import { AccessibilityInfo } from 'react-native'
 import { apiClient } from './apiClient'
 import { Logger } from './logger'
 import { subscribeConnectionStatus, subscribeToRoomFriends } from './socketClient'
+import { firstNameOf } from './profileIdentity'
 import { useLatest } from './useLatest'
 
 /**
@@ -19,12 +20,8 @@ export interface FriendHere {
   photo: string | null
 }
 
-/** The Room reads 8 and draws 3 rows plus 5 faces (plan 9.1). */
+/** The Room reads 8 (plan 9.1) and its row draws 3 faces (Flow 5 R-A). */
 export const FRIENDS_FIRST_PAGE = 8
-/** Rows in the section before "N more here". */
-export const FRIEND_ROWS = 3
-/** Faces in the overflow row. */
-export const FRIEND_OVERFLOW_FACES = 5
 /** `room:friends` carries no data, so a burst of them is one read. */
 export const FRIENDS_REFETCH_MS = 1000
 
@@ -108,8 +105,7 @@ export function useFriendsHere(eventId: string | null, inRoom: boolean): Friends
 /** 1204 reads "1,204": a long count stays a glance and never breaks a header or a row. */
 export const groupedCount = (n: number): string => n.toLocaleString('en-US')
 
-/** "Karthik Subramaniam Venkataraman" is Karthik: the toast speaks the way a friend would. */
-export const firstNameOf = (name: string): string => name.trim().split(/\s+/)[0] || name
+export { firstNameOf }
 
 /** The DM did not open (the friend left, an unfriend or a block in between, or no network). */
 export const friendChatFailure = (name: string): string => `Couldn’t open your chat with ${firstNameOf(name)}. Try again.`

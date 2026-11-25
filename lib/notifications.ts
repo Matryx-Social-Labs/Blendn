@@ -8,8 +8,10 @@ import { openWhenReady } from './pendingRoute'
 import { apiClient, TokenStorage } from './apiClient'
 import { bannerPresentation, isOnNotificationsScreen } from './inAppBanners'
 import { Logger } from './logger'
+import { forgetMessageRequests, forgetPersonalChats } from './queryCache'
 import { setPushTokenRef, getPushTokenRef } from './pushTokenRef'
 import { notePushPermission, readPushPermission, whenPermissionReadable } from './pushStatus'
+import { isLinkId } from './shareLinks'
 
 /**
  * The conversation or room on screen, spelled the way the server spells a
@@ -112,21 +114,21 @@ export async function ensureNotificationChannels(): Promise<void> {
     Notifications.setNotificationChannelAsync('messages', {
       ...base,
       name: 'Messages and people',
-      description: 'Direct messages, friend requests and matches',
+      description: 'Direct messages, friend requests and waves back',
       importance: Notifications.AndroidImportance.HIGH,
       lockscreenVisibility: PRIVATE,
     }),
     Notifications.setNotificationChannelAsync('matches', {
       ...base,
-      name: 'Matches and friends',
-      description: 'Friend requests, matches and reveals',
+      name: 'Waves and friends',
+      description: 'Waves back, friend requests and reveals',
       importance: Notifications.AndroidImportance.HIGH,
       lockscreenVisibility: PRIVATE,
     }),
     Notifications.setNotificationChannelAsync('crew', {
       ...base,
       name: 'Your crew',
-      description: 'Crew invites, “we’re here” and Blends',
+      description: 'Crew invites, “we’re here” and Mixes',
       importance: Notifications.AndroidImportance.HIGH,
       lockscreenVisibility: PRIVATE,
     }),
@@ -198,7 +200,7 @@ export async function registerForPushNotificationsAsync(
 
     if (existingStatus !== 'granted') {
       if (!prompt) {
-        Logger.info('notifications', 'Push declined during onboarding; not asking')
+        Logger.info('notifications', 'Push declined or deferred; not asking')
         return null
       }
       const answer = await Notifications.requestPermissionsAsync()
@@ -364,6 +366,8 @@ export function notificationTarget(data: Record<string, any> | undefined): Href 
             ...(kind ? { kind } : {}),
             ...(kind === 'crew' && data.crewId ? { crewId: String(data.crewId) } : {}),
             ...(kind === 'blend' && data.blendId ? { blendId: String(data.blendId) } : {}),
+            // An event's room: the room asks that door for its lock when the server's history says nothing (ROOM-05).
+            ...(!kind && data.eventId ? { eventId: String(data.eventId) } : {}),
           } as any,
         }
       } else {
@@ -373,7 +377,7 @@ export function notificationTarget(data: Record<string, any> | undefined): Href 
     }
     case 'announcement': {
       if (data.chatGroupId) {
-        target = { pathname: '/chat/[id]', params: { id: String(data.chatGroupId) } as any }
+        target = { pathname: '/chat/[id]', params: { id: String(data.chatGroupId), ...(data.eventId ? { eventId: String(data.eventId) } : {}) } as any }
       } else if (data.eventId) {
         target = { pathname: '/event/[id]', params: { id: String(data.eventId) } as any }
       } else {
@@ -409,8 +413,8 @@ export function notificationTarget(data: Record<string, any> | undefined): Href 
      * wiring the notifications centre, which routes through this same
      * function rather than carrying a second copy of it.
      *
-     * The Banter tab, which is where requests are listed (`app/(tabs)/chat.tsx`
-     * loads them) — there is no dedicated route. Deliberately not the sender's
+     * A message request opens Banter's Message requests, where it is answered (requests placement A, 2026-11-15); an
+     * answer to yours, and a Lobby ask, the Banter tab, where the chat and the Lobby section are. Deliberately not the sender's
      * profile: the decision is accept-or-decline, and a request from somebody
      * you have not accepted must not deep-link to a profile you are not yet
      * entitled to see.
@@ -419,7 +423,10 @@ export function notificationTarget(data: Record<string, any> | undefined): Href 
      * words, because a lock screen is read by other people — so the client
      * draws nothing from it either.
      */
-    case 'message_request':
+    case 'message_request': {
+      target = '/message-requests'
+      break
+    }
     case 'message_request_response':
     case 'board_request': {
       target = '/(tabs)/chat'
@@ -464,6 +471,24 @@ export function notificationTarget(data: Record<string, any> | undefined): Href 
         : '/(tabs)/events'
       break
     }
+    /*
+     * A post of yours taken down (SYS-06): the Board it was on. The push carries `eventId` and `postId`; without an
+     * event there is nowhere to go, and the Banter tab is where the app opens for a kind that has no place of its own.
+     */
+    case 'board_post_removed': {
+      target = data.eventId ? { pathname: '/board/[eventId]', params: { eventId: String(data.eventId) } as any } : '/(tabs)/chat'
+      break
+    }
+    /*
+     * The Lobby's opt-in alerts (SCRUM-1026, 6/6). Somebody offers what you are looking for: their post, which the
+     * Lobby scrolls to. The host's note changed: the Lobby, where the note is pinned first. No event, nowhere to go.
+     */
+    case 'board_match':
+    case 'board_host_post': {
+      const post = notifType === 'board_match' && isLinkId(data.postId) ? { post: data.postId } : {}
+      target = isLinkId(data.eventId) ? { pathname: '/board/[eventId]', params: { eventId: data.eventId, ...post } as any } : '/(tabs)/chat'
+      break
+    }
     case 'friend_request': {
       /*
        * Where requests are answered. Not the asker's profile: a friend's
@@ -504,9 +529,10 @@ export function notificationTarget(data: Record<string, any> | undefined): Href 
 /**
  * The kinds that are asked something, whose push lands on the Notifications screen (Flow 9 · 9.2, motion #50):
  * the request is answered there, where Accept and Decline are, and the screen scrolls to it and washes it.
- * (A row's own View/Join, on that screen, goes to `notificationTarget`: the destination, not the feed.)
+ * (A row's own Join, on that screen, goes to `notificationTarget`: the destination, not the feed.) The asks that open a
+ * chat (a message request, a Lobby ask, a reveal ask) are answered in Banter, so their push goes there (requests placement A).
  */
-const LANDS_IN_THE_FEED = ['friend_request', 'crew_invite', 'reveal_request', 'board_request', 'message_request']
+const LANDS_IN_THE_FEED = ['friend_request', 'crew_invite']
 const LANDING_KEYS = ['requestId', 'crewId', 'eventId', 'conversationId'] as const
 
 /** Where a tapped push or banner goes: the Notifications screen with its payload ids for a request kind, otherwise the destination. */
@@ -543,6 +569,11 @@ export function landFromNotificationData(data: Record<string, any> | undefined) 
 export function navigateFromNotificationData(data: Record<string, any> | undefined) {
   try {
     const target = notificationTarget(data)
+    // The Banter's requests and people predate the notification being shown: it reads them again on arrival.
+    if (target === '/(tabs)/chat' || target === '/message-requests') {
+      forgetMessageRequests()
+      forgetPersonalChats()
+    }
     if (target) openWhenReady(target)
   } catch (e) {
     Logger.warn('notifications', 'Failed to navigate from notification', { error: e })

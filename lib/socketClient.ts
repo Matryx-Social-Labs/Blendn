@@ -44,6 +44,8 @@ export interface ServerToClientEvents {
     eventId: string
     userId: string
     userName: string
+    /** `userName` is their name, not the pseudonym (admin SCRUM-1067). Absent from an older server. */
+    revealed?: boolean
     userImage?: string
     checkInTime: string
     /** See `event:checkin`. */
@@ -163,6 +165,8 @@ export interface ServerToClientEvents {
   }) => void
   /** Somebody in the room waved at you. `fromName` is how they appear to you. */
   "room:wave": (data: { eventId: string; fromUserId: string; fromName: string }) => void
+  /** A crew here waved at you (admin #1007): the crew only, never who tapped. */
+  "room:crew_wave": (data: { eventId: string; fromCrewId: string; fromName: string }) => void
   /** The event was cancelled: everyone checked in has been checked out (blendn-admin `emitEventCancelled`, to `event:{id}` and `event:room:{id}`). */
   "event:cancelled": (data: { eventId: string }) => void
   /** Who is here among your friends changed (blendn-admin `notifyFriendsHere`): content-free, so the phone re-reads Friends here. */
@@ -235,6 +239,7 @@ type PrivateTypingCallback = (data: ServerToClientEvents["private:typing"] exten
 type PrivateReadCallback = (data: ServerToClientEvents["private:read"] extends (data: infer D) => void ? D : never) => void
 type PrivateRevealedCallback = (data: ServerToClientEvents["private:revealed"] extends (data: infer D) => void ? D : never) => void
 type RoomMatchCallback = (data: ServerToClientEvents["room:match"] extends (data: infer D) => void ? D : never) => void
+type RoomCrewWaveCallback = ServerToClientEvents["room:crew_wave"]
 type RoomWaveCallback = (data: ServerToClientEvents["room:wave"] extends (data: infer D) => void ? D : never) => void
 type EventCancelledCallback = (data: ServerToClientEvents["event:cancelled"] extends (data: infer D) => void ? D : never) => void
 type RoomFriendsCallback = (data: ServerToClientEvents["room:friends"] extends (data: infer D) => void ? D : never) => void
@@ -340,6 +345,7 @@ const userSubscriptions = new Map<string, Set<PrivateMessageCallback>>()
  */
 const roomMatchSubscriptions = new Set<RoomMatchCallback>()
 const roomWaveSubscriptions = new Set<RoomWaveCallback>()
+const roomCrewWaveSubscriptions = new Set<RoomCrewWaveCallback>()
 const roomFriendsSubscriptions = new Set<RoomFriendsCallback>()
 const bellSubscriptions = new Set<BellCallback>()
 const liveEndedSubscriptions = new Set<LiveEndedCallback>()
@@ -511,8 +517,11 @@ export async function connect(opts: { force?: boolean } = {}): Promise<boolean> 
          * which cost real time to establish by hand. engine.io attaches a
          * `description` (the underlying event or HTTP status) and `context`.
          */
-        const detail = error as Error & { description?: unknown; context?: unknown }
-        Logger.error("socket", "Connection error", {
+        const detail = error as Error & { description?: unknown; context?: unknown; type?: unknown }
+        // A transport that could not reach the server ("xhr poll error", "websocket error") is the network, and the manager
+        // retries it: a warning (a breadcrumb). A refusal from the server's middleware is still an error. BLENDN-1C, W, 2G.
+        const log = detail.type === "TransportError" ? Logger.warn : Logger.error
+        log("socket", "Connection error", {
           error: detail.message,
           description:
             detail.description instanceof Error
@@ -575,6 +584,7 @@ export function disconnect(): void {
   userSubscriptions.clear()
   roomMatchSubscriptions.clear()
   roomWaveSubscriptions.clear()
+  roomCrewWaveSubscriptions.clear()
   roomFriendsSubscriptions.clear()
 }
 
@@ -769,6 +779,10 @@ function setupSocketHandlers(sock: TypedSocket): void {
 
   sock.on("room:wave", (data) => {
     roomWaveSubscriptions.forEach((cb) => cb(data))
+  })
+
+  sock.on("room:crew_wave", (data) => {
+    roomCrewWaveSubscriptions.forEach((cb) => cb(data))
   })
 
   sock.on("room:friends", (data) => {
@@ -1212,6 +1226,15 @@ export function subscribeToRoomWave(callback: RoomWaveCallback): () => void {
   roomWaveSubscriptions.add(callback)
   return () => {
     roomWaveSubscriptions.delete(callback)
+  }
+}
+
+/** A crew's wave at you. Same delivery as `subscribeToRoomWave`. */
+export function subscribeToRoomCrewWave(callback: RoomCrewWaveCallback): () => void {
+  if (!socket?.connected) connect()
+  roomCrewWaveSubscriptions.add(callback)
+  return () => {
+    roomCrewWaveSubscriptions.delete(callback)
   }
 }
 

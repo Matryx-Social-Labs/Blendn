@@ -5,14 +5,16 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { broadcastParts } from '../../lib/chatFeed'
 import { crewLikeLine } from '../../lib/crews'
+import { isCrewWavedLine, type WaveBackOutcome } from '../../lib/crewWaveBack'
+import { CrewWavedNotice } from './CrewWavedNotice'
 import { goneKindFor } from '../../lib/chatGone'
 import { liveEndedState, type LiveEndedAction } from '../../lib/chatLiveEnded'
-import { markSeed } from '../../lib/pseudonymAvatar'
+import { markSeed } from '../../lib/creatureSeed'
 import { DURATION, SPACE } from '../../lib/design/tokens'
-import { isTemp, type RoomMessage } from '../../lib/roomMessages'
+import { isTemp, QUOTE_UNAVAILABLE, type RoomMessage } from '../../lib/roomMessages'
 import { clockTime } from '../../lib/time'
 import { BroadcastNotice } from '../ds/BroadcastNotice'
-import { ChatBubble, type BubbleReaction } from '../ds/ChatBubble'
+import { ChatBubble, CHIP_REACH, type BubbleReaction } from '../ds/ChatBubble'
 import type { Rect } from '../ds/chatShared'
 import { StateScreen } from '../ds/StateScreen'
 import type { ButtonKind } from '../ds/Button'
@@ -23,6 +25,9 @@ import { RoomPoll } from './RoomPoll'
 import { chatHeaderBottom } from './ChatHeader'
 import { opensInSpoken } from '../../lib/preEventRoom'
 
+/** The poll's host as the server names them; the client's own stand-ins for no name are not a name. */
+const pollHost = (name: string) => (name && name !== 'Attendee' && name !== 'You' && name !== 'System' ? name : undefined)
+
 export type RowHandlers = {
   menu: (m: RoomMessage, anchor: Rect) => void
   retry: (m: RoomMessage) => void
@@ -32,6 +37,8 @@ export type RowHandlers = {
   link: (url: string) => void
   /** A vote the room itself refused (closed, not in it, not live): the room locks. */
   pollRefusal: (reason: PollRefusal) => void
+  /** A crew chat's `crew_waved` line answered (advisor L-A). */
+  crewWaveBack?: (m: RoomMessage) => Promise<WaveBackOutcome>
 }
 
 /**
@@ -39,9 +46,13 @@ export type RowHandlers = {
  * on it — the one seed rule every surface shares (`markSeed`): the Grid, Room
  * info and the profile agree, and two unresolved people never share one.
  */
-export const senderOf = (m: Pick<RoomMessage, 'sender_name' | 'sender_id'>, roomId: string) => ({
+/** `named`: a crew's room names its members (SV-6); an event's room never does. */
+export const senderOf = (m: Pick<RoomMessage, 'sender_name' | 'sender_id' | 'sender_image'>, roomId: string, named = false) => ({
   name: m.sender_name,
+  named: named || Boolean(m.sender_image),
   pseudonym: markSeed(m.sender_name, `${roomId}:${m.sender_id}`),
+  // A crew's members are named and photographed (SV-6); an event's room never sends one, so it stays a creature.
+  ...(m.sender_image ? { photoUri: m.sender_image } : {}),
 })
 
 /** The six the server accepts, as the bubble draws them: counts, never who. */
@@ -60,6 +71,7 @@ const bubbleReactions = (r: RoomMessage['reactions']): BubbleReaction[] => (r ??
 export const RoomMessageRow = memo(function RoomMessageRow({
   item,
   roomId,
+  namedSenders = false,
   mine,
   first,
   last,
@@ -68,11 +80,14 @@ export const RoomMessageRow = memo(function RoomMessageRow({
   senderTappable,
   eventId,
   pollViewable = false,
+  afterChips = false,
   handlers,
 }: {
   item: RoomMessage
   /** The room: an unresolved name ("Attendee") is seeded per person here, never shared (`markSeed`). */
   roomId: string
+  /** A crew's room: its members are named, so one with no photo is their initial (`personFace`). */
+  namedSenders?: boolean
   mine: boolean
   first: boolean
   last: boolean
@@ -86,24 +101,49 @@ export const RoomMessageRow = memo(function RoomMessageRow({
   eventId?: string | null
   /** This poll's row is on screen: it is read only then. */
   pollViewable?: boolean
+  /** The row above is a bubble with chips, whose lower half is real space: start that much less far down (`hangsChips`). */
+  afterChips?: boolean
   handlers: RowHandlers
 }) {
-  if (item.sender_id === 'system') return <SystemLine text={item.message_text} />
+  const runStart = afterChips ? styles.runStartAfterChips : styles.runStart
+  if (item.sender_id === 'system') {
+    return (
+      <View testID={`row-${item.message_id}`} style={runStart}>
+        <SystemLine text={item.message_text} />
+      </View>
+    )
+  }
+  // Another crew (or a person) waved at this crew: a notice with Wave back, never a bubble (advisor L-A).
+  if (isCrewWavedLine(item)) {
+    const answer = item.crewWave ? handlers.crewWaveBack : undefined
+    return (
+      <View testID={`row-${item.message_id}`} style={runStart}>
+        <CrewWavedNotice id={item.message_id} text={item.message_text} onWaveBack={answer ? () => answer(item) : undefined} />
+      </View>
+    )
+  }
   // A crew like is the room saying who did what, never somebody's bubble (your own drew as yours, TG-10).
   const like = item.message_type === 'system' ? crewLikeLine(item.message_text, mine ? 'You' : item.sender_name) : null
-  if (like) return <SystemLine text={like} testID={`system-${item.message_id}`} />
+  if (like) {
+    return (
+      <View testID={`row-${item.message_id}`} style={runStart}>
+        <SystemLine text={like} testID={`system-${item.message_id}`} />
+      </View>
+    )
+  }
   /*
    * A poll is the organiser's question. With its poll id on the message (SV8) it is the poll, answerable, as
    * <PollBubble>; until the server names it, the room says it as a notice, never as somebody's bubble.
    */
   if (item.message_type === 'poll') {
     return (
-      <View style={styles.runStart}>
+      <View testID={`row-${item.message_id}`} style={runStart}>
         {item.poll_id && eventId ? (
           <RoomPoll
             eventId={eventId}
             pollId={item.poll_id}
             question={item.message_text}
+            host={pollHost(item.sender_name)}
             viewable={pollViewable}
             onRoomRefusal={handlers.pollRefusal}
             testID={`poll-${item.message_id}`}
@@ -118,23 +158,23 @@ export const RoomMessageRow = memo(function RoomMessageRow({
     const { from, text } = broadcastParts(item.message_type, item.message_text, item.sender_name)
     // Full width, no tail, no menu: not somebody talking to you.
     return (
-      <View style={styles.runStart}>
+      <View testID={`row-${item.message_id}`} style={runStart}>
         <BroadcastNotice kind={item.message_type} from={from} text={text} time={clockTime(item.created_at)} media={item.media} testID={`broadcast-${item.message_id}`} />
       </View>
     )
   }
   const sending = isTemp(item) && !item.failed
   return (
-    <Animated.View exiting={FadeOut.duration(DURATION.quick)} style={first ? styles.runStart : styles.inRun}>
+    <Animated.View testID={`row-${item.message_id}`} exiting={FadeOut.duration(DURATION.quick)} style={first ? runStart : styles.inRun}>
       <ChatBubble
         testID={`bubble-${item.message_id}`}
         mine={mine}
-        sender={senderOf(item, roomId)}
+        sender={senderOf(item, roomId, namedSenders)}
         first={first}
         last={last}
         text={item.removed ? '' : item.message_text}
         removed={item.removed}
-        replyTo={item.replyTo ? { name: item.replyTo.sender_name, text: item.replyTo.message_text } : undefined}
+        replyTo={item.replyTo ? { name: item.replyTo.sender_name, text: item.replyTo.removed ? QUOTE_UNAVAILABLE : item.replyTo.message_text } : undefined}
         reactions={bubbleReactions(item.reactions)}
         onReactionPress={item.removed || sending ? undefined : (emoji) => handlers.react(item, emoji)}
         landed={landed}
@@ -216,7 +256,7 @@ export function RoomOutside({
           variant="screen"
           icon="door-closed"
           title="You were removed from this room"
-          body={outside.line || 'The organizer removed you. You can read nothing more here tonight, and no one is told.'}
+          body={outside.line || 'The host removed you. You can read nothing more here tonight, and no one is told.'}
           testID="room-removed"
         />
       )
@@ -238,7 +278,7 @@ export function RoomOutside({
           variant="screen"
           icon="clock"
           title="Not open yet"
-          body={`The room opens in ${opensInSpoken(opensIn)}. An event’s room opens 24 hours before it starts.`}
+          body={`The room opens in ${opensInSpoken(opensIn)}, when the doors open.`}
           actions={back}
           testID="room-not-open"
         />
@@ -247,7 +287,7 @@ export function RoomOutside({
           variant="screen"
           icon="door-open"
           title="The room is open"
-          body="It opened 24 hours before the event starts."
+          body="It opened with the doors."
           actions={[{ label: 'Open the room', kind: 'lit', onPress: () => onOpenRoom?.(), loading: opening }]}
           testID="room-now-open"
         />
@@ -269,7 +309,7 @@ export function RoomOutside({
       const left = outside.kind === 'left'
       // A Blend you left is over for both sides: nothing to rejoin (10-10, proposed copy).
       if (roomKind === 'blend') {
-        return <StateScreen variant="screen" icon="door-open" title="You left this Blend" body="Nothing you wrote has gone anywhere." actions={back} testID="room-left" />
+        return <StateScreen variant="screen" icon="door-open" title="You left this Mix" body="Nothing you wrote has gone anywhere." actions={back} testID="room-left" />
       }
       // A crew's room has no event to check in at (5-1, "a crew room falls through here with event wording").
       const words = roomKind === 'crew' ? CREW_WORDS : EVENT_WORDS
@@ -302,6 +342,7 @@ const CREW_WORDS = {
 
 const styles = StyleSheet.create({
   runStart: { marginTop: SPACE.lg },
+  runStartAfterChips: { marginTop: SPACE.lg - CHIP_REACH },
   inRun: { marginTop: SPACE.xs },
   gone: { flex: 1, paddingHorizontal: SPACE.gutter },
 })

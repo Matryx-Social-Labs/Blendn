@@ -1,26 +1,34 @@
 import { TopBar } from '../../components/ds/TopBar'
 import { useTopBarOverlay } from '../../lib/useTopBarState'
-import { router, useLocalSearchParams } from 'expo-router'
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
 import React, { useCallback, useEffect, useState } from 'react'
-import { ScrollView, StyleSheet, Text, View } from 'react-native'
+import { ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 import Animated, { LinearTransition } from 'react-native-reanimated'
 
 import { Avatar } from '../../components/ds/Avatar'
 import { Button } from '../../components/ds/Button'
+import { Chip } from '../../components/ds/Chip'
 import { Dock } from '../../components/ds/Dock'
 import { Orbs } from '../../components/ds/Orbs'
+import { LookingForCard } from '../../components/ds/LookingForCard'
 import { RadioCard } from '../../components/ds/RadioCard'
-import { SectionHeader } from '../../components/ds/SectionHeader'
 import { SettingsRow } from '../../components/ds/SettingsRow'
-import { CONTROL_FONT_CAP, font, HueProvider, useBoldText } from '../../components/ds/shared'
-import { fadeInFast } from '../../components/motion/presence'
+import { TextArea } from '../../components/ds/TextField'
+import { Title } from '../../components/ds/Title'
+import { font, HueProvider, useBoldText } from '../../components/ds/shared'
+import { bannerFadeIn, bannerOut } from '../../components/motion/presence'
 import { useToast } from '../../components/Toast'
 import { apiClient } from '../../lib/apiClient'
-import { intentAnswered } from '../../lib/checkIn'
+import { checkInChanged, intentAnswered } from '../../lib/checkIn'
 import { COLOR, MAX_FONT_SCALE, SPACE, SPRING } from '../../lib/design/tokens'
 import { toggleIntent } from '../../lib/intents'
 import { Logger } from '../../lib/logger'
+import { firstNameOf } from '../../lib/profileIdentity'
+import { personFace } from '../../lib/personFace'
+import { requestTextRefusal } from '../../lib/requestRefusal'
 import { revealReadiness, type RevealReadiness } from '../../lib/reveal'
+import { answerLength, normalizeAnswer, parseLens, parseWorkIntent, TONIGHT_ANSWER_MAX, WORK_INTENTS, type RoomLens, type WorkIntent } from '../../lib/roomLens'
+import { myRoomFace, pseudonymFromParam } from '../../lib/roomState'
 import { useAuth } from '../../lib/useAuth'
 import { RouteModal } from '../../components/system/RouteModal'
 import { useReducedMotion } from '../../lib/motion'
@@ -33,11 +41,12 @@ import { useReducedMotion } from '../../lib/motion'
  *
  * ## Two questions, one primary
  *
- * A glass close at the top, the first question as the screen's `title`, the second under a `SectionHeader`,
+ * A glass close at the top, the first question as the screen's `title`, the second as a `heading`,
  * and Save docked on a glass bar so it is always in reach and never under the home indicator. Reveal is two
- * `RadioCard`s (Anonymous, Named) with the face each would show; the intents are `RadioCard`s too, each one
- * `deselectable` since a tap on a chosen intent clears it. "Just here for the event" stands apart behind an
- * "or", because choosing it clears the others and that should be visible before it happens.
+ * lead `RadioCard`s (Flow 4 `prefs`, SCRUM-1025): Anonymous with your room creature and the pseudonym itself, Named with
+ * your face and first name, each value in its own slot. The intents are onboarding's photo tiles, three across, any of
+ * them at once. "Just here for the event" stands apart behind an "or", because choosing it clears the others and that
+ * should be visible before it happens.
  *
  * ## The two things this sets
  *
@@ -46,7 +55,7 @@ import { useReducedMotion } from '../../lib/motion'
  * halves, and "just here for the event" is a first-class answer rather than a
  * failure to choose.
  *
- * **Reveal** — whether your real name and photo are visible in this room.
+ * **Reveal** — whether your first name and photo are visible in this room.
  * Default off. Per event, deliberately: choosing to be visible at a work meetup
  * is not choosing to be visible at a club, and one global switch would make
  * that decision once for every room you ever enter.
@@ -71,23 +80,57 @@ const INTENTS: { value: Intent; label: string; hint: string }[] = [
   { value: 'just_here', label: 'Just here for the event', hint: 'Not looking to meet anyone' },
 ]
 
+const ART: Record<Exclude<Intent, 'just_here'>, number> = {
+  networking: require('../../assets/onboarding/looking-networking.jpg'),
+  friendship: require('../../assets/onboarding/looking-friendship.jpg'),
+  dating: require('../../assets/onboarding/looking-dating.jpg'),
+}
+
 const AVATAR = 56
+/** The anonymous card before the room has given you a pseudonym (opened from check-in, ahead of the room). */
+const NO_PSEUDONYM_YET = 'A made-up name'
+/** Flow 4 `.sub`, `.rc2`, `.t20`, `.ic3`, `.orl`: the board's gaps between the pieces, which sit off the 4-pt scale. */
+const SUB_GAP = SPACE.xs + SPACE.xxs
+const CARDS_GAP = SPACE.lg + SPACE.xxs
+const SECOND_HEAD_GAP = SPACE.xl + SPACE.xs
+const TILES_GAP = SPACE.md + SPACE.xxs
+const TILE_GAP = SPACE.sm + SPACE.xxs
+/** From the accessibility sizes the cards and the tiles stack: a half or a third of the width broke "Anonymous" and "Networking" mid-word at AX XXXL (drive). As Rate. */
+const STACK_FROM_SCALE = 1.5
+
+/** A section's question and its line: the screen's title when it leads, a heading when it follows (Flow 4 `.t24` / `.t20`). */
+function Head({ lead, title, sub, bold, testID }: { lead: boolean; title: string; sub: string; bold: boolean; testID: string }) {
+  return (
+    <View style={styles.head}>
+      <Title variant={lead ? 'title' : 'heading'} testID={testID} accessibilityRole="header" style={styles.ink}>
+        {title}
+      </Title>
+      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.lede} style={[font('lede', bold), styles.secondary]}>
+        {sub}
+      </Text>
+    </View>
+  )
+}
 
 function EventPreferencesContent() {
   // `revealed` arrives from the status chip, which already knows it. There is
   // no GET for per-event preferences, and adding a round trip to learn
   // something the caller is holding would be the wrong trade.
-  const { eventId, revealed: initialRevealed, askIntent: askIntentParam } = useLocalSearchParams<{
+  const { eventId, revealed: initialRevealed, askIntent: askIntentParam, pseudonym: pseudonymParam } = useLocalSearchParams<{
     eventId: string
     revealed?: string
     askIntent?: string
+    /** From the room (`roomSettingsRoute`): this screen cannot ask, because `GET /events/:id/chat` joins the room. */
+    pseudonym?: string
   }>()
+  const pseudonym = pseudonymFromParam(pseudonymParam)
   /*
    * "Why do you go out?" — asked at the door of the first room.
    *
-   * Onboarding never wrote `intent_default`, so every account that came
-   * through it was refused the board ("add … why you go out") for a field the
-   * flow never asked for. Check-in says `intentNeeded` while there is no
+   * Onboarding now asks it ("Why you go out", OUT-01), but older accounts and
+   * anyone who skipped that step have no `intent_default`, and the board refuses
+   * them ("add … why you go out") for it. No backfill (E14): this is their ask.
+   * Check-in says `intentNeeded` while there is no
    * default; the events tab sends people here with this flag, the intent
    * leads, and the answer is saved as the default in the same write.
    */
@@ -100,6 +143,7 @@ function EventPreferencesContent() {
   const bar = useTopBarOverlay()
   const reduceMotion = useReducedMotion()
   const bold = useBoldText()
+  const stacked = useWindowDimensions().fontScale >= STACK_FROM_SCALE
 
   const [intent, setIntent] = useState<Intent[]>([])
   /*
@@ -125,34 +169,77 @@ function EventPreferencesContent() {
    */
   const [canReveal, setCanReveal] = useState<RevealReadiness | null>(null)
   const [photo, setPhoto] = useState<string | null>(null)
+  const [firstName, setFirstName] = useState<string | null>(null)
   // Dating is 18+. The server refuses it (403) on this write as everywhere
   // else; hiding the card for a minor turns that refusal into a card they
   // never see rather than an error on the way into their first room.
   const [under18, setUnder18] = useState(false)
-
+  /*
+   * Tonight's question (Flow 5 P-A): asked only when the room has one (`GET /matches/preferences` says the lens). The
+   * answer is sent only when it changed, so opening this to change the reveal never rewrites it.
+   */
+  const [lens, setLens] = useState<RoomLens | null>(null)
+  const [savedAnswer, setSavedAnswer] = useState('')
+  const [answer, setAnswer] = useState('')
+  const [answerRefused, setAnswerRefused] = useState<string | undefined>()
+  // Here to (the work lens's "Here to hire"): one pick, sent only when it changed.
+  const [savedWorkIntent, setSavedWorkIntent] = useState<WorkIntent | null>(null)
+  const [workIntent, setWorkIntent] = useState<WorkIntent | null>(null)
   useEffect(() => {
+    if (!eventId) return
     let cancelled = false
-    if (!user) return
     apiClient
-      .getProfile(user.id)
+      .getMatchPreferences(String(eventId))
       .then((res) => {
         if (cancelled || !res.success || !res.data) return
-        const age = res.data.profile?.age
-        const photos: string[] = Array.isArray(res.data.profile?.photos) ? res.data.profile.photos : []
-        setUnder18(typeof age === 'number' && age < 18)
-        setPhoto(typeof photos[0] === 'string' ? photos[0] : null)
-        setCanReveal(revealReadiness({ name: res.data.profile?.name || res.data.name, photos }))
+        const said = res.data.tonightAnswer ?? ''
+        setLens(parseLens(res.data.lens))
+        setSavedAnswer(said)
+        setAnswer(said)
+        const picked = parseWorkIntent(res.data.workIntent)
+        setSavedWorkIntent(picked)
+        setWorkIntent(picked)
       })
-      .catch(() => {
-        // Fail open on the *gate*, not on the reveal: an unreachable profile
-        // endpoint should not permanently disable a control, and the server
-        // still decides what a card actually shows.
-        if (!cancelled) setCanReveal({ ok: true, missing: '' })
-      })
+      // No question is the safe reading of a failed read: the field simply is not offered.
+      .catch((error) => Logger.warn('match', 'Failed to read match preferences', { error }))
     return () => {
       cancelled = true
     }
-  }, [user])
+  }, [eventId])
+  const asks = !!lens?.question
+  const answerChanged = asks && normalizeAnswer(answer) !== normalizeAnswer(savedAnswer)
+  const answerTooLong = asks && answerLength(answer) > TONIGHT_ANSWER_MAX
+  const asksWork = lens?.key === 'work'
+  const workIntentChanged = asksWork && workIntent !== savedWorkIntent
+
+  // On each focus: back from Edit profile with a photo added there (audit D-1), Named can be picked.
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false
+      if (!user) return
+      apiClient
+        .getProfile(user.id)
+        .then((res) => {
+          if (cancelled || !res.success || !res.data) return
+          const age = res.data.profile?.age
+          const photos: string[] = Array.isArray(res.data.profile?.photos) ? res.data.profile.photos : []
+          setUnder18(typeof age === 'number' && age < 18)
+          const name: unknown = res.data.profile?.name || res.data.name
+          setPhoto(typeof photos[0] === 'string' ? photos[0] : null)
+          setFirstName(typeof name === 'string' && name.trim() ? firstNameOf(name) : null)
+          setCanReveal(revealReadiness({ name: typeof name === 'string' ? name : undefined, photos }))
+        })
+        .catch(() => {
+          // Fail open on the *gate*, not on the reveal: an unreachable profile
+          // endpoint should not permanently disable a control, and the server
+          // still decides what a card actually shows.
+          if (!cancelled) setCanReveal({ ok: true, missing: '' })
+        })
+      return () => {
+        cancelled = true
+      }
+    }, [user])
+  )
 
   const onToggleIntent = useCallback((value: Intent) => {
     setIntentTouched(true)
@@ -182,33 +269,44 @@ function EventPreferencesContent() {
          * person-level intent set on a different screen.
          */
         rememberReveal,
+        // null clears it; omitted, the server leaves it as it was.
+        ...(answerChanged ? { tonightAnswer: normalizeAnswer(answer) || null } : {}),
+        ...(workIntentChanged ? { workIntent } : {}),
       })
+      // Moderation refused the answer: said in the field, in the server's words, and the screen stays.
+      const refused = res.success ? undefined : requestTextRefusal(res)
+      if (refused) {
+        setAnswerRefused(refused)
+        return
+      }
       if (!res.success) {
         // The server's sentence when it has one — "Dating is for 18+" is
         // actionable; "could not save" is not.
-        showToast(res.error || 'Could not save. Try again.', 'error', { haptic: 'error' })
+        showToast(res.error || 'Couldn’t save that. Try again.', 'error', { haptic: 'error' })
         return
       }
+      // The Room and the tab bar read the reveal from caches this just made stale: say so, don't wait on a poll (ROOM-03).
+      checkInChanged(String(eventId))
       leave()
     } catch (e) {
       Logger.error('match', 'Failed to save match preferences', { error: e })
-      showToast('Could not save. Try again.', 'error', { haptic: 'error' })
+      showToast('Couldn’t save that. Try again.', 'error', { haptic: 'error' })
     } finally {
       setSaving(false)
     }
-  }, [askIntent, eventId, intent, intentTouched, leave, rememberReveal, revealed, saving, showToast])
+  }, [answer, answerChanged, workIntent, workIntentChanged, askIntent, eventId, intent, intentTouched, leave, rememberReveal, revealed, saving, setAnswerRefused, showToast])
 
   const intents = under18 ? INTENTS.filter((i) => i.value !== 'dating') : INTENTS
   const lookingIntents = intents.filter((i) => i.value !== 'just_here')
   const justHere = intents.find((i) => i.value === 'just_here')
 
-  const intentOption = (opt: (typeof INTENTS)[number]) => (
-    <RadioCard
+  const tile = (opt: (typeof INTENTS)[number]) => (
+    <LookingForCard
       key={opt.value}
-      title={opt.label}
-      hint={opt.hint}
+      size="tall"
+      label={opt.label}
+      image={ART[opt.value as Exclude<Intent, 'just_here'>]}
       selected={intent.includes(opt.value)}
-      deselectable
       onPress={() => onToggleIntent(opt.value)}
       testID={`prefs-intent-${opt.value}`}
     />
@@ -217,49 +315,43 @@ function EventPreferencesContent() {
   const blocked = canReveal ? !canReveal.ok : false
   const namedHint = blocked
     ? `Add ${canReveal?.missing} to your profile first. That’s what other people would see.`
-    : 'People here see your name and photo.'
+    : 'Your first name and photo.'
   // Layout glides when the "future events" row arrives; Reduce Motion cuts (U-L11).
   const glide = reduceMotion ? undefined : LinearTransition.springify().stiffness(SPRING.settle.stiffness).damping(SPRING.settle.damping).mass(SPRING.settle.mass)
 
   const revealBlock = (
-    <Animated.View layout={glide} style={styles.section}>
-      {askIntent ? (
-        <SectionHeader
-          title="Can people see who you are?"
-          caption="By default you appear as a made-up name, and people see what you have in common rather than who you are. Turning this on shows your real name and photo to people in this room."
-        />
-      ) : (
-        <View style={styles.headline}>
-          <Text accessibilityRole="header" maxFontSizeMultiplier={MAX_FONT_SCALE.title} style={[font('title', bold), styles.ink]}>
-            Can people see who you are?
-          </Text>
-          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>
-            By default you appear as a made-up name, and people see what you have in common rather than who you are. Turning this on shows your real name and photo to people in this room.
-          </Text>
-        </View>
-      )}
-      <View style={styles.pair} accessibilityRole="radiogroup">
+    <Animated.View layout={glide} style={askIntent ? styles.second : undefined}>
+      <Head lead={!askIntent} title="Can people see who you are?" sub="Just for this room." bold={bold} testID="prefs-reveal-title" />
+      <View testID="prefs-reveal" style={[styles.pair, stacked && styles.stacked]} accessibilityRole="radiogroup">
         <RadioCard
+          layout="lead"
           title="Anonymous"
-          hint="Nobody here sees your name or photo."
-          avatar={<Avatar kind="creature" pseudonym={String(eventId)} /* the made-up face is seeded on the event, never on the person (lib/pseudonymAvatar.ts) */ size={AVATAR} ring={COLOR.surface} />}
+          detail={pseudonym ?? NO_PSEUDONYM_YET}
+          hint="That’s all people here see, plus what you have in common."
+          // The room's own face for you (lib/roomState.ts): your pseudonym's creature, or the room's stand-in before it has one.
+          avatar={<Avatar {...myRoomFace({ revealed: false, name: null, photo: null, pseudonym, eventId: String(eventId) })} size={AVATAR} ring={COLOR.surface} />}
           selected={!revealed}
           onPress={() => setRevealed(false)}
           testID="prefs-anonymous"
         />
         <RadioCard
+          layout="lead"
           title="Named"
+          detail={firstName ?? undefined}
           hint={namedHint}
-          avatar={photo ? <Avatar kind="photo" uri={photo} size={AVATAR} ring={COLOR.surface} /> : undefined}
-          icon={photo ? undefined : 'user'}
+          // The named face rule (lib/personFace): your photo, or your initial on your disc; the card's dimming takes it when blocked.
+          avatar={<Avatar {...personFace({ named: true, name: firstName ?? '', photo })} size={AVATAR} ring={COLOR.surface} />}
           selected={revealed}
           disabled={blocked}
+          // The way to what is missing: Edit profile opens on the photos, and coming back reads the profile again.
+          action={blocked && canReveal ? { label: `Add ${canReveal.missing}`, onPress: () => router.push('/edit-profile') } : undefined}
           onPress={() => setRevealed(true)}
           testID="prefs-named"
         />
       </View>
       {revealed ? (
-        <Animated.View entering={reduceMotion ? undefined : fadeInFast}>
+        // M16: the line fades in and out; opacity only, so Reduce Motion keeps it.
+        <Animated.View entering={bannerFadeIn} exiting={bannerOut} style={styles.remember}>
           <SettingsRow
             icon="history"
             title="Do this at future events too"
@@ -274,43 +366,100 @@ function EventPreferencesContent() {
   )
 
   const intentBlock = (
-    <View style={styles.section}>
+    <Animated.View layout={glide} style={askIntent ? undefined : styles.second}>
       {askIntent ? (
-        <View style={styles.headline}>
-          <Text accessibilityRole="header" maxFontSizeMultiplier={MAX_FONT_SCALE.title} style={[font('title', bold), styles.ink]}>
-            Why do you go out?
-          </Text>
-          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>
-            It shapes who you’re introduced to. We’ll remember this for future events; change it any time from your profile.
-          </Text>
-        </View>
+        <Head lead testID="prefs-intent-title" title="Why do you go out?" sub="It shapes who you’re introduced to. We’ll remember this for future events; change it any time from your profile." bold={bold} />
       ) : (
-        <SectionHeader title="Why are you here tonight?" caption="Just for this event. It overrides your usual answer for tonight without changing it." />
+        <Head lead={false} testID="prefs-intent-title" title="Why are you here tonight?" sub="Only for tonight. Your usual answer stays as it is." bold={bold} />
       )}
-      <View style={styles.options}>{lookingIntents.map(intentOption)}</View>
+      <View testID="prefs-intents" style={[styles.tiles, stacked && styles.stacked]}>{lookingIntents.map(tile)}</View>
       {justHere ? (
         <>
-          {/* Exclusive of the cards above: choosing it clears them, so it stands apart. */}
-          <Text accessibilityElementsHidden importantForAccessibility="no" maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('label', bold), styles.or]}>
-            OR
-          </Text>
-          {intentOption(justHere)}
+          {/* Exclusive of the tiles above: choosing it clears them, so it stands apart. */}
+          <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.or}>
+            <View style={styles.orLine} />
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>
+              or
+            </Text>
+            <View style={styles.orLine} />
+          </View>
+          <RadioCard
+            layout="row"
+            title={justHere.label}
+            hint={justHere.hint}
+            selected={intent.includes('just_here')}
+            deselectable
+            onPress={() => onToggleIntent('just_here')}
+            testID="prefs-intent-just_here"
+          />
         </>
       ) : null}
-    </View>
+    </Animated.View>
   )
 
   const needsAnswer = askIntent && intent.length === 0
+  const tonightBlock = asks ? (
+    <Animated.View layout={glide} style={styles.second}>
+      <Head lead={false} testID="prefs-tonight-title" title={lens?.question ?? ''} sub="Tonight’s question. Only people in this room see your answer." bold={bold} />
+      <View style={styles.answer}>
+        <TextArea
+          value={answer}
+          onChangeText={(text) => {
+            setAnswer(text)
+            setAnswerRefused(undefined)
+          }}
+          placeholder="Your answer"
+          limit={TONIGHT_ANSWER_MAX}
+          measure={answerLength}
+          error={answerRefused}
+          testID="prefs-tonight"
+        />
+        {answer ? (
+          <Button
+            label="Clear"
+            kind="tertiary"
+            size="sm"
+            accessibilityLabel="Clear your answer"
+            onPress={() => {
+              setAnswer('')
+              setAnswerRefused(undefined)
+            }}
+            style={styles.clear}
+            testID="prefs-tonight-clear"
+          />
+        ) : null}
+      </View>
+      {asksWork ? (
+        <View style={styles.answer}>
+          <Head lead={false} testID="prefs-work-intent-title" title="Here to" sub="On your card in this room. Tap your pick again to clear it." bold={bold} />
+          <View testID="prefs-work-intent" accessibilityRole="radiogroup" style={styles.picks}>
+            {WORK_INTENTS.map((w) => (
+              <Chip
+                key={w.key}
+                label={w.short}
+                // Said with its group (TalkBack): "Here to hire", not a bare "Hire".
+                accessibilityLabel={w.label}
+                selected={workIntent === w.key}
+                onPress={() => setWorkIntent((now) => (now === w.key ? null : w.key))}
+                testID={`prefs-work-intent-${w.key}`}
+              />
+            ))}
+          </View>
+        </View>
+      ) : null}
+    </Animated.View>
+  ) : null
   return (
     <View style={styles.screen}>
       <Orbs set="feed" />
       <ScrollView
         testID="prefs-scroll"
         {...bar.scrollProps}
-        contentContainerStyle={[styles.scroll, { paddingTop: bar.contentTop + SPACE.md, paddingBottom: dockHeight + SPACE.xl }]}
+        contentContainerStyle={[styles.scroll, { paddingTop: bar.contentTop - SPACE.xxs, paddingBottom: dockHeight + SPACE.xl }]}
         scrollIndicatorInsets={{ top: bar.indicatorTop }}
         showsVerticalScrollIndicator={false}
       >
+        {/* The board's column starts 16 under the circle row; the bar's own `contentTop` leaves 18 (as Rate). */}
         {/*
           * Reveal leads, intent follows — unless intent is the question that brought them here (`askIntent`).
           *
@@ -320,26 +469,26 @@ function EventPreferencesContent() {
           * equivalent — it is deliberately decided per room, every room.
           */}
         {askIntent ? intentBlock : revealBlock}
-        <View accessibilityElementsHidden importantForAccessibility="no" style={styles.divider} />
         {askIntent ? revealBlock : intentBlock}
+        {tonightBlock}
       </ScrollView>
       {/*
         The bar over the scroll (Flow 3 `prefs`: a ✕ and nothing else), so the copy passes under glass when it scrolls and never
         under the ✕ or, on Android, the status bar. Last of the page's pieces in the tree but first to be read: the page is
         modal, and Close is the first thing a screen reader should land on.
       */}
-      <View style={bar.barPin} pointerEvents="box-none">
+      <View style={bar.barPin} onLayout={bar.onBarLayout} pointerEvents="box-none">
         <TopBar close state={bar.state} onBack={leave} testID="prefs-top" />
       </View>
       {/* Docked, not at the end of the scroll: with four intents it fell below the fold. The first-door answer cannot be nothing: an empty save would write an empty default. */}
-      <Dock floating onHeight={setDockHeight} testID="prefs-dock">
+      <Dock floating line one onHeight={setDockHeight} testID="prefs-dock">
         <Button
           label="Save"
           kind="primary"
           onPress={() => void save()}
-          disabled={needsAnswer}
+          disabled={needsAnswer || answerTooLong}
           loading={saving}
-          accessibilityHint={needsAnswer ? 'Choose an answer first' : undefined}
+          accessibilityHint={needsAnswer ? 'Choose an answer first' : answerTooLong ? `Keep your answer to ${TONIGHT_ANSWER_MAX} characters` : undefined}
           testID="prefs-save"
         />
       </Dock>
@@ -349,13 +498,18 @@ function EventPreferencesContent() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: COLOR.ink },
-  scroll: { paddingHorizontal: SPACE.gutter, gap: SPACE.xl },
-  section: { gap: SPACE.lg },
-  headline: { gap: SPACE.sm },
-  pair: { flexDirection: 'row', gap: SPACE.md },
-  options: { gap: SPACE.md },
-  or: { textAlign: 'center', color: COLOR.textTertiary },
-  divider: { height: StyleSheet.hairlineWidth, backgroundColor: COLOR.hairline },
+  scroll: { paddingHorizontal: SPACE.gutter },
+  head: { gap: SUB_GAP },
+  second: { marginTop: SECOND_HEAD_GAP },
+  pair: { flexDirection: 'row', gap: SPACE.md, marginTop: CARDS_GAP },
+  stacked: { flexDirection: 'column' },
+  remember: { marginTop: SPACE.md },
+  answer: { marginTop: CARDS_GAP, gap: SPACE.sm },
+  picks: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm },
+  clear: { alignSelf: 'flex-end' },
+  tiles: { flexDirection: 'row', gap: TILE_GAP, marginTop: TILES_GAP },
+  or: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md, marginVertical: SPACE.lg },
+  orLine: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: COLOR.hairlineStrong },
   ink: { color: COLOR.textPrimary },
   secondary: { color: COLOR.textSecondary },
 })

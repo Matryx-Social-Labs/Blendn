@@ -2,44 +2,51 @@ import { StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 
 import { Icon } from '../ui/Icon'
 import { Material } from '../ui/Material'
-import { COLOR, ICON, MATERIAL, MAX_FONT_SCALE, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
+import type { RevealBarState } from '../../lib/conversationReveal'
+import { COLOR, ICON, MAX_FONT_SCALE, RADIUS, SPACE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { Avatar } from './Avatar'
 import { Button } from './Button'
 import type { Face } from './Facepile'
-import { CONTROL_FONT_CAP, font, IC_HAIRLINE, ROOMY_WIDTH, useBoldText, useIncreaseContrast } from './shared'
+import { CONTROL_FONT_CAP, font, IC_HAIRLINE, ROOMY_WIDTH, useAnnounced, useBoldText, useIncreaseContrast } from './shared'
 
-/** None revealed, you only, they only, or you asked them; at both the bar is gone, unless there is a friend to add (`both`). */
-export type RevealState = 'none' | 'youOnly' | 'theyOnly' | 'asked' | 'both'
+/** Swap names (`lib/conversationReveal.ts` `RevealBarState`): neither, you tapped, they tapped; at both the bar is gone, unless there is a friend to add. */
+export type RevealState = RevealBarState
 /** `both`'s one action: Add friend, or Accept friend request when one is waiting. */
 export type RevealFriend = { label: string; accept?: boolean; busy?: boolean; onPress: () => void }
-/** A side as the DM shows it now: the creature and pseudonym until seen, then the photo and name. */
+/** A side as the DM shows it now: the creature and pseudonym until you have both swapped, then the photo and first name. */
 export type RevealSide = { face: Face; name: string }
 
 const SIDE_FACE = 36
 
+/** Said under Swap names, wherever it is offered: what a swap shows, and that nothing shows until both tap. */
+export const SWAP_NOTE = 'Nothing shows until you both tap. Then it’s your first name and one photo, in this chat only.'
+
 /**
- * A DM between two anonymous people opens with this (guidelines/components/RevealBar.html),
- * on the sheet tier: you on the left, them on the right, each a face, a name
- * and an eye that says seen or anonymous. Under it the one action: "Show them
- * who you are" (lit, irreversible: a sheet confirms it) with "Ask
- * them" beside it. Once you've shown yourself it says so and waits; once both
- * have, the caller drops the bar. Designed as a moment (§12), not a setting.
+ * A DM between two anonymous people opens with this (Flow 5 D-A, the identity model's Swap names; board `swap-names/`,
+ * advisor pick A): on the sheet tier, you on the left, them on the right, each a face, a name and an eye line. Under it
+ * the state's one action, always stacked under its line:
  *
- * Silent: Show them opens the confirming sheet, Ask them is none; the caller
- * plays `H.success` on "Revealed · both sides". Read: "You, Night Cat,
- * anonymous. Cosmic Panda, anonymous." then the actions. Names and the eye
- * line cap at 1.3×; Increase Contrast: the 50% hairline and the eye line white.
+ * - `none`: Swap names (lit), and what a swap shows.
+ * - `mine`: "Waiting for them to swap too", and Cancel (quiet). Nothing shows yet: your side stays your pseudonym.
+ * - `theirs`: "{them} wants to swap names", Swap names (lit), and what a swap shows.
+ * - `both`: "You can both see each other", and Add friend while the server offers it.
+ *
+ * Swap names is felt as any lit press; the caller plays `H.success` only when the server says you have both swapped.
+ * `error` is a refusal said in place (heard once). Read: "You, Night Cat, anonymous. Cosmic Panda, wants to swap." then
+ * the actions. Names wrap to two lines rather than cut; names and the eye line cap at 1.3×.
  */
-/** Your side's name before you have shown yourself. */
+/** Your side's name when the server sent no pseudonym of yours. */
 export const YOU = 'You'
 
 export function RevealBar({
   state,
   you,
   them,
-  onShow,
-  onAsk,
+  onSwap,
+  onCancel,
+  busy = false,
+  error,
   friend,
   previewState,
   testID,
@@ -47,26 +54,32 @@ export function RevealBar({
   state: RevealState
   you: RevealSide
   them: RevealSide
-  onShow?: () => void
-  onAsk?: () => void
+  onSwap?: () => void
+  onCancel?: () => void
+  /** A tap is in flight: the action shows its spinner and takes no second press. */
+  busy?: boolean
+  /** The last tap's refusal, in the server's words. */
+  error?: string | null
   /** `both` only: the action that is left. */
   friend?: RevealFriend
-  /** The design gallery only: Show them pressed or focused. */
+  /** The design gallery only: Swap names pressed or focused. */
   previewState?: 'pressed' | 'focused'
   testID?: string
 }) {
   const bold = useBoldText()
+  // The refusal line is said on iOS when it arrives; Android reads it through its live region.
+  useAnnounced(error)
   const contrast = useIncreaseContrast()
   // At 360 dp each side had about 90 dp: "You · Aarav" cut to "You · Aa…" (C26). Narrow, "You" stacks over your name.
   const narrow = useWindowDimensions().width <= ROOMY_WIDTH
-  const youSeen = state === 'youOnly' || state === 'both'
-  const themSeen = state === 'theyOnly' || state === 'both'
   const quiet = contrast ? COLOR.textPrimary : COLOR.textSecondary
-  const seenWord = (seen: boolean) => (seen ? 'seen' : 'anonymous')
-  // Your side before you have shown yourself carries no name of its own ("You"), so it reads "You", never "You · You".
+  /** What each side's eye line says: one word while anonymous (it can only shrink), a short phrase once there is news. */
+  const word = (mine: boolean) =>
+    state === 'both' ? 'seen' : mine && state === 'mine' ? 'tapped' : !mine && state === 'theirs' ? 'wants to swap' : 'anonymous'
+  // Your side with no pseudonym of its own reads "You", never "You · You".
   const yourName = you.name === YOU ? null : you.name
 
-  const side = (who: RevealSide, mine: boolean, seen: boolean) => {
+  const side = (who: RevealSide, mine: boolean) => {
     const id = testID && `${testID}-${mine ? 'you' : 'them'}`
     const names = (
       <View testID={id && `${id}-names`} style={styles.sideText}>
@@ -75,11 +88,11 @@ export function RevealBar({
             You
           </Text>
         ) : null}
-        {/* Each name may take two lines rather than be cut to a few letters (C26, C27). */}
-        <Text numberOfLines={2} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('caption', bold), styles.ink]}>
+        {/* A name wraps as far as it needs and is never cut (advisor A; C26, C27): "Albat…" hid who it was. */}
+        <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('caption', bold), styles.ink]}>
           {mine ? (yourName ? (narrow ? yourName : `You · ${yourName}`) : YOU) : who.name}
         </Text>
-        {narrow ? null : eyeLine(seen, id)}
+        {narrow ? null : eyeLine(mine, id)}
       </View>
     )
     const faceAndNames = (
@@ -90,26 +103,50 @@ export function RevealBar({
     )
     /*
      * Narrow, the eye line goes under the face and the name, across the whole side: beside the face it had about 54 dp
-     * at 1.3× / 360 dp, and "anonymous" is one word, so it read "anony…" on both sides (rc8 10d). Across the side it has
-     * about 107 dp, and it needs about 77.
+     * at 1.3× / 360 dp, and "anonymous" is one word, so it read "anony…" on both sides (rc8 10d).
      */
     return narrow ? (
       <View style={styles.sideStack}>
         {faceAndNames}
-        {eyeLine(seen, id)}
+        {eyeLine(mine, id)}
       </View>
     ) : (
       faceAndNames
     )
   }
-  const eyeLine = (seen: boolean, id: string | undefined) => (
-    <View testID={id && `${id}-eye`} style={styles.eye}>
-      <Icon name={seen ? 'eye' : 'eye-off'} size={ICON.inline} color={quiet} />
-      {/* Shrinks and ends in "…" rather than run past the card at 1.3× / 360 dp ("anonymou|s", rc7 D8). */}
-      <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('caption', bold), styles.shrink, { color: quiet }]}>
-        {seenWord(seen)}
-      </Text>
-    </View>
+  const eyeLine = (mine: boolean, id: string | undefined) => {
+    const w = word(mine)
+    return (
+      <View testID={id && `${id}-eye`} style={styles.eye}>
+        <Icon name={w === 'seen' ? 'eye' : w === 'tapped' ? 'check' : w === 'anonymous' ? 'eye-off' : 'arrow-left-right'} size={ICON.inline} color={quiet} />
+        {/* One word shrinks and ends in "…" rather than run past the card at 1.3× / 360 dp (rc7 D8); a phrase may wrap. */}
+        <Text numberOfLines={w.includes(' ') ? 2 : 1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('caption', bold), styles.shrink, { color: quiet }]}>
+          {w}
+        </Text>
+      </View>
+    )
+  }
+  const swap = (
+    <Button
+      kind="lit"
+      size="md"
+      icon="arrow-left-right"
+      label="Swap names"
+      loading={busy}
+      onPress={onSwap}
+      previewState={previewState}
+      testID={testID && `${testID}-swap`}
+    />
+  )
+  const note = (
+    <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary, styles.centre]}>
+      {SWAP_NOTE}
+    </Text>
+  )
+  const line = (text: string, id: string) => (
+    <Text testID={testID && `${testID}-${id}`} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), state === 'theirs' ? styles.ink : styles.secondary]}>
+      {text}
+    </Text>
   )
 
   return (
@@ -117,16 +154,14 @@ export function RevealBar({
       <Material role="sheet" style={[StyleSheet.absoluteFill, styles.radius]} />
       <View
         accessible
-        accessibilityLabel={`${yourName ? `You, ${yourName}` : YOU}, ${seenWord(youSeen)}. ${them.name}, ${seenWord(themSeen)}.`}
+        accessibilityLabel={`${yourName ? `You, ${yourName}` : YOU}, ${word(true)}. ${them.name}, ${word(false)}.`}
         style={styles.sides}
       >
-        {side(you, true, youSeen)}
+        {side(you, true)}
         <Icon name="arrow-left-right" size={ICON.inline} color={COLOR.textSecondary} />
-        {side(them, false, themSeen)}
+        {side(them, false)}
       </View>
-      {state === 'youOnly' ? (
-        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>They can see you. They’ll decide in their own time.</Text>
-      ) : state === 'both' ? (
+      {state === 'both' ? (
         <View testID={testID && `${testID}-both`} style={styles.both}>
           <View style={styles.bothLine}>
             <Icon name="eye" size={ICON.inline} color={quiet} />
@@ -148,17 +183,21 @@ export function RevealBar({
             />
           ) : null}
         </View>
-      ) : state === 'asked' ? (
-        <View testID={testID && `${testID}-asked`} style={styles.asked}>
-          <Icon name="check" size={ICON.inline} color={COLOR.textSecondary} />
-          <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold), styles.secondary, styles.shrink]}>
-            Asked · they’ll decide in their own time
-          </Text>
-        </View>
       ) : (
         <View testID={testID && `${testID}-actions`} style={styles.actions}>
-          <Button kind="lit" size="md" icon="eye" label="Show them who you are" onPress={onShow} previewState={previewState} style={styles.grow} testID={testID && `${testID}-show`} />
-          {state === 'none' ? <Button kind="secondary" size="md" onGlass label="Ask them" onPress={onAsk} testID={testID && `${testID}-ask`} /> : null}
+          {state === 'mine' ? line('Waiting for them to swap too', 'waiting') : null}
+          {state === 'theirs' ? line(`${them.name} wants to swap names`, 'theirs') : null}
+          {state === 'mine' ? (
+            <Button kind="secondary" size="md" onGlass label="Cancel" accessibilityLabel="Cancel your swap" loading={busy} onPress={onCancel} testID={testID && `${testID}-cancel`} />
+          ) : (
+            swap
+          )}
+          {state === 'mine' ? null : note}
+          {error ? (
+            <Text testID={testID && `${testID}-error`} accessibilityLiveRegion="polite" maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.ink, styles.centre]}>
+              {error}
+            </Text>
+          ) : null}
         </View>
       )}
       {contrast ? <View testID={testID && `${testID}-contrast`} pointerEvents="none" style={[StyleSheet.absoluteFill, styles.radius, IC_HAIRLINE]} /> : null}
@@ -179,21 +218,10 @@ const styles = StyleSheet.create({
   ink: { color: COLOR.textPrimary },
   secondary: { color: COLOR.textSecondary },
   shrink: { flexShrink: 1 },
-  /** Wraps rather than truncating "Show them who you are" on a narrow phone or at large text. */
-  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm },
-  grow: { flexGrow: 1 },
+  /** The state's line, its one action under it at every size (advisor pick A), then the note. */
+  actions: { flexDirection: 'column', alignItems: 'stretch', gap: SPACE.sm },
+  centre: { textAlign: 'center' },
   /** The line and the action: side by side, and the action drops under it when the line needs the room. */
   both: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: SPACE.sm },
   bothLine: { flexShrink: 1, flexDirection: 'row', alignItems: 'center', gap: SPACE.xs },
-  asked: {
-    minHeight: SIZE.control,
-    paddingVertical: SPACE.sm,
-    borderRadius: RADIUS.capsule,
-    backgroundColor: MATERIAL.fillOnGlass,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: SPACE.sm,
-    paddingHorizontal: SPACE.lg,
-  },
 })

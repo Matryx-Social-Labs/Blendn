@@ -14,7 +14,8 @@ import { Creature, creatureFor } from './Creature'
 import { CrewEmblem } from './CrewEmblem'
 import { CategoryPlate } from './EventCard'
 import { Badge, PresenceDot } from './MonoFamily'
-import { announceOutcome, font, PRESSED_WASH, useBoldText, useIncreaseContrast, useSelection } from './shared'
+import { announceOutcome, font, PRESSED_WASH, useBoldText, useIncreaseContrast, useLargeText, useSelection } from './shared'
+import { ContainedCover } from './LinkPreviewCard'
 
 /** Someone in a stack, as the server lets you see them: a photo only where the face is already yours to see. */
 export type StackPerson = { pseudonym: string } | { uri: string }
@@ -26,8 +27,11 @@ export type StackPerson = { pseudonym: string } | { uri: string }
  * for logistics; a stack with +N for merged rows.
  */
 export type NotificationVisualSpec =
-  | { type: 'photo'; uri: string }
+  /** A named person's photo, over their initial while it loads (`Avatar` photo); with no `name`, over their hue disc alone. */
+  | { type: 'photo'; uri: string; name?: string }
   | { type: 'creature'; pseudonym: string }
+  /** A named person with no photo: their initial on their hue disc (`personFace`). */
+  | { type: 'initial'; name: string }
   | { type: 'glyph'; icon: IconName }
   | { type: 'emblem'; seed: string }
   | { type: 'event'; cover?: string | null; badge: IconName; cancelled?: boolean; category?: string }
@@ -43,9 +47,19 @@ const EVENT_BADGE = SPACE.lg
 const EVENT_BADGE_GLYPH = SPACE.sm + SPACE.xxs
 /** A cancelled cover: grey at 70% (the greyscale is Android's; iOS draws the fade alone). */
 const CANCELLED_OPACITY = 0.7
-/** The unread dot sits level with the title's first line. */
+/** The board's history-line chevron (requests placement A, `.rpnr .go`). design-exception: 18 sits between ICON.inline and ICON.control, as `DOCK_GLYPH` does. */
+const CHEVRON = 18
+/** The unread dot, and a history line's chevron, sit level with the title's first line. */
 const DOT_TOP = SPACE.sm + SPACE.xxs
 const STALE_OPACITY = 0.5
+/** A title's lines below the accessibility sizes (board 01 A: two in a title, one in a context). */
+const TITLE_LINES = 2
+/**
+ * At the accessibility sizes the verb must never be cut (Flow 9 · 8), but a cap, not unclamped: iOS lays an unclamped Text out
+ * with NSLineBreakByClipping, and a word wider than the column ("Thiruvananthapuram" at AX) broke mid-word and pushed the next
+ * line out of the row ("…Night Owls are her", seen on the sim). Eight lines hold the 89-character title at the largest size.
+ */
+const AX_TITLE_LINES = 8
 /** A row's visual; the in-app banner draws it at 32. */
 const ROW_VISUAL = 40
 
@@ -81,8 +95,9 @@ export function NotificationVisual({
   const box = { width: size, height: size }
   return (
     <View testID={testID} style={box} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-      {visual.type === 'photo' ? <Avatar kind="photo" uri={visual.uri} size={size} ring={faceRing} halo={halo} testID={testID && `${testID}-face`} /> : null}
+      {visual.type === 'photo' ? <Avatar kind="photo" uri={visual.uri} name={visual.name ?? ''} size={size} ring={faceRing} halo={halo} testID={testID && `${testID}-face`} /> : null}
       {visual.type === 'creature' ? <Avatar kind="creature" pseudonym={visual.pseudonym} size={size} ring={faceRing} halo={halo} testID={testID && `${testID}-face`} /> : null}
+      {visual.type === 'initial' ? <Avatar kind="initial" name={visual.name} size={size} ring={faceRing} halo={halo} testID={testID && `${testID}-face`} /> : null}
       {visual.type === 'emblem' ? <CrewEmblem seed={visual.seed} size={size} /> : null}
       {visual.type === 'glyph' ? (
         <View testID={testID && `${testID}-tile`} style={[box, styles.center, { borderRadius: corner, backgroundColor: lit ? sel.fill : COLOR.surfaceRaised }]}>
@@ -97,7 +112,7 @@ export function NotificationVisual({
         <>
           <View style={[box, styles.cover, { borderRadius: corner }, visual.cancelled && styles.cancelled]}>
             {visual.cover ? (
-              <Image source={{ uri: visual.cover }} style={StyleSheet.absoluteFill} contentFit="cover" accessible={false} />
+              <ContainedCover uri={visual.cover} auto />
             ) : (
               <CategoryPlate category={visual.category} size={size} testID="notification-event-plate" />
             )}
@@ -156,6 +171,8 @@ export type NotificationRowProps = {
   doneText?: string
   /** Where the push would go. */
   onPress?: () => void
+  /** A history line that leads somewhere to be answered (a talk-ask, requests placement A): the chevron, never the unread dot. */
+  chevron?: boolean
   /** The colour behind the row (`COLOR.surface` in the Waiting card). */
   ground?: string
   testID?: string
@@ -205,7 +222,7 @@ function DoneLine({ text, answered, bold, reduceMotion, testID }: { text: string
 
 /**
  * One notification (guidelines/components/NotificationRow.html, Flow 9 · 9.3):
- * a 40 pt visual, the title (700 while new, with the dot; two lines at most),
+ * a 40 pt visual, the title (700 while new, with the dot; two lines at most, eight at the accessibility sizes),
  * one line of context; a request adds its pills; a stale row dims its visual to
  * 50% and says "This request is no longer open" (the flow's frame; the page's
  * intro says "This isn't available any more").
@@ -225,11 +242,14 @@ export function NotificationRow({
   state,
   doneText,
   onPress,
+  chevron = false,
   ground = COLOR.ink,
   testID,
 }: NotificationRowProps) {
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
+  // At the accessibility sizes the title takes up to eight lines: two cut the verb ("Marc-André wants to be frie…", Flow 9 · 8).
+  const large = useLargeText()
   const reduceMotion = useReducedMotion()
   const sel = useSelection()
   const answered = useRecordedOutcome(state, doneText)
@@ -259,14 +279,18 @@ export function NotificationRow({
         </View>
         <View style={styles.text}>
           <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong}
-            numberOfLines={2}
+            numberOfLines={large ? AX_TITLE_LINES : TITLE_LINES}
             style={[font('bodyStrong', bold, fresh ? FONT_FAMILY.brand[700] : FONT_FAMILY.brand[500]), { color: stale ? COLOR.textSecondary : COLOR.textPrimary }]}
           >
             {title}
           </Text>
-          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: stale ? COLOR.textTertiary : detail }]}>{line}</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} numberOfLines={1} style={[font('meta', bold), { color: stale ? COLOR.textTertiary : detail }]}>{line}</Text>
         </View>
-        {fresh && !pills ? (
+        {chevron ? (
+          <View style={styles.dot} testID={testID && `${testID}-chevron`}>
+            <Icon name="chevron-right" size={CHEVRON} color={detail} />
+          </View>
+        ) : fresh && !pills ? (
           // Motion #29, unread → read: the dot leaves over `quick` as the title's weight swaps (at once, in the font above). Reduce Motion: it goes.
           <Animated.View style={styles.dot} exiting={reduceMotion ? undefined : DOT_EXIT}>
             <PresenceDot size={SPACE.sm} color={sel.glyph} testID={testID && `${testID}-dot`} />

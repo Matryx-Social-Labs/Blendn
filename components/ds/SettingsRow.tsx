@@ -9,7 +9,7 @@ import { H } from '../../lib/haptics'
 import { useReducedMotion } from '../../lib/motion'
 import { OPACITY, tint } from '../../lib/theme'
 import { Spinner } from './Loader'
-import { font, IC_HAIRLINE, LIGHT, PRESSED_WASH, useBoldText, useIncreaseContrast, useLargeText, useMinMeasure, useSelection } from './shared'
+import { font, IC_HAIRLINE, LIGHT, PRESSED_WASH, useBoldText, useIncreaseContrast, useLargeText, useMinMeasure, useSelection, quickTransition } from './shared'
 import { Toggle } from './Toggle'
 
 export type SettingsTrail = 'switch' | 'chevron' | 'external' | 'none'
@@ -29,6 +29,8 @@ export type SettingsRowProps = {
   title: string
   /** A line under the title; on a rollback, the sentence that names it. */
   hint?: string
+  /** Clamp the hint (an email on the account card); default: it wraps to whatever it needs. */
+  hintLines?: number
   /** What a screen reader says in place of "{title}, {hint}": the whole sentence, when a count is part of it ("3 friend requests"). */
   label?: string
   /** What the row reports before its chevron: a count (the DS `Badge`, Geist Mono), a dot. Decorative; `label` carries it for a screen reader. */
@@ -96,11 +98,15 @@ const textEdge = (row: unknown, large: boolean) => {
  * text a column one to three words wide, four screens tall (RC drive 3 D-D).
  * Increase Contrast whitens the trailing glyph.
  */
+/** A row dimming (or coming back) fades over `DURATION.quick`, as Button's does: a block switched off never snaps (M10). */
+const DISABLE_FADE = quickTransition('opacity')
+
 export function SettingsRow({
   icon,
   leading,
   title,
   hint,
+  hintLines,
   label,
   accessory,
   trail = 'none',
@@ -141,7 +147,7 @@ export function SettingsRow({
         {title}
       </Text>
       {hint ? (
-        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: error ? COLOR.destructive : COLOR.textSecondary }]}>
+        <Text numberOfLines={hintLines} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: error ? COLOR.destructive : COLOR.textSecondary }]}>
           {hint}
         </Text>
       ) : null}
@@ -154,6 +160,8 @@ export function SettingsRow({
   ) : null
 
   return (
+    // The dim lives on an animated wrapper with an explicit value both ways: a CSS transition runs only on an Animated component.
+    <Animated.View testID={testID && `${testID}-fade`} style={[{ opacity: disabled ? OPACITY.disabled : 1 }, DISABLE_FADE]}>
     <Pressable
       testID={testID}
       // A plain row has no action, but is not disabled: it must not read as dimmed.
@@ -174,7 +182,6 @@ export function SettingsRow({
         ((pressed && Platform.OS !== 'android') || previewState === 'pressed') && {
           backgroundColor: PRESSED_WASH[Platform.OS === 'android' ? 'android' : 'ios'],
         },
-        disabled && { opacity: OPACITY.disabled },
       ]}
     >
       {leading ??
@@ -209,6 +216,7 @@ export function SettingsRow({
         <View testID={testID && `${testID}-focus`} pointerEvents="none" style={styles.focus} />
       ) : null}
     </Pressable>
+    </Animated.View>
   )
 }
 
@@ -221,10 +229,13 @@ export function SettingsGroup({
   title,
   children,
   danger = false,
+  sentence = false,
   testID,
 }: {
   title?: string
   children: ReactNode
+  /** The title in sentence case (Satoshi 13/18) where it names a moment, not a setting: Tips (remaining-screens 04 A). Default: the mono label. */
+  sentence?: boolean
   /** The Danger zone (Flow 7): no fill, a 1 pt outline in the destructive colour at 38%, and 24 pt more room above it. */
   danger?: boolean
   testID?: string
@@ -235,7 +246,7 @@ export function SettingsGroup({
   return (
     <View testID={testID} style={[styles.group, danger && styles.dangerRoom]}>
       {title ? (
-        <Text accessibilityRole="header" maxFontSizeMultiplier={MAX_FONT_SCALE.label} style={[font('label', bold, FONT_FAMILY.brand[700]), styles.label, contrast && styles.labelContrast]}>
+        <Text accessibilityRole="header" maxFontSizeMultiplier={MAX_FONT_SCALE.label} style={[sentence ? font('note', bold, FONT_FAMILY.brand[500]) : font('label', bold, FONT_FAMILY.brand[700]), styles.label, contrast && styles.labelContrast]}>
           {title}
         </Text>
       ) : null}

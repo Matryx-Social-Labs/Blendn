@@ -1,14 +1,10 @@
 import { act, renderHook } from '@testing-library/react-native'
 
 import {
-  FRIEND_ROW_HEIGHT,
   FRIENDS_PAGE,
-  LETTER_HEIGHT,
-  layoutOf,
-  letterOf,
+  SEARCH_ABOVE,
   SEARCH_DEBOUNCE_MS,
   useFriendsHereList,
-  withLetters,
 } from '../lib/friendsHereList'
 
 const mockGet = jest.fn()
@@ -17,40 +13,9 @@ jest.mock('../lib/logger', () => ({ Logger: { debug: jest.fn(), warn: jest.fn(),
 
 const f = (name: string, i = 0) => ({ userId: `${name}-${i}`, name, photo: null })
 
-describe('letterOf', () => {
-  it('upper-cases a Latin initial', () => expect(letterOf('asha Menon')).toBe('A'))
-  it('a non-Latin initial is its own letter', () => {
-    expect(letterOf('অনির্বাণ')).toBe('অ')
-    expect(letterOf('Ñandú')).toBe('Ñ')
-  })
-  it('digits, symbols and emoji are under #', () => {
-    expect(letterOf('4chan Fan')).toBe('#')
-    expect(letterOf('🙂 Smile')).toBe('#')
-    expect(letterOf('  ')).toBe('#')
-  })
-  it('an emoji or accent is one character, not half a surrogate pair', () => expect(letterOf('😀')).toBe('#'))
-})
-
-describe('withLetters and layoutOf', () => {
-  const rows = withLetters([f('Aarav', 1), f('Ananya', 2), f('Dev', 3), f('অর্জুন', 4), f('9lives', 5)])
-  it('a header before each run of one initial', () => {
-    expect(rows.map((r) => (r.kind === 'letter' ? `#${r.letter}` : r.friend.name))).toEqual([
-      '#A', 'Aarav', 'Ananya', '#D', 'Dev', '#অ', 'অর্জুন', '##', '9lives',
-    ])
-  })
-  it('keys are unique', () => expect(new Set(rows.map((r) => r.key)).size).toBe(rows.length))
-  it('offsets are exact: headers 32, friends 64, summed', () => {
-    const at = layoutOf(rows)
-    expect(at[0]).toEqual({ length: LETTER_HEIGHT, offset: 0, index: 0 })
-    expect(at[1]).toEqual({ length: FRIEND_ROW_HEIGHT, offset: LETTER_HEIGHT, index: 1 })
-    expect(at[3]).toEqual({ length: LETTER_HEIGHT, offset: LETTER_HEIGHT + 2 * FRIEND_ROW_HEIGHT, index: 3 })
-    const last = at[at.length - 1]
-    expect(last.offset + last.length).toBe(4 * LETTER_HEIGHT + 5 * FRIEND_ROW_HEIGHT)
-  })
-  it('a thousand friends lay out in one pass', () => {
-    const many = withLetters(Array.from({ length: 1000 }, (_, i) => f(`A${String(i).padStart(4, '0')}`, i)))
-    expect(layoutOf(many)).toHaveLength(1001)
-  })
+describe('pages (Flow 5 C6, I-A)', () => {
+  it('pages of 20, as the board says ("Show 20 more")', () => expect(FRIENDS_PAGE).toBe(20))
+  it('search comes first only above 20', () => expect(SEARCH_ABOVE).toBe(20))
 })
 
 describe('useFriendsHereList', () => {
@@ -62,7 +27,7 @@ describe('useFriendsHereList', () => {
   const page = (friends: ReturnType<typeof f>[], total: number, nextCursor: string | null) => ({ success: true, data: { friends, total, nextCursor } })
   const settle = () => act(async () => {})
 
-  it('reads the first page by name, 50 at a time', async () => {
+  it('reads the first page by name, 20 at a time', async () => {
     mockGet.mockResolvedValue(page([f('A')], 60, 'c1'))
     const { result } = await renderHook(() => useFriendsHereList('e1'))
     await settle()

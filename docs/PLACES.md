@@ -31,11 +31,15 @@ Hero (tonight's cover, else the type plate at full bleed: A87), name, type ·
 area · distance (the distance the list showed, handed over in the route). Then,
 by state: the tiles (Open · Live · Reset · Size), or the live card, or the card
 of the event that has the place. Tonight here, Coming up here, Who's here,
-Regulars, the Board, About, Good to know, Where, and last the claim line.
+Regulars, the Lobby, About, Good to know, Where, and last the claim line.
 
 The dock holds one slot: **Go live** (a dial, then the hold), **Go live again**
-in one tap with *Pick another time*, the **live pill** with *Open the room* and
-*Leave*, the hand-off **Check in to the event**, or the server's sentence. The
+in one tap with *Pick another time*, **live** (the event page's checked-in
+line: "● Live · 2h 45m" over *Extend or stop*, or "● Ending · 4:59" over
+*Extend* in the last five minutes, beside *Open the room*), the hand-off
+**Check in to the event**, or the server's sentence. The live state opens the
+live sheet: the time, *Extend* while it would move the end, and *Stop* with the
+neutral hold. There is no Leave button (owner, 2026-11-17, SCRUM-1063). The
 client never draws a check-in boundary: it asks the server.
 
 ## Where the build departs from the design, and why
@@ -46,7 +50,7 @@ client never draws a check-in boundary: it asks the server.
 | Share is the text of the place | There are no links yet (Flow 16) |
 | No "Past nights here" | Needs the venue's completed events (server) |
 | The live card holds a glyph, not your creature | Today's nickname is not on the place payload |
-| The Board row opens tonight's event board | A venue has no board of its own; the row shows only before the event's doors |
+| The Lobby row opens tonight's event Lobby | A venue has no Lobby of its own; the row shows only before the event's doors |
 | No peek summary ("3 places live") | Needs counts the list cannot know (server) |
 | ExpiryPrompt, NotLiveNotice not wired | They belong to `LiveAtVenue` and the chat room, not to these two screens |
 | The map under the pin is the platform's | The home map's OSM credit (About › Map data) is untouched; this draws none of our tiles |

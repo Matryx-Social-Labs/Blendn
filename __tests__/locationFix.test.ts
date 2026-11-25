@@ -25,6 +25,7 @@ import * as Location from 'expo-location'
 import { Platform } from 'react-native'
 import { markCheckIn } from '../lib/checkInTiming'
 import { getCurrentLocation, LOCATION_FIX_TIMEOUT_MS } from '../lib/locationFix'
+import { validAccuracy } from '../lib/geo'
 
 /** Which native path runs: iOS watches, Android asks once. */
 const setOS = (os: 'ios' | 'android') => Object.defineProperty(Platform, 'OS', { get: () => os, configurable: true })
@@ -79,6 +80,36 @@ describe('getCurrentLocation', () => {
     expect(t.showTray).toHaveBeenCalledWith('Location timed out', 'We couldn’t get a fix in 15 seconds.', expect.any(Array), { icon: 'hourglass' })
   })
 
+  // SCRUM-906: the deadline starts before the first native read, so a blocked native queue cannot spin Go Live for ever.
+  it.each([
+    ['the Location Services read', () => loc.hasServicesEnabledAsync.mockReturnValue(new Promise(() => {}))],
+    ['the permission read', () => loc.requestForegroundPermissionsAsync.mockReturnValue(new Promise(() => {}))],
+  ])('answers "Couldn’t get your location" within the deadline when %s never answers (SCRUM-906)', async (_name, stall) => {
+    jest.useFakeTimers()
+    stall()
+    const t = trays()
+    const pending = getCurrentLocation({ ...t, purpose: 'goLive' })
+    await jest.advanceTimersByTimeAsync(LOCATION_FIX_TIMEOUT_MS - 1)
+    expect(t.showTray).not.toHaveBeenCalled()
+    await jest.advanceTimersByTimeAsync(1)
+    expect(await pending).toBeNull()
+    expect(t.showTray).toHaveBeenCalledTimes(1)
+    expect(t.showTray).toHaveBeenCalledWith('Couldn’t get your location', expect.any(String), expect.any(Array), { icon: 'map-pin-off' })
+    expect(loc.getCurrentPositionAsync).not.toHaveBeenCalled()
+  })
+
+  it('bounds the whole ask, reads and fix together, at one deadline (SCRUM-906)', async () => {
+    jest.useFakeTimers()
+    loc.requestForegroundPermissionsAsync.mockImplementation(() => new Promise((r) => setTimeout(() => r({ status: 'granted' } as any), 10_000)))
+    loc.getCurrentPositionAsync.mockReturnValue(new Promise(() => {}))
+    const t = trays()
+    const pending = getCurrentLocation(t)
+    await jest.advanceTimersByTimeAsync(LOCATION_FIX_TIMEOUT_MS)
+    expect(await pending).toBeNull()
+    // The reads answered, so it is the fix that ran out of time.
+    expect(t.showTray).toHaveBeenCalledWith('Location timed out', expect.any(String), expect.any(Array), { icon: 'hourglass' })
+  })
+
   it('asks for permission rather than reading a position without it', async () => {
     loc.requestForegroundPermissionsAsync.mockResolvedValue({ status: 'denied' } as any)
     const t = trays()
@@ -122,7 +153,7 @@ describe('getCurrentLocation', () => {
 
   it('precise location off: its own tray with the path to the switch (R3-D4 4.7)', async () => {
     setOS('ios') // Precise Location is an iOS switch, and the path named is iOS's
-    loc.requestForegroundPermissionsAsync.mockResolvedValue({ status: 'granted', ios: { accuracy: 'reduced' } } as any)
+    loc.requestForegroundPermissionsAsync.mockResolvedValue({ status: 'granted', granted: true, ios: { accuracy: 'reduced' } } as any)
     const t = trays()
     expect(await getCurrentLocation(t)).toBeNull()
     expect(t.showTray).toHaveBeenCalledWith(
@@ -131,6 +162,49 @@ describe('getCurrentLocation', () => {
       expect.any(Array),
       { icon: 'locate-off', detail: 'Settings › Blend’n › Location › Precise Location' }
     )
+  })
+
+  it('Android approximate location is the same precise-location tray, not "GPS signal is weak" (SCRUM-634)', async () => {
+    loc.requestForegroundPermissionsAsync.mockResolvedValue({ status: 'granted', granted: true, android: { accuracy: 'coarse' } } as any)
+    loc.getCurrentPositionAsync.mockResolvedValue(fixWith(2000))
+    const t = trays()
+    expect(await getCurrentLocation(t)).toBeNull()
+    expect(t.showTray).toHaveBeenCalledTimes(1)
+    expect(t.showTray).toHaveBeenCalledWith(
+      'Precise location is off',
+      'Check-in needs your exact spot to confirm you’re inside. Turn on Precise Location for Blend’n.',
+      expect.any(Array),
+      { icon: 'locate-off', detail: 'App info › Permissions › Location › Use precise location' }
+    )
+    expect(loc.getCurrentPositionAsync).not.toHaveBeenCalled()
+  })
+})
+
+// SCRUM-930: iOS reports -1 for an invalid accuracy. It is truthy, so `|| 999` kept it, and the server refuses a negative.
+describe('an accuracy below zero is no accuracy', () => {
+  it.each([[-1], [-0.5], [NaN], [Infinity], [null], [undefined]])('validAccuracy(%s) is unknown', (raw) => {
+    expect(validAccuracy(raw as number | null | undefined)).toBeNull()
+  })
+
+  it.each([[0], [12.5], [150]])('validAccuracy(%s) is itself', (raw) => {
+    expect(validAccuracy(raw)).toBe(raw)
+  })
+
+  it.each([[-1], [NaN]])('a fix saying %s is a weak signal, never an accuracy sent on', async (raw) => {
+    loc.getCurrentPositionAsync.mockResolvedValue(fixWith(raw))
+    const t = trays()
+    expect(await getCurrentLocation(t)).toBeNull()
+    expect(t.showTray).toHaveBeenCalledWith('GPS signal is weak', 'Accuracy is 999 m. Step away from walls and try again.', expect.any(Array), { icon: 'radar' })
+  })
+
+  it('on iOS a watch fix of -1 is not the best fix, nor good enough', async () => {
+    setOS('ios')
+    loc.watchPositionAsync.mockImplementation(async (_o: any, cb: any) => {
+      cb(fixWith(-1))
+      cb(fixWith(20))
+      return { remove: jest.fn() } as any
+    })
+    expect(await getCurrentLocation(trays())).toEqual({ latitude: 12.97, longitude: 77.59, accuracy: 20 })
   })
 })
 
@@ -162,6 +236,21 @@ describe('a fix that is already there', () => {
 
     expect(await locate(trays())).toEqual({ latitude: 12.97, longitude: 77.59, accuracy: 9 })
     expect(loc.getCurrentPositionAsync).toHaveBeenCalledTimes(1)
+  })
+
+  it('a cached fix saying -1 is not reused: a new one is asked for (SCRUM-930)', async () => {
+    const { getCurrentLocation: locate } = fresh()
+    loc.getLastKnownPositionAsync.mockResolvedValue(recentFix(-1, 1000))
+    loc.getCurrentPositionAsync.mockResolvedValue(recentFix(9))
+    expect(await locate(trays())).toEqual({ latitude: 12.97, longitude: 77.59, accuracy: 9 })
+    expect(loc.getCurrentPositionAsync).toHaveBeenCalledTimes(1)
+  })
+
+  it('warming starts nothing on an approximate grant either: no fix it gives could pass the door (SCRUM-634)', async () => {
+    const { warmLocationFix } = fresh()
+    loc.getForegroundPermissionsAsync.mockResolvedValue({ status: 'granted', granted: true, android: { accuracy: 'coarse' } } as any)
+    await warmLocationFix()
+    expect(loc.getCurrentPositionAsync).not.toHaveBeenCalled()
   })
 
   it('warming never asks for permission: without it, nothing starts', async () => {

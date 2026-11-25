@@ -1,0 +1,375 @@
+/**
+ * The Pulse works out which city the phone is in from its fix (a reverse geocode), to offer a switch, to improve an
+ * app-chosen city, and to tell the server which city people are away in (`recordCityDemand`). With "Share location for
+ * nearby events" off none of that happens: the fix is not turned into a place (SCRUM-908).
+ *
+ * The screen renders for real; what it stands on is stubbed, as in `pulseCoachMark`.
+ */
+import { act, render, screen } from '@testing-library/react-native'
+import React from 'react'
+
+const mockUser: { id: string } | null = { id: 'u-a' }
+const mockFocused = true
+const mockVisible = true
+const mockFull = false
+const mockTray: { visible: boolean; onClose: () => void }[] = []
+
+jest.mock('@react-native-async-storage/async-storage', () =>
+  require('@react-native-async-storage/async-storage/jest/async-storage-mock')
+)
+jest.mock('expo-router', () => ({
+  router: { push: jest.fn() },
+  useScrollToTop: () => {},
+  useIsFocused: () => mockFocused,
+  useLocalSearchParams: () => ({}),
+}))
+jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }))
+jest.mock('expo-location', () => ({
+  Accuracy: { Balanced: 3 },
+  getForegroundPermissionsAsync: jest.fn(async () => ({ status: 'granted' })),
+  requestForegroundPermissionsAsync: jest.fn(async () => ({ status: 'granted' })),
+  // Mumbai: a long way from the city the app has chosen.
+  getLastKnownPositionAsync: jest.fn(async () => ({ coords: { latitude: 19.076, longitude: 72.8777, accuracy: 10 }, timestamp: Date.now() })),
+  getCurrentPositionAsync: jest.fn(async () => ({ coords: { latitude: 19.076, longitude: 72.8777, accuracy: 10 }, timestamp: Date.now() })),
+  reverseGeocodeAsync: jest.fn(async () => [{ city: 'Mumbai' }]),
+}))
+jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }))
+jest.mock('../lib/perf', () => ({ ScreenProfiler: ({ children }: { children: React.ReactNode }) => children }))
+// The shell reports what the drawer is doing; the test decides it.
+// The city lives in the shell's title tabs now: its chip calls what the screen reported as `openCityPicker`.
+let mockBrowse: { openCityPicker: () => void } | null = null
+jest.mock('../components/home/HomeShell', () => ({
+  HomeShell: ({ renderEvents }: { renderEvents: (b: (browse: { openCityPicker: () => void }) => void, visible: boolean, full: boolean) => React.ReactNode }) => {
+    const { Pressable } = require('react-native')
+    return (
+      <>
+        {renderEvents((browse) => {
+          mockBrowse = browse
+        }, mockVisible, mockFull)}
+        <Pressable testID="open-city" onPress={() => mockBrowse?.openCityPicker()} />
+      </>
+    )
+  },
+}))
+jest.mock('../app/(tabs)/_layout', () => ({ TAB_BAR_CLEARANCE: 92, tabBarTop: () => 800 }))
+jest.mock('../components/pulse/LeadPager', () => {
+  const { Pressable, Text, View } = require('react-native')
+  return {
+    LeadPager: (p: { cards: { id: string; title: string }[]; onOpen: (i: number) => void; onLongPress?: (i: number, frame: object) => void }) => (
+      <View>
+        {p.cards.map((c, i) => (
+          <Pressable key={c.id} testID={`card-${c.id}`} onPress={() => p.onOpen(i)} onLongPress={() => p.onLongPress?.(i, { x: 0, y: 0, width: 300, height: 256 })}>
+            <Text>{c.title}</Text>
+          </Pressable>
+        ))}
+      </View>
+    ),
+  }
+})
+jest.mock('../components/pulse/FriendsCard', () => ({ FriendsCard: () => null }))
+jest.mock('../components/ds/EventCard', () => {
+  const { Pressable, Text } = require('react-native')
+  return {
+    EventCard: (p: { title: string; onPress: () => void; onPressIn?: () => void; onLongPress?: (frame: object) => void }) => (
+      <Pressable testID={`row-${p.title}`} onPress={p.onPress} onPressIn={p.onPressIn} onLongPress={() => p.onLongPress?.({ x: 0, y: 0, width: 300, height: 64 })}>
+        <Text>{p.title}</Text>
+      </Pressable>
+    ),
+  }
+})
+// The two sheets the header opens, each with a way to close it (the city's is opened from the shell, above).
+// The filter sheet opens from the Filters chip now (Option C: the chips are the header).
+jest.mock('../components/pulse/QuickChips', () => {
+  const { Pressable } = require('react-native')
+  return { QuickChips: (p: { onOpenFilters: () => void }) => <Pressable testID="open-filters" onPress={p.onOpenFilters} /> }
+})
+jest.mock('../components/pulse/FilterControl', () => {
+  const { Pressable } = require('react-native')
+  return {
+    FilterSheet: (p: { visible: boolean; onClose: () => void }) =>
+      p.visible ? <Pressable testID="close-sheet" onPress={p.onClose} /> : null,
+  }
+})
+jest.mock('../components/ds/DayHeading', () => ({ DayHeading: () => null }))
+jest.mock('../components/cityArt/CityArtCard', () => ({ CityArtBanner: () => null, CityArtCard: () => null }))
+jest.mock('../components/cityArt/drawable', () => ({ drawableCityArt: () => null }))
+jest.mock('../components/OptimizedImage', () => ({ preloadImages: jest.fn(async () => {}) }))
+jest.mock('../components/RealtimeStatusBanner', () => () => null)
+jest.mock('../components/Skeleton', () => ({ Skeleton: () => null, SkeletonBlock: () => null, SkeletonLine: () => null }))
+const mockShowToast = jest.fn()
+jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: mockShowToast }) }))
+// What each banner block was told (the place block rides the map; the system block stays over the list).
+const mockBanners: { only?: string; locationDenied: boolean; onOpenSettings: () => void }[] = []
+jest.mock('../components/pulse/PulseBanners', () => ({
+  PulseBanners: (p: { only?: string; locationDenied: boolean; onOpenSettings: () => void }) => {
+    mockBanners.push(p)
+    return null
+  },
+}))
+jest.mock('../components/motion/FadeInUp', () => ({ children }: { children: React.ReactNode }) => children)
+// The city picker's sheet, with a way to close it (the Sheet needs a modal host).
+// The country the picker ranks second is kept (SCRUM-1037).
+let mockPickerCountry: string | null | undefined
+jest.mock('../components/pulse/CityPicker', () => {
+  const { Pressable } = require('react-native')
+  return {
+    CityPicker: (p: { visible: boolean; onClose: () => void; deviceCountry?: string | null }) => {
+      mockPickerCountry = p.deviceCountry
+      return p.visible ? <Pressable testID="close-sheet" onPress={p.onClose} /> : null
+    },
+  }
+})
+// The peek the long-press opens: what it was told, and a way to close it.
+jest.mock('../components/pulse/PulsePeek', () => ({
+  PulsePeek: (p: { peek: unknown; onClose: () => void }) => {
+    mockTray.push({ visible: !!p.peek, onClose: p.onClose })
+    return null
+  },
+}))
+jest.mock('../lib/api', () => ({ getEvents: jest.fn(async () => ({ data: [], error: null })) }))
+jest.mock('../lib/apiClient', () => ({
+  apiClient: {
+    getEvent: jest.fn(async () => ({ success: false })),
+    getActiveCheckins: jest.fn(async () => ({ success: true, data: { checkIns: [] } })),
+    getBatchCheckinStatuses: jest.fn(async () => ({ success: true, data: {} })),
+    getEventCities: jest.fn(async () => ({ success: true, data: { cities: [{ city: 'Bengaluru', count: 9 }, { city: 'Mumbai', count: 4 }] } })),
+    getCategories: jest.fn(async () => ({ success: false })),
+    recordCityDemand: jest.fn(async () => ({ success: true })),
+    toggleInterest: jest.fn(async () => ({ success: false })),
+  },
+}))
+jest.mock('../lib/cityStorage', () => ({ readStoredCity: jest.fn(async () => null), storeCity: jest.fn(async () => {}) }))
+jest.mock('../lib/roomSignal', () => ({ publishRoomSignal: jest.fn() }))
+jest.mock('../lib/checkIn', () => ({ checkOutOf: jest.fn() }))
+jest.mock('../lib/blendnOverlay', () => ({ openBlendn: jest.fn() }))
+jest.mock('../lib/usePresence', () => ({ usePresence: () => ({ finished: false }) }))
+jest.mock('../lib/useLiveSync', () => ({ useLiveSync: () => 'connected' }))
+jest.mock('../lib/photoUtils', () => ({ getOptimizedImageUrl: (url: string) => url }))
+jest.mock('../lib/logger', () => ({
+  Logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn(), journey: jest.fn() },
+}))
+jest.mock('../lib/useAuth', () => ({
+  useAuth: () => ({ user: mockUser, loading: false }),
+  currentUserId: () => mockUser?.id ?? null,
+}))
+
+/* eslint-disable import/first */
+import * as Location from 'expo-location'
+import Events from '../app/(tabs)/events'
+import { apiClient } from '../lib/apiClient'
+import { setLocationSharing } from '../lib/shareLocation'
+/* eslint-enable import/first */
+
+async function settle() {
+  for (let i = 0; i < 8; i += 1) await act(async () => {})
+}
+const reverse = Location.reverseGeocodeAsync as jest.Mock
+
+beforeEach(() => {
+  jest.clearAllMocks()
+  setLocationSharing(true)
+})
+afterEach(() => setLocationSharing(true))
+
+it('with sharing on, the fix is named as a city (the control)', async () => {
+  await render(<Events />)
+  await settle()
+  expect(reverse).toHaveBeenCalled()
+})
+
+it('with sharing off, the fix is never turned into a place: no geocode, no city demand', async () => {
+  setLocationSharing(false)
+  await render(<Events />)
+  await settle()
+  expect(reverse).not.toHaveBeenCalled()
+  expect(apiClient.recordCityDemand).not.toHaveBeenCalled()
+})
+
+/*
+ * Location denied, or no fix (SCRUM-1037): the phone's own time zone, then its region, picks the city and the country, by
+ * the rule the onboarding map opens on (`phoneCitySlug`). Before this every such phone browsed Bengaluru and sent no country.
+ */
+describe('no fix: the phone’s clock and region say where it is (SCRUM-1037)', () => {
+  // eslint-disable-next-line import/first
+  const { refreshPhoneZone } = require('../lib/time') as typeof import('../lib/time')
+  const { readStoredCity, storeCity } = require('../lib/cityStorage') as { readStoredCity: jest.Mock; storeCity: jest.Mock }
+  const cities = jest.mocked(apiClient.getEventCities)
+  const zoned = {
+    cities: [
+      { city: 'Mysuru', slug: 'mysuru', country: 'IN', timezone: 'Asia/Kolkata', eventCount: 9 },
+      { city: 'Bengaluru', slug: 'bengaluru', country: 'IN', timezone: 'Asia/Kolkata', eventCount: 4, isDefault: true },
+      { city: 'Toronto', slug: 'toronto', country: 'CA', timezone: 'America/Toronto', eventCount: 0, access: 'comingSoon' },
+    ],
+    countries: [
+      { code: 'IN', name: 'India', defaultCitySlug: 'bengaluru' },
+      { code: 'CA', name: 'Canada', defaultCitySlug: 'toronto' },
+    ],
+    defaultCitySlug: 'bengaluru',
+    device: null,
+  }
+  const zoneBefore = process.env.TZ
+
+  beforeEach(() => {
+    jest.mocked(Location.getForegroundPermissionsAsync).mockResolvedValue({ status: 'denied' } as never)
+    jest.mocked(Location.requestForegroundPermissionsAsync).mockResolvedValue({ status: 'denied' } as never)
+    jest.mocked(Location.getLastKnownPositionAsync).mockResolvedValue(null)
+    cities.mockResolvedValue({ success: true, data: zoned } as never)
+  })
+  afterEach(() => {
+    process.env.TZ = zoneBefore
+    refreshPhoneZone()
+    readStoredCity.mockResolvedValue(null)
+    jest.mocked(Location.getForegroundPermissionsAsync).mockResolvedValue({ status: 'granted' } as never)
+    jest.mocked(Location.requestForegroundPermissionsAsync).mockResolvedValue({ status: 'granted' } as never)
+  })
+  const inZone = (zone: string) => {
+    process.env.TZ = zone
+    refreshPhoneZone()
+  }
+  const stored = () => storeCity.mock.calls.map(([c]) => c.city)
+  const countriesSent = () => cities.mock.calls.map(([country]) => country ?? null)
+
+  it('a Toronto phone set to English (US) browses Toronto, sends CA, and is counted as waiting there', async () => {
+    inZone('America/Toronto')
+    await render(<Events />)
+    await settle()
+    expect(stored()).toContain('Toronto')
+    expect(stored()).not.toContain('Bengaluru')
+    expect(countriesSent()).toContain('CA')
+    expect(apiClient.recordCityDemand).toHaveBeenCalledWith('Toronto', 'CA')
+    expect(mockPickerCountry).toBe('CA')
+  })
+
+  it('a Kolkata phone browses Bengaluru (the default of a zone several cities share, not the busiest row)', async () => {
+    inZone('Asia/Kolkata')
+    await render(<Events />)
+    await settle()
+    expect(stored()).toEqual(expect.arrayContaining(['Bengaluru']))
+    expect(stored()).not.toContain('Mysuru')
+    expect(countriesSent()).toContain('IN')
+  })
+
+  it('an unserved zone keeps today’s behaviour: the default city, no country sent, no demand (the control)', async () => {
+    inZone('Europe/Berlin')
+    await render(<Events />)
+    await settle()
+    expect(stored()).toContain('Bengaluru')
+    expect(countriesSent().filter(Boolean)).toEqual([])
+    expect(apiClient.recordCityDemand).not.toHaveBeenCalled()
+    expect(mockPickerCountry).toBeNull()
+  })
+
+  it('a city the person chose wins over the clock', async () => {
+    readStoredCity.mockResolvedValue({ city: 'Bengaluru', slug: 'bengaluru', source: 'chosen' })
+    inZone('America/Toronto')
+    await render(<Events />)
+    await settle()
+    expect(stored()).not.toContain('Toronto')
+    expect(apiClient.recordCityDemand).not.toHaveBeenCalled()
+  })
+
+  /*
+   * Denied (pulse-map 06): one quiet line on the map, "See what’s near you" · Settings, whether or not any other place
+   * line is up, and its Settings opens Settings. The drive found it never showed (the place block waited for a switch,
+   * travel or away notice) and its Settings did nothing.
+   */
+  it('denied: the map line shows on its own, and its Settings opens the phone’s Settings', async () => {
+    const { Linking } = require('react-native')
+    const open = jest.spyOn(Linking, 'openSettings').mockResolvedValue(undefined as never)
+    mockBanners.length = 0
+    inZone('Asia/Kolkata')
+    await render(<Events />)
+    await settle()
+    const place = mockBanners.filter((b) => b.only === 'place').at(-1)
+    expect(place?.locationDenied).toBe(true)
+    place?.onOpenSettings()
+    expect(open).toHaveBeenCalledTimes(1)
+    // One ask, not two: the system block over the list never says it too.
+    expect(mockBanners.filter((b) => b.only === 'system').some((b) => b.locationDenied)).toBe(false)
+    open.mockRestore()
+  })
+
+  it('granted (the control): no denied line anywhere', async () => {
+    jest.mocked(Location.getForegroundPermissionsAsync).mockResolvedValue({ status: 'granted' } as never)
+    jest.mocked(Location.getLastKnownPositionAsync).mockResolvedValue({ coords: { latitude: 12.97, longitude: 77.59, accuracy: 10 }, timestamp: Date.now() } as never)
+    mockBanners.length = 0
+    inZone('Asia/Kolkata')
+    await render(<Events />)
+    await settle()
+    expect(mockBanners.some((b) => b.locationDenied)).toBe(false)
+  })
+
+  it('a stored guess that was only the default moves to where the phone points', async () => {
+    readStoredCity.mockResolvedValue({ city: 'Bengaluru', slug: 'bengaluru', source: 'inferred' })
+    inZone('America/Toronto')
+    await render(<Events />)
+    await settle()
+    expect(stored()).toContain('Toronto')
+  })
+})
+
+/*
+ * SCRUM-1077: on a cold start the first fix usually lands after the lead's 3 s hold, and the lap froze in the server's
+ * order (Rooftop Sundowner, 6.8 km, ahead of a 750 m event). A recent last-known position now orders it meanwhile.
+ */
+describe('the Featured lap on a cold start (SCRUM-1077)', () => {
+  const { getEvents } = require('../lib/api') as { getEvents: jest.Mock }
+  const soon = (h: number) => new Date(Date.now() + h * 3_600_000).toISOString()
+  const featured = (id: string, dLat: number, rank: number) => ({
+    id,
+    title: id,
+    start_time: soon(2),
+    end_time: soon(5),
+    is_featured: true,
+    featured: { kind: 'promoted' as const, rank },
+    latitude: 12.97 + dLat,
+    longitude: 77.59,
+  })
+  // The server's order: the far rooftop first.
+  const picks = [featured('rooftop', 0.061, 1), featured('near', 0.0067, 2)]
+  const order = () => screen.getAllByTestId(/^card-/).map((c) => c.props.testID)
+
+  beforeEach(() => {
+    // As the server answers (backend round 3): asked with a position, Featured comes nearest first; without one, by rank.
+    getEvents.mockImplementation(async (q: { featured?: boolean; lat?: number; lon?: number }) => {
+      if (!q?.featured) return { data: [], error: null }
+      if (q.lat === undefined || q.lon === undefined) return { data: picks, error: null }
+      const far = (e: (typeof picks)[number]) => Math.abs(e.latitude - (q.lat as number)) * 111
+      return { data: [...picks].sort((a, b) => far(a) - far(b)).map((e) => ({ ...e, distance: far(e) })), error: null }
+    })
+    // Cold start: GPS still warming up, nothing cached inside the fix's 2 min.
+    jest.mocked(Location.getCurrentPositionAsync).mockImplementation(() => new Promise(() => {}))
+    jest.mocked(Location.reverseGeocodeAsync).mockResolvedValue([{ city: 'Bengaluru' }] as never)
+  })
+  afterEach(() => getEvents.mockImplementation(async () => ({ data: [], error: null })))
+
+  it('opens nearest first from a last-known position up to 30 min old', async () => {
+    const seed = { coords: { latitude: 12.97, longitude: 77.59, accuracy: 65 }, timestamp: Date.now() - 20 * 60_000 }
+    jest.mocked(Location.getLastKnownPositionAsync).mockImplementation(async (o?: { maxAge?: number }) => ((o?.maxAge ?? 0) > 120_000 ? seed : null) as never)
+    await render(<Events />)
+    await settle()
+    expect(order()).toEqual(['card-near', 'card-rooftop'])
+    // The server ordered it: Featured was asked from the seed (the client sorts nothing).
+    expect(getEvents.mock.calls.some(([q]) => (q as { featured?: boolean; lat?: number })?.featured && (q as { lat?: number }).lat === 12.97)).toBe(true)
+  })
+
+  it('never reorders in view: the live fix landing later, even beside the rooftop, keeps the order it opened in', async () => {
+    const seed = { coords: { latitude: 12.97, longitude: 77.59, accuracy: 65 }, timestamp: Date.now() - 20 * 60_000 }
+    jest.mocked(Location.getLastKnownPositionAsync).mockImplementation(async (o?: { maxAge?: number }) => ((o?.maxAge ?? 0) > 120_000 ? seed : null) as never)
+    let land: (p: unknown) => void = () => {}
+    jest.mocked(Location.getCurrentPositionAsync).mockImplementation(() => new Promise((resolve) => (land = resolve as never)) as never)
+    await render(<Events />)
+    await settle()
+    expect(order()).toEqual(['card-near', 'card-rooftop'])
+    await act(async () => land({ coords: { latitude: 13.031, longitude: 77.59, accuracy: 10 }, timestamp: Date.now() }))
+    await settle()
+    expect(order()).toEqual(['card-near', 'card-rooftop'])
+  })
+
+  it('control: with no recent last-known position, the server’s order', async () => {
+    jest.mocked(Location.getLastKnownPositionAsync).mockResolvedValue(null)
+    await render(<Events />)
+    await settle()
+    expect(order()).toEqual(['card-rooftop', 'card-near'])
+  })
+})

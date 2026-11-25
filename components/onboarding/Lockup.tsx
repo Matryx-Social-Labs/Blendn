@@ -1,4 +1,6 @@
-import { Image, StyleSheet, View } from 'react-native'
+import { Image, View, useWindowDimensions } from 'react-native'
+
+import { SPACE } from '../../lib/design/tokens'
 
 import { assetAspect } from './authForm'
 
@@ -22,15 +24,16 @@ export const LOCKUP_HEIGHT = { landing: 60, form: 40 } as const
  */
 export function Lockup({ size, testID }: { size: keyof typeof LOCKUP_HEIGHT; testID?: string }) {
   const height = LOCKUP_HEIGHT[size]
+  /*
+   * The cap is a number, 86% of the window's content width. As `'86%'` it resolved against a parent that shrink-wraps the
+   * image, i.e. against the image itself, and drew the lockup at 86% (the mockup diff, 2026-11-05: 14% under the board).
+   */
+  const maxWidth = MAX_SHARE * (useWindowDimensions().width - 2 * SPACE.gutter)
   return (
     <View testID={testID} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-      <Image source={LOCKUP} resizeMode="contain" style={[styles.image, { height, width: height * LOCKUP_ASPECT }]} />
+      <Image testID={testID && `${testID}-image`} source={LOCKUP} resizeMode="contain" style={{ height, width: height * LOCKUP_ASPECT, maxWidth }} />
     </View>
   )
 }
 
-const MAX_WIDTH = '86%'
-
-const styles = StyleSheet.create({
-  image: { maxWidth: MAX_WIDTH },
-})
+const MAX_SHARE = 0.86

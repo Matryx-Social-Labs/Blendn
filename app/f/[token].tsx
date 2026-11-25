@@ -9,7 +9,9 @@ import { Button } from '../../components/ds/Button'
 import { Grain } from '../../components/ds/Grain'
 import { IconButton } from '../../components/ds/IconButton'
 import { Orbs } from '../../components/ds/Orbs'
-import { CONTROL_FONT_CAP, font, HueProvider, useBoldText } from '../../components/ds/shared'
+import { font, HueProvider, useBoldText } from '../../components/ds/shared'
+import { Title } from '../../components/ds/Title'
+import type { IconName } from '../../components/ui/Icon'
 import { StateScreen } from '../../components/ds/StateScreen'
 import FadeInUp from '../../components/motion/FadeInUp'
 import { SkeletonBlock, SkeletonCircle } from '../../components/Skeleton'
@@ -21,6 +23,7 @@ import { inviteCta, inviteLine, type FriendPerson, type FriendState } from '../.
 import { askFriendsSeeMe, useStillHere } from '../../lib/friendsSeeMeAsk'
 import { isGone } from '../../lib/loadFailure'
 import { RouteModal } from '../../components/system/RouteModal'
+import { personFace } from '../../lib/personFace'
 
 /** Flow 6 `invite`: the face is 160. */
 const FACE = 160
@@ -179,7 +182,7 @@ function InviteScreen() {
             />
           ) : !person || !cta ? (
             // The page's own shape while it loads (Flow 6 invite 09), so it does not jump when it lands.
-            <View testID="invite-loading" accessibilityLabel="Loading" accessibilityState={{ busy: true }} style={styles.stage}>
+            <View accessible testID="invite-loading" accessibilityLabel="Loading" accessibilityState={{ busy: true }} style={styles.stage}>
               <SkeletonCircle width={FACE} />
               <SkeletonBlock width="70%" height={SKELETON.title} />
               <SkeletonBlock width="80%" height={SKELETON.line} />
@@ -188,30 +191,43 @@ function InviteScreen() {
             <FadeInUp style={styles.stage}>
               {/* Decorative: the name under it says who this is. */}
               <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-                {person.photo ? <Avatar kind="photo" uri={person.photo} size={FACE} /> : <Avatar kind="creature" pseudonym={person.name} size={FACE} />}
+                <Avatar {...personFace({ named: true, name: person.name, photo: person.photo })} size={FACE} />
               </View>
               <View style={styles.words}>
-                <Text accessibilityRole="header" maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('display', bold, FONT_FAMILY.brand[900]), styles.title]}>
+                {/*
+                  Flow 7 3-A: the name alone is the headline (Satoshi Black, 34; 30 for a long name), the shared Title, so a word too
+                  wide for its line at the large sizes shrinks rather than splits. Under it, one line says what happened.
+                */}
+                <Title
+                  variant="display"
+                  family={FONT_FAMILY.brand[900]}
+                  accessibilityRole="header"
+                  numberOfLines={HEADLINE_LINES}
+                  style={[styles.title, headline(person.name, state).length > LONG_NAME ? styles.titleLong : styles.titleShort]}
+                >
                   {headline(person.name, state)}
-                </Text>
+                </Title>
                 <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.line]}>{state ? inviteLine(state) : null}</Text>
               </View>
             </FadeInUp>
           )}
         </View>
 
+        {/* The buttons arrive with the stage they belong to, not at rest under it (motion audit M16). */}
         {cta && !dead && !refusal ? (
-          <View style={styles.footer}>
+          <FadeInUp style={styles.footer}>
             <Button
               kind={cta.action === null ? 'secondary' : 'primary'}
+              icon={CTA_ICON[state ?? 'none']}
               label={cta.label}
+              accessibilityLabel={cta.action === null ? 'Friend request sent' : undefined}
               onPress={() => void act()}
               loading={asking}
               disabled={cta.action === null}
               testID="invite-cta"
             />
             <Button kind="tertiary" label="Not now" onPress={close} />
-          </View>
+          </FadeInUp>
         ) : null}
       </SafeAreaView>
     </HueProvider>
@@ -222,17 +238,31 @@ function InviteScreen() {
 function headline(name: string, state: FriendState | null) {
   if (state === 'self') return 'Your invite link'
   if (state === 'friends') return `You and ${name} are friends`
-  if (state === 'requested') return name
-  return `${name} wants to blend with you`
+  return name
 }
+
+/** The glyph before the invite's one button: Add friend's user-plus, Requested's clock (Flow 7 3-A). */
+const CTA_ICON: Record<FriendState, IconName | undefined> = { none: 'user-plus', incoming: 'user-check', requested: 'clock', friends: undefined, self: 'share' }
+
+/** Past this many characters a name heads the page at 30, not 34 (the board's 45-character and Québec names). */
+const LONG_NAME = 24
+/** Three lines hold the 45-character name at 30; a longer one ends in an ellipsis rather than pushing the button off. */
+const HEADLINE_LINES = 3
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLOR.ink },
   bar: { paddingHorizontal: SPACE.lg, paddingVertical: SPACE.sm, flexDirection: 'row' },
   body: { flex: 1, justifyContent: 'center', paddingHorizontal: SPACE.gutter },
-  stage: { alignItems: 'center', gap: SPACE.lg },
-  words: { alignItems: 'center', gap: SPACE.sm },
-  title: { color: COLOR.textPrimary, textAlign: 'center' },
+  // design-exception: the board's face sits 22 above the name and the line 10 under it (fr.js `landing`).
+  stage: { alignItems: 'center', gap: 22 },
+  // design-exception: the line is 10 under the name (fr.js `landing`).
+  words: { alignItems: 'center', gap: 10 },
+  // design-exception: the board's headline (fr.js `T1`): 900 at 34/38 (30/34 for a long name), tracking -0.4, 345 wide.
+  title: { color: COLOR.textPrimary, textAlign: 'center', letterSpacing: -0.4, maxWidth: 345 },
+  // design-exception: the board's headline at 34/38 (fr.js `T1`)
+  titleShort: { fontSize: 34, lineHeight: 38 },
+  // design-exception: the board's long-name headline at 30/34 (fr.js `lA`)
+  titleLong: { fontSize: 30, lineHeight: 34 },
   line: { color: COLOR.textSecondary, textAlign: 'center' },
   footer: { paddingHorizontal: SPACE.gutter, paddingBottom: SPACE.lg, gap: SPACE.sm },
 })

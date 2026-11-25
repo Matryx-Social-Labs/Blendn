@@ -2,7 +2,7 @@ import { ScreenProfiler } from '../../lib/perf'
 import { router, useFocusEffect, useScrollToTop } from 'expo-router'
 import React, { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { AppState, FlatList, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
-import Animated, { Easing, FadeIn, FadeOut, LinearTransition } from 'react-native-reanimated'
+import Animated from 'react-native-reanimated'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { EventCover } from '../../components/EventCover'
 import { OfflineBanner } from '../../components/OfflineBanner'
@@ -12,16 +12,23 @@ import { SkeletonBlock } from '../../components/Skeleton'
 import { Spinner } from '../../components/ds/Loader'
 import FadeInUp from '../../components/motion/FadeInUp'
 import ScalePress from '../../components/motion/ScalePress'
-import { EventCard } from '../../components/ds/EventCard'
+import { rowBack, rowOut, rowReflow } from '../../components/motion/presence'
+import { reflowsOnSpring } from '../../lib/resort'
+import { EventCard, eventLabel } from '../../components/ds/EventCard'
 import { MonoRun, PresenceDot, TimeBadge } from '../../components/ds/MonoFamily'
 import { SectionHeader } from '../../components/ds/SectionHeader'
 import { StateScreen } from '../../components/ds/StateScreen'
 import { Button } from '../../components/ds/Button'
-import { CONTROL_FONT_CAP, font, minTarget, SELECTION, useBoldText } from '../../components/ds/shared'
+import { Title } from '../../components/ds/Title'
+import { CONTROL_FONT_CAP, font, minTarget, useBoldText, useScreenReader } from '../../components/ds/shared'
 import { Icon, type IconName } from '../../components/ui/Icon'
-import { Toast, type ToastKind } from '../../components/ds/Toast'
+import { Toast, toastDwell, type ToastKind } from '../../components/ds/Toast'
+import { IconButton } from '../../components/ds/IconButton'
+import { SwipeRow } from '../../components/ds/SwipeRow'
+import { deferLeave, flushLeave, leaveKind, leavePending, leaveSheet, leaveToast, menuLabel, sendLeave, swipeLabel, undoLeave, type LeaveKind } from '../../lib/goingLeave'
 import { apiClient } from '../../lib/apiClient'
-import { openBlendn } from '../../lib/blendnOverlay'
+import { openPass, useLiveEventId } from '../../lib/blendnOverlay'
+import { attendancePhase, doorOf, goingCardAction } from '../../lib/attendanceState'
 import { Logger } from '../../lib/logger'
 import { failedSections, goingSections, newFailure, type GoingPaging, type GoingSection } from '../../lib/goingSections'
 import {
@@ -51,13 +58,15 @@ import {
   type RsvpEventRow,
   type SavedEventRow as EventRow,
 } from '../../lib/savedEvents'
-import { HAPPENING_NOW, featuredDateLabel, nextUpLabel, placeLabel, timeLabel } from '../../lib/pulse'
+import { boardOpen } from '../../lib/board'
+import { HAPPENING_NOW, dayAndClock, featuredDateLabel, nextUpLabel, placeLabel, timeLabel } from '../../lib/pulse'
 import { liveWindow, sessionOver } from '../../lib/eventSession'
-import { COLOR, FONT_FAMILY, ICON, MAX_FONT_SCALE, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, ICON, MATERIAL, MAX_FONT_SCALE, RADIUS, SIZE, SPACE, TYPE } from '../../lib/design/tokens'
 import { OPACITY } from '../../lib/theme'
 import { useAuth } from '../../lib/useAuth'
-import { DURATION, EASING, SPRING, useReducedMotion } from '../../lib/motion'
+import { useReducedMotion } from '../../lib/motion'
 import { openInMaps } from '../../lib/openInMaps'
+import { LobbyRowNews, NewInLobbyRow } from '../../components/board/LobbyPreview'
 import { addToCalendar } from '../../lib/calendar'
 import { openTonight } from '../../lib/paywall'
 import { shareEvent } from '../../lib/shareRow'
@@ -65,6 +74,7 @@ import { showSheet } from '../../lib/sheet'
 import { isNightRated, markNightRated, useRatedNights } from '../../lib/ratedNights'
 import { usePullToRefresh } from '../../lib/usePullToRefresh'
 import { TAB_BAR_CLEARANCE } from './_layout'
+import { useTabListScroll } from '../../lib/tabBarSettle'
 
 /**
  * Going — the events that are yours.
@@ -79,7 +89,7 @@ import { TAB_BAR_CLEARANCE } from './_layout'
  * From `goingItems` (lib/savedEvents.ts), top to bottom: your soonest RSVP
  * (from `/me/rsvps`) as the one large **next up** card, with directions,
  * calendar and share; the rest of your RSVPs as rows under day headings;
- * **Saved** — hearts not already above, the heart on each row removing it;
+ * **Saved** — saves not already above, the bookmark on each row removing it;
  * **Past** — events you attended, each with the way in to rating the people
  * you met there, which had no entry point but reopening an old event.
  */
@@ -108,7 +118,8 @@ function GoingScreenInner() {
    * The design's Toast (components/ds/Toast): iOS a capsule at the top, Android
    * a snackbar at the bottom above the tab bar (drive 2: it covered "Going").
    */
-  const [toast, setToast] = useState<{ key: number; kind: ToastKind; text: string; action?: { label: string; onPress: () => void } } | null>(null)
+  // `leaveId`: a cancel held under this toast (`lib/goingLeave.ts`), sent when it closes.
+  const [toast, setToast] = useState<{ key: number; kind: ToastKind; text: string; action?: { label: string; onPress: () => void }; leaveId?: string } | null>(null)
   const say = useCallback((text: string, kind: ToastKind = 'info', action?: { label: string; onPress: () => void }) => {
     setToast({ key: Date.now(), kind, text, action })
   }, [])
@@ -233,7 +244,7 @@ function GoingScreenInner() {
       if (rowCount > 0) hadRowsRef.current = true
       if (saved.ok) setSavedPaged(saved.paged)
       else Logger.debug('interested', 'Failed to load favorites', { error: saved.failure.error })
-      if (rsvps.ok) setGoingPaged(rsvps.paged)
+      if (rsvps.ok) setGoingPaged(pagedRows(rsvps.paged).filter((r) => leavePending(r.id)).reduce((p, r) => withoutRow(p, r.id), rsvps.paged))
       else Logger.debug('interested', 'Failed to load RSVPs', { error: rsvps.failure.error })
       if (past.ok) {
         setPastPaged(past.paged)
@@ -346,6 +357,8 @@ function GoingScreenInner() {
   // The branded pull (motion #18); Android keeps the platform's control.
   const pullRefresh = useCallback(() => void onRefresh(), [onRefresh])
   const pull = usePullToRefresh({ refreshing, onRefresh: pullRefresh })
+  // On the UI thread: the tab bar's settle (SCRUM-1023), and the pull its offset while it is the pull's.
+  const onScroll = useTabListScroll(pull)
 
   /** Back into the list where it was, rather than at the end. */
   const restoreRow = useCallback((event: EventRow, index: number) => {
@@ -403,17 +416,78 @@ function GoingScreenInner() {
   }, [events, restoreRow, say, markSave, settleSave])
 
   // The tray (Flow 16 · 16.1). The rows do not say whether an event may be shared, so the tray asks the event itself.
+  const openBoard = useCallback((id: string) => {
+    router.push({ pathname: '/board/[eventId]', params: { eventId: id } } as never)
+  }, [])
+
   const shareRow = useCallback((event: EventRow) => void shareEvent(event), [])
+  // The event you are checked into (the disc's poll): its Next up card says "You’re in" (SCRUM-882).
+  const liveEventId = useLiveEventId()
+  const screenReader = useScreenReader()
+
+  /** The way off a Going card in its state (SCRUM-1074): Can’t go, Can’t make it, Leave waitlist; Check out once in. */
+  const rowLeave = useCallback(
+    (row: EventRow) => leaveKind({ phase: attendancePhase(row), rsvpStatus: 'rsvpStatus' in row ? (row as RsvpEventRow).rsvpStatus : null, checkedIn: liveEventId === row.id, roomOpen: false }),
+    [liveEventId]
+  )
+
+  /*
+   * Off the list, with an Undo (sheet 06). The row goes at once; the DELETE is held until the toast closes, so Undo only
+   * puts the row back and nothing reached the server. Refused, the row comes back and says why (`sendLeave`).
+   */
+  const leaveRow = useCallback((row: RsvpEventRow, kind: LeaveKind) => {
+    const index = Math.max(0, going.findIndex((r) => r.id === row.id))
+    setGoingPaged((prev) => withoutRow(prev, row.id))
+    const putBack = () => setGoingPaged((prev) => withRowAt(withoutRow(prev, row.id), row, index))
+    const text = leaveToast(kind, row.title)
+    deferLeave(row.id, () => void sendLeave(row.id, row.title, putBack), toastDwell(text, { action: true, screenReader }))
+    setToast({
+      key: Date.now(),
+      kind: 'success',
+      text,
+      leaveId: row.id,
+      action: {
+        label: 'Undo',
+        onPress: () => {
+          if (undoLeave(row.id)) return putBack()
+          // It already went (the toast was held past its time): going again, as the server answers it.
+          void apiClient.rsvpToEvent(row.id, 'going').finally(() => reloadRef.current())
+        },
+      },
+    })
+  }, [going, screenReader])
+
+  const confirmLeaveRow = useCallback((row: RsvpEventRow, kind: LeaveKind) => {
+    const words = leaveSheet(kind, row.title, false)
+    showSheet({
+      kind: 'actions',
+      title: words.title,
+      message: words.message,
+      actions: [
+        { label: words.keep, variant: 'secondary', then: () => {} },
+        { label: words.leave, variant: 'destructive', then: () => leaveRow(row, kind) },
+      ],
+    })
+  }, [leaveRow])
   /*
    * A row's ⋯ (Flow 4 · Going · share from a row, frame 02): the app's one Sheet with what a night you are going to or saved
    * can do from the list. No Remove on an RSVP: leaving it is a decision the event's own page explains (the waitlist).
    */
+  const leaveAction = useCallback(
+    (row: EventRow) => {
+      const kind = rowLeave(row)
+      if (!kind) return []
+      if (kind === 'checkOut') return [{ label: 'Check out', variant: 'secondary' as const, then: () => openPass(doorOf(row, { going: true })) }]
+      return [{ label: menuLabel(kind), variant: 'destructive' as const, then: () => confirmLeaveRow(row as RsvpEventRow, kind) }]
+    },
+    [rowLeave, confirmLeaveRow]
+  )
   const rowActions = useCallback(
     (row: EventRow) =>
       showSheet({
         kind: 'actions',
         title: row.title,
-        message: [placeLabel(row), `${featuredDateLabel(liveWindow(row).start_time, new Date(), row.timezone)} · ${timeLabel(liveWindow(row).start_time, row.timezone)}`].filter(Boolean).join(' · '),
+        message: [placeLabel(row), dayAndClock(liveWindow(row).start_time, new Date(), row.timezone)].filter(Boolean).join(' · '),
         actions: [
           { label: 'Share', variant: 'secondary', then: () => shareRow(row) },
           // A night called off has nowhere to go and nothing to put in a calendar.
@@ -423,11 +497,16 @@ function GoingScreenInner() {
                 { label: 'Directions', variant: 'secondary' as const, then: () => void openInMaps(row) },
                 { label: 'Add to calendar', variant: 'secondary' as const, then: () => addToCalendar(row) },
               ]),
+          // The Board serves committed people, and this is their list: the Scene's gate, before doors and not called off.
+          ...(boardOpen(row) ? [{ label: 'The Lobby', variant: 'secondary' as const, then: () => openBoard(row.id) }] : []),
+          // The way out last (SCRUM-1074): in red, to its confirm; checked in, Check out opens this night's pass and its hold.
+          ...leaveAction(row),
           { label: 'Cancel', cancel: true },
         ],
       }),
-    [shareRow]
+    [shareRow, openBoard, leaveAction]
   )
+
 
   const openEvent = useCallback((id: string) => {
     router.push({ pathname: '/event/[id]', params: { id } as any })
@@ -449,8 +528,17 @@ function GoingScreenInner() {
      * listed until the run's end, and says so rather than naming a start.
      */
     const today = liveWindow(row)
-    const when = sessionOver(row) ? 'Ended' : nextUpLabel(today.start_time, today.end_time, new Date(), row.timezone)
-    const live = when === HAPPENING_NOW
+    // The attendance flow's one phase (`lib/attendanceState.ts`): a cancelled night is never "Happening now" (SCRUM-882).
+    const phase = attendancePhase(row)
+    const live = phase === 'live'
+    const clock = nextUpLabel(today.start_time, today.end_time, new Date(), row.timezone)
+    // Not live but inside its hours (called off): its date and time, never "Happening now".
+    const when = sessionOver(row)
+      ? 'Ended'
+      : live || clock !== HAPPENING_NOW
+        ? clock
+        : dayAndClock(today.start_time, new Date(), row.timezone)
+    const action = goingCardAction(phase, liveEventId === row.id)
     const place = placeLabel(row)
     const cancelled = row.status === 'cancelled'
     const waitlisted = !cancelled && row.rsvpStatus === 'waitlisted'
@@ -483,9 +571,9 @@ function GoingScreenInner() {
             </View>
             <View style={styles.heroBody}>
               {when ? <NextUpWhen when={when} live={live} /> : null}
-              <Text maxFontSizeMultiplier={MAX_FONT_SCALE.title} style={[font('title', bold), styles.ink]} numberOfLines={2}>
+              <Title style={styles.ink} numberOfLines={2}>
                 {row.title}
-              </Text>
+              </Title>
               {place ? (
                 <View style={styles.heroPlace}>
                   <Icon name="map-pin" size={ICON.inline} color={COLOR.textSecondary} />
@@ -504,25 +592,43 @@ function GoingScreenInner() {
             </View>
           </ScalePress>
 
+          {/* The Next up ⋯ (SCRUM-1074): today's row actions, "Can’t go" (or Check out) last. A sibling of the card's button. */}
+          <View style={styles.heroMore}>
+            <IconButton icon="ellipsis" tier="media" size="sm" accessibilityLabel={`More about ${row.title}`} onPress={() => rowActions(row)} testID="going-next-more" />
+          </View>
+
+          {/* The Lobby line (L2, owner 2026-11-17): while the Lobby is open, news or quiet; gone at the doors (`boardOpen`). */}
+          {boardOpen(row) ? <NewInLobbyRow eventId={row.id} style={styles.heroLobby} /> : null}
+
           {/*
            * Directions (or Open Blend'n) keeps its word and is the card's one positive action, so it is the world's lit button
            * (Direction C, audit C14: nothing on the tab was lit); Calendar and Share are icons.
            */}
           <View style={styles.heroActions}>
-            {live ? (
-              <Button kind="lit" size="md" icon="radio" label="Open Blend’n" onPress={() => openBlendn()} style={styles.heroLit} testID="going-open-blendn" />
-            ) : (
+            {action.kind === 'pass' ? (
+              // Owner ruling 2026-10-28: the check-in page for THIS event (its pass and hold), never the overlay with no event.
+              <Button
+                kind="lit"
+                size="md"
+                icon="radio"
+                label={action.label}
+                accessibilityHint={liveEventId === row.id ? 'Opens the room' : 'Opens Blend’n to check in'}
+                onPress={() => openPass(doorOf(row, { going: row.rsvpStatus === 'going' }))}
+                style={styles.heroLit}
+                testID="going-blend-in"
+              />
+            ) : action.kind === 'directions' ? (
               <Button
                 kind="lit"
                 size="md"
                 icon="navigation"
-                label="Directions"
+                label={action.label}
                 accessibilityLabel={`Directions to ${row.venue_name || row.title}`}
                 onPress={() => void openInMaps(row)}
                 style={styles.heroLit}
                 testID="going-directions"
               />
-            )}
+            ) : null}
             {live ? (
               <HeroAction icon="navigation" accessibilityLabel={`Directions to ${row.venue_name || row.title}`} onPress={() => void openInMaps(row)} />
             ) : (
@@ -533,7 +639,7 @@ function GoingScreenInner() {
         </View>
       </View>
     )
-  }, [bold, openEvent, refreshCount, shareRow])
+  }, [bold, openEvent, refreshCount, shareRow, liveEventId, rowActions])
 
   /*
    * Every item carries its own space above it, because a FlatList has no `gap`:
@@ -567,29 +673,51 @@ function GoingScreenInner() {
     }
 
     if (item.kind === 'going') {
-      // No Remove here: leaving an RSVP is a decision about the event, and the
-      // event screen is where its consequences (the waitlist) are explained.
       const row = item.row
       const cancelled = row.status === 'cancelled'
-      return (
+      const when = rowWhen(liveWindow(row).start_time, row.timezone)
+      const place = placeLabel(row)
+      const kind = rowLeave(row)
+      // Swipe to say "Can’t go" (SCRUM-1074 option 1): More · the way out; a long swipe commits it, with Undo. Checked in or
+      // ended, there is nothing to swipe: leaving a room is Check out, in the ⋯.
+      const leave = kind && kind !== 'checkOut' ? kind : null
+      const drawn = (
         <GoingRow
           title={row.title}
-          cover={row.cover_image_url}
+          stamp={{ iso: liveWindow(row).start_time, timeZone: row.timezone }}
           category={row.category}
           testID={`going-row-${row.id}`}
           retry={refreshCount}
           // Today's day of a multi-day run. The headings are by week (D30), so a row past today names its own day.
-          time={rowWhen(liveWindow(row).start_time, row.timezone)}
-          venue={placeLabel(row)}
-          onPress={() => openEvent(row.id)}
-          onLongPress={() => rowActions(row)}
+          time={when}
+          venue={place}
+          inert={!!leave}
+          onPress={leave ? undefined : () => openEvent(row.id)}
+          onLongPress={leave ? undefined : () => rowActions(row)}
           trailing={
             <>
               {cancelled ? <RowNote text="Cancelled" bad /> : row.rsvpStatus === 'waitlisted' ? <RowNote text="Waitlist" /> : changedTag(row) ? <RowNote text={changedTag(row) as string} /> : null}
               <RowMore title={row.title} onPress={() => rowActions(row)} />
             </>
           }
+          // "Lobby · 3 new" (L2): only when the server sends the row's count; nothing until it does.
+          below={boardOpen(row) && row.lobbyNew ? <LobbyRowNews eventId={row.id} count={row.lobbyNew} /> : undefined}
         />
+      )
+      if (!leave) return drawn
+      return (
+        <SwipeRow
+          testID={`going-swipe-${row.id}`}
+          accessibilityLabel={[eventLabel({ title: row.title, time: when, venue: place ?? '' }), row.rsvpStatus === 'waitlisted' ? 'On the waitlist' : null].filter(Boolean).join(', ')}
+          onPress={() => openEvent(row.id)}
+          actions={[
+            { icon: 'ellipsis', label: 'More', onPress: () => rowActions(row) },
+            { icon: 'calendar-x', label: swipeLabel(leave), destructive: true, onPress: () => leaveRow(row, leave) },
+          ]}
+          onFullSwipe={() => leaveRow(row, leave)}
+        >
+          {drawn}
+        </SwipeRow>
       )
     }
 
@@ -624,7 +752,7 @@ function GoingScreenInner() {
       return (
         <GoingRow
           title={row.title}
-          cover={row.cover_image_url}
+          stamp={{ iso: row.start_time, timeZone: row.timezone, past: true }}
           category={row.category}
           retry={refreshCount}
           time={featuredDateLabel(row.start_time, new Date(), row.timezone)}
@@ -646,29 +774,30 @@ function GoingScreenInner() {
       )
     }
 
-    // Saved. The heart is the remove. `exiting` on every row; `entering` only
+    // Saved. The bookmark is the remove. `exiting` on every row; `entering` only
     // on the one Undo just put back — an entrance on every row would replay as
-    // the list virtualises.
+    // the list virtualises. The rows carry no blur or shadow, which is what
+    // makes the list's layout transition safe here (see tasks/lessons.md).
     const row = item.row
     const cancelled = row.status === 'cancelled'
     return (
       <Animated.View
-        exiting={reduceMotion ? undefined : ROW_OUT}
-        entering={!reduceMotion && row.id === restoredId ? ROW_BACK : undefined}
+        exiting={reduceMotion ? undefined : rowOut}
+        entering={!reduceMotion && row.id === restoredId ? rowBack : undefined}
       >
         <GoingRow
           title={row.title}
-          cover={row.cover_image_url}
+          stamp={{ iso: row.start_time, timeZone: row.timezone }}
           category={row.category}
           retry={refreshCount}
-          time={`${featuredDateLabel(row.start_time, new Date(), row.timezone)} · ${timeLabel(row.start_time, row.timezone)}`}
+          time={dayAndClock(row.start_time, new Date(), row.timezone)}
           venue={placeLabel(row)}
           onPress={() => openEvent(row.id)}
           onLongPress={() => rowActions(row)}
           trailing={
             <>
               {cancelled ? <RowNote text="Cancelled" bad /> : changedTag(row) ? <RowNote text={changedTag(row) as string} /> : null}
-              <SavedHeart title={row.title} onPress={() => void removeSave(row)} />
+              <SavedMark title={row.title} onPress={() => void removeSave(row)} />
               <RowMore title={row.title} onPress={() => rowActions(row)} />
             </>
           }
@@ -754,7 +883,7 @@ function GoingScreenInner() {
         <StateScreen
           icon="calendar"
           title="Nothing here yet"
-          body="Tap “I’m going” or the heart on an event and it shows up here."
+          body="Tap “I’m going” or Save on an event and it shows up here."
           actions={[{ label: 'Browse events', onPress: () => router.navigate('/(tabs)/events' as any) }]}
           gutter
           testID="going-empty"
@@ -772,7 +901,8 @@ function GoingScreenInner() {
             ref={listRef}
             testID="going-list"
             data={items}
-            itemLayoutAnimation={reduceMotion ? undefined : ROW_REFLOW}
+            // Up to DS #38's twelve rows: past that a refresh (every tab focus) would reflow a page at once (M14).
+            itemLayoutAnimation={reflowsOnSpring(items.length, reduceMotion) ? rowReflow : undefined}
             renderItem={renderItem}
             keyExtractor={keyExtractor}
             // Hundreds of past nights are rows drawn a screen at a time, never the whole list.
@@ -785,12 +915,25 @@ function GoingScreenInner() {
             // absolutely positioned tab bar on top of that.
             contentContainerStyle={{ paddingBottom: TAB_BAR_CLEARANCE + SPACE.xl }}
             {...pull.listProps}
+            onScroll={onScroll}
           />
           {pull.indicator}
         </FadeInUp>
       )}
       {toast ? (
-        <Toast key={toast.key} kind={toast.kind} text={toast.text} action={toast.action} aboveTabBar onDismiss={() => setToast(null)} testID="going-toast" />
+        <Toast
+          key={toast.key}
+          kind={toast.kind}
+          text={toast.text}
+          action={toast.action}
+          aboveTabBar
+          onDismiss={() => {
+            // The held cancel goes as its toast closes (Undo already dropped it, so this is then nothing).
+            if (toast.leaveId) flushLeave(toast.leaveId)
+            setToast(null)
+          }}
+          testID="going-toast"
+        />
       ) : null}
     </SafeAreaView>
   )
@@ -813,30 +956,10 @@ function rowWhen(start: string, timeZone?: string | null): string {
   return day === 'Today' || !day ? time : `${day} · ${time}`
 }
 
-/**
- * "{n} more nights with Blend'n+": Plus's door, in Plus's violet (its selection fill, edge and glyph). Named, not provided:
- * the screen stays one ember world (hueWorlds), and the card is Plus's mark inside it, as a Plus badge would be.
- */
+/** "{n} more nights with Blend'n+": Plus's door, a positive action (buttons board C): `lit`, as every yes is. */
 function LockedNights({ count, onPress }: { count: number; onPress: () => void }) {
-  const bold = useBoldText()
-  const sel = SELECTION.violet
-  const label = lockedNightsLabel(count)
   return (
-    <ScalePress
-      style={[styles.inset, styles.locked, { backgroundColor: sel.fill, borderColor: sel.edge }]}
-      pressedScale={0.97}
-      haptic={false}
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      accessibilityHint="Opens Blend’n+"
-    >
-      <Icon name="lock" size={ICON.control} color={sel.glyph} />
-      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink, styles.shrink]}>
-        {label}
-      </Text>
-      <Icon name="chevron-right" size={ICON.inline} color={sel.glyph} />
-    </ScalePress>
+    <Button kind="lit" size="md" icon="lock" label={lockedNightsLabel(count)} accessibilityHint="Opens Blend’n+" onPress={onPress} style={[styles.inset, styles.locked]} />
   )
 }
 
@@ -902,6 +1025,7 @@ function HeroAction({ icon, accessibilityLabel, onPress }: { icon: IconName; acc
 function GoingRow({
   title,
   cover,
+  stamp,
   plate,
   category,
   label,
@@ -917,6 +1041,8 @@ function GoingRow({
 }: {
   title: string
   cover?: string | null
+  /** Flow 4 G-A: the date stamp leads the row in place of a cover. */
+  stamp?: { iso: string; timeZone?: string | null; past?: boolean }
   /** A place's type art in place of a cover (a visit). */
   plate?: string
   /** The event's category: with no cover, its plate (DS-12, D8), never an empty box. */
@@ -936,7 +1062,7 @@ function GoingRow({
 }) {
   const row = (
     <View style={[styles.inset, styles.row]}>
-      <EventCard key={retry} kind="row" title={title} cover={cover} plate={plate} category={category} testID={testID} label={label} inert={inert} time={time} venue={venue ?? ''} onPress={onPress} onLongPress={onLongPress ? () => onLongPress() : undefined} style={styles.shrink} />
+      <EventCard key={retry} kind="row" title={title} cover={cover} stamp={stamp} plate={plate} category={category} testID={testID} label={label} inert={inert} time={time} venue={venue ?? ''} onPress={onPress} onLongPress={onLongPress ? () => onLongPress() : undefined} style={styles.shrink} />
       {trailing ? <View style={styles.trailing}>{trailing}</View> : null}
     </View>
   )
@@ -958,7 +1084,7 @@ function TextAction({ label, accessibilityLabel, onPress, testID }: { label: str
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
-      hitSlop={(minTarget() - SPACE.xl) / 2}
+      hitSlop={(minTarget() - TYPE.meta.lineHeight) / 2}
       style={({ pressed }) => pressed && styles.pressed}
     >
       <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} numberOfLines={1} style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.ink]}>
@@ -975,7 +1101,7 @@ function RowMore({ title, onPress }: { title: string; onPress: () => void }) {
       onPress={onPress}
       pressedScale={0.97}
       haptic={false}
-      hitSlop={(minTarget() - HEART) / 2}
+      hitSlop={(minTarget() - MARK) / 2}
       accessibilityRole="button"
       accessibilityLabel={`More about ${title}`}
       accessibilityHint="Share, directions, add to calendar"
@@ -1028,20 +1154,20 @@ function RowNote({ text, bad = false }: { text: string; bad?: boolean }) {
   return <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), bad ? styles.bad : styles.secondary]}>{text}</Text>
 }
 
-/** Saved: a 32 pt white disc with the ink heart; the tap removes the save (with Undo). */
-function SavedHeart({ title, onPress }: { title: string; onPress: () => void }) {
+/** Saved: the filled bookmark (going-lifecycle S1, sheet 08); the tap removes the save (with Undo). */
+function SavedMark({ title, onPress }: { title: string; onPress: () => void }) {
   return (
     <ScalePress
       onPress={onPress}
       pressedScale={0.97}
       haptic={false}
-      hitSlop={(minTarget() - HEART) / 2}
+      hitSlop={(minTarget() - MARK) / 2}
       accessibilityRole="button"
       accessibilityLabel={`Saved, ${title}`}
       accessibilityHint="Removes it from saved"
-      style={styles.heart}
+      style={styles.mark}
     >
-      <Icon name="heart" size={ICON.inline} color={COLOR.selectionInk} active />
+      <Icon name="bookmark" size={ICON.control} color={COLOR.textPrimary} filled />
     </ScalePress>
   )
 }
@@ -1068,23 +1194,17 @@ const END_THRESHOLD = 1.5
 
 /** The next-up card's photo. */
 const HERO_PHOTO = 180
+/** The Next up ⋯ (SCRUM-1074, board `.next .ph .ib`): 10 inside the photo, which sits `SPACE.sm` inside the card. */
+const HERO_MORE_INSET = SPACE.sm + 10
 /** Loading: the hero card and two rows (flow4.js going `loading`). */
 const SKELETON_HERO = 330
 const SKELETON_ROW = 72
-/** The saved heart's white disc. */
-const HEART = SIZE.tag
+/** A row's trailing controls, the Saved mark and the ⋯: 32 pt, reached at 44 / 48 by slop. */
+const MARK = SIZE.tag
 
-/*
- * Removing a save (DS #16): the row fades out on quick while the ones below close the gap,
- * instead of vanishing and letting the list snap up — the snap hid where the
- * row went. Undo fades it back in at its old place and the list opens for it.
- * The rows carry no blur or shadow, which is what makes a layout transition
- * safe here (see tasks/lessons.md). Reduce Motion: the list simply updates.
- */
-const ROW_OUT = FadeOut.duration(DURATION.quick).easing(Easing.bezier(...EASING.exit))
-const ROW_BACK = FadeIn.duration(DURATION.base).easing(Easing.bezier(...EASING.entrance))
-// The reflow is M.settle (DS #16), the system's own spring, not a timed ease.
-const ROW_REFLOW = LinearTransition.springify().stiffness(SPRING.settle.stiffness).damping(SPRING.settle.damping).mass(SPRING.settle.mass)
+
+/** The Pulse lead's ember underglow (`glowLead`), on Next up (board `.nu`). */
+const NEXT_UP_GLOW = MATERIAL.glowLead.map(({ offsetY, radius, spread, color }) => ({ offsetX: 0, offsetY, blurRadius: radius, spreadDistance: spread, color }))
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: 'transparent' },
@@ -1115,7 +1235,8 @@ const styles = StyleSheet.create({
   // 72 pt rows, 4 apart (the frame steps 76).
   row: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md, minHeight: SKELETON_ROW, marginTop: SPACE.xs },
   // Next up: a solid ticket, the photo inset 8 inside the card's 32 corner.
-  hero: { padding: SPACE.sm, backgroundColor: COLOR.surface, borderRadius: RADIUS.card },
+  // Flow 4 G-A: Next up keeps its cover and wears the Pulse lead's underglow (Foundations C, "lit from behind").
+  hero: { padding: SPACE.sm, backgroundColor: COLOR.surface, borderRadius: RADIUS.card, boxShadow: NEXT_UP_GLOW },
   heroPhoto: { borderRadius: RADIUS.mediaInCard, overflow: 'hidden' },
   heroBadge: { position: 'absolute', left: SPACE.md, top: SPACE.md },
   // 12 under the photo, then the details' 4 / 12 / 6 (flow4.js going `det`).
@@ -1133,6 +1254,9 @@ const styles = StyleSheet.create({
   },
   // The details' 6 gap plus the group's 4 above it; the details' 8 below.
   heroActions: { flexDirection: 'row', gap: SPACE.sm, marginTop: SPACE.sm + SPACE.xxs, paddingHorizontal: SPACE.md, paddingBottom: SPACE.sm },
+  // `.nlb`: 16 from the place's glyphs (measured on going-new), and 16 over the buttons (their own 10, plus 6).
+  heroMore: { position: 'absolute', top: HERO_MORE_INSET, right: HERO_MORE_INSET },
+  heroLobby: { marginHorizontal: SPACE.md, marginTop: SPACE.md + SPACE.xxs + 1, marginBottom: SPACE.xs + SPACE.xxs },
   heroAction: {
     height: SIZE.control,
     flexDirection: 'row',
@@ -1146,30 +1270,15 @@ const styles = StyleSheet.create({
   // 24 under the hero, 12 between rows (flow4.js going `loading`).
   skeletonFirstRow: { marginTop: SPACE.xl },
   skeletonRow: { marginTop: SPACE.md },
-  locked: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACE.md,
-    marginTop: SPACE.md,
-    padding: SPACE.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: RADIUS.rowInCard,
-  },
+  locked: { marginTop: SPACE.md },
   heroLit: { flex: 1 },
   // The ⋯ and the "Show more" row: the row's own air, nothing bordered.
   // Controls beside each other keep their 44 apart (the Android 48 reach is 8 either side of a 32), so no two reaches overlap.
-  trailing: { flexDirection: 'row', alignItems: 'center', gap: minTarget() - HEART },
-  more: { width: HEART, height: HEART, alignItems: 'center', justifyContent: 'center' },
+  trailing: { flexDirection: 'row', alignItems: 'center', gap: minTarget() - MARK },
+  more: { width: MARK, height: MARK, alignItems: 'center', justifyContent: 'center' },
   moreRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACE.sm, minHeight: minTarget(), marginTop: SPACE.xs },
   venueTag: { height: SPACE.xl, paddingHorizontal: SPACE.sm, borderRadius: RADIUS.capsule, backgroundColor: COLOR.surface, justifyContent: 'center' },
-  heart: {
-    width: HEART,
-    height: HEART,
-    borderRadius: RADIUS.capsule,
-    backgroundColor: COLOR.selectionFill,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  mark: { width: MARK, height: MARK, alignItems: 'center', justifyContent: 'center' },
 })
 
 /*

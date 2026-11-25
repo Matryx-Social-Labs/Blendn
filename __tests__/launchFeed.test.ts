@@ -41,7 +41,7 @@ describe('Pulse launch', () => {
   })
 
   it('persists an inferred city so the next launch starts scoped', () => {
-    expect(src).toMatch(/selection\?\.source === 'inferred'[\s\S]{0,120}storeCity\(selection\.city, 'inferred'\)/)
+    expect(src).toMatch(/selection\?\.source === 'inferred'[\s\S]{0,120}storeCity\(selection\)/)
   })
 
   it('keys every location-scoped read on the same rounded fix', () => {

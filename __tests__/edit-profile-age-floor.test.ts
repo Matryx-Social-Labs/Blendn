@@ -32,7 +32,8 @@ describe('the account floor is 18', () => {
     expect(accountAgeError('17', { required: true })).toBe(ADULTS_ONLY)
     expect(accountAgeError('13', { required: true })).toBe(ADULTS_ONLY)
     expect(accountAgeError('18', { required: true })).toBeNull()
-    expect(accountAgeError('121', { required: true })).toBe('Enter a valid age between 18 and 120')
+    expect(accountAgeError('101', { required: true })).toBe('Enter your real age.')
+    expect(accountAgeError('abc', { required: true })).toBe('Enter a valid age between 18 and 100')
   })
 
   it('leaves an age that is optional alone when it is blank', () => {
@@ -55,9 +56,10 @@ describe('Edit profile', () => {
     expect(profileFormErrors({ name: 'Asha', age: '17', storedAge: null }).age).toBe(ADULTS_ONLY)
   })
 
-  it('refuses 121 and anything that is not a whole number, naming the real range', () => {
-    for (const age of ['121', 'abc', '17.5']) {
-      expect(profileFormErrors({ name: 'Asha', age, storedAge: null }).age).toBe('Enter a valid age between 18 and 120')
+  it('refuses 101 as not real, and anything that is not a whole number, naming the range', () => {
+    expect(profileFormErrors({ name: 'Asha', age: '101', storedAge: null }).age).toBe('Enter your real age.')
+    for (const age of ['abc', '17.5']) {
+      expect(profileFormErrors({ name: 'Asha', age, storedAge: null }).age).toBe('Enter a valid age between 18 and 100')
     }
   })
 
@@ -83,11 +85,11 @@ describe('the birth date uses the same floor', () => {
       .slice(0, 10)
   }
 
-  it('admits 18 today and 120, refuses 18 tomorrow and 121', () => {
+  it('admits 18 today and 100, refuses 18 tomorrow and 101', () => {
     expect(isCompleteDateOfBirth(dobForAge(18))).toBe(true)
-    expect(isCompleteDateOfBirth(dobForAge(120))).toBe(true)
+    expect(isCompleteDateOfBirth(dobForAge(100))).toBe(true)
     expect(isCompleteDateOfBirth(dobForAge(18, 1))).toBe(false)
-    expect(isCompleteDateOfBirth(dobForAge(121))).toBe(false)
+    expect(isCompleteDateOfBirth(dobForAge(101))).toBe(false)
   })
 
   it('says a real birth date is under 18, and nothing about a date that is not one', () => {
@@ -105,7 +107,7 @@ describe('one age rule for every form that takes an age', () => {
 
   it('is the one isAccountAge, not numbers written into each screen', () => {
     expect(isAccountAge(18)).toBe(true)
-    expect(isAccountAge(120)).toBe(true)
+    expect(isAccountAge(100)).toBe(true)
     expect(isAccountAge(17)).toBe(false)
     expect(isAccountAge(17.5)).toBe(false)
     expect(isAccountAge(null)).toBe(false)
@@ -123,14 +125,14 @@ describe('one age rule for every form that takes an age', () => {
     expect(src).not.toContain('Used for age-restricted events')
   })
 
-  it('tells "The basics" why Continue is off: under 18, or not a usable date', () => {
+  it('tells "The basics" why Continue is off: under 18, too old, or not a usable date', () => {
     const src = read('app/onboarding/basics.tsx')
     // The date field announces its own sentence as it appears (assertive, with the ring), so the screen only chooses it.
     expect(src).toContain('const underAge = isUnderAccountAge(dateOfBirth)')
-    expect(src).toContain('const dateError = underAge ? ADULTS_ONLY : notADate ? NOT_A_DATE : undefined')
+    expect(src).toContain('const dateError = underAge ? ADULTS_ONLY : tooOld ? DOB_TOO_OLD : notADate ? NOT_A_DATE : undefined')
     expect(src).toContain("const NOT_A_DATE = 'That is not a date we recognise.'")
     // `!dateOfBirth` is never true once the boxes are full, so 30 February showed nothing.
-    expect(src).toMatch(/const notADate = !underAge && !!dateOfBirth && !isCompleteDateOfBirth\(dateOfBirth\)/)
+    expect(src).toMatch(/const notADate = !underAge && !tooOld && !!dateOfBirth && !isCompleteDateOfBirth\(dateOfBirth\)/)
     expect(src).not.toMatch(/&& !dateOfBirth \? \(/)
     // The two cases are disjoint: an impossible date is never "under 18".
     expect(isUnderAccountAge('2010-02-30')).toBe(false)
@@ -149,7 +151,7 @@ describe('one age rule for every form that takes an age', () => {
     const refused = src.slice(src.indexOf('if (errors.name || errors.age)')).slice(0, 900)
     // To the Basic Information card's own offset, not 0 (the photo grid)...
     expect(refused).toMatch(/scrollRef\.current\?\.scrollTo\(\{ *y: *basicInfoY\.current/)
-    expect(src).toContain('<EditCard title="Basic information" onLayout={(y) => (basicInfoY.current = y)}>')
+    expect(src).toContain('<EditCard title="You" onLayout={(y) => (basicInfoY.current = y)}>')
     // ...and focus on the field to fix, not left on Save.
     expect(refused).toContain('(errors.name ? nameInputRef : ageInputRef).current?.focus()')
     expect(src).toMatch(/label="Name"\s*inputRef=\{nameInputRef\}/)

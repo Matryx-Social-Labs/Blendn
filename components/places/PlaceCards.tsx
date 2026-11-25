@@ -1,4 +1,3 @@
-import { Image } from 'expo-image'
 import { memo, useEffect, useState } from 'react'
 import { Platform, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated'
@@ -28,10 +27,12 @@ import {
   plateFor,
   tileLabel,
   tonightEvent,
+  type DistanceShown,
   type PlaceTypeFilter,
 } from '../../lib/placesPane'
-import { QuietRow } from './PlaceParts'
+import { PlaceMeta, QuietRow } from './PlaceParts'
 import { openPlace } from './openPlace'
+import { ContainedCover } from '../ds/LinkPreviewCard'
 
 /** The live tile is a square (BUILD-SPEC B2); the open card is 200 × 132 (B3). */
 export const TILE_WIDTH = 156
@@ -50,7 +51,7 @@ function PlaceArt({ venue, now, size, radius }: { venue: VenueListItem; now: num
   if (cover) {
     return (
       <View style={frame}>
-        <Image source={{ uri: cover }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" accessible={false} />
+        <ContainedCover uri={cover} auto />
       </View>
     )
   }
@@ -109,25 +110,6 @@ function Glow({ bucket, size }: { bucket: Bucket; size: number }) {
   )
 }
 
-/** "{area} · {distance mono}" or the type line; one line. */
-function MetaLine({ parts, distance }: { parts: (string | null)[]; distance: string | null }) {
-  const bold = useBoldText()
-  const lead = parts.filter(Boolean).join(' · ')
-  return (
-    <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} numberOfLines={1} style={[font('meta', bold), styles.secondary]}>
-      {lead}
-      {distance ? (
-        <>
-          {lead ? ' · ' : ''}
-          <Text style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.tabular]}>
-            <MonoRun text={distance} />
-          </Text>
-        </>
-      ) : null}
-    </Text>
-  )
-}
-
 const pressProps = {
   haptic: false,
   pressedScale: Platform.OS === 'android' ? 1 : PRESS.scale,
@@ -135,11 +117,11 @@ const pressProps = {
 } as const
 
 /** A live tile: the plate (or tonight's cover) at 156 square, the bucket's glow, the pill. */
-export const LiveTile = memo(function LiveTile({ venue, now }: { venue: VenueListItem; now: number }) {
+export const LiveTile = memo(function LiveTile({ venue, now, reading }: { venue: VenueListItem; now: number; reading: DistanceShown }) {
   const bold = useBoldText()
   const liveText = bucketLabel(venue.liveNow)
   return (
-    <ScalePress {...pressProps} onPress={() => openPlace(venue)} accessibilityRole="button" accessibilityLabel={tileLabel(venue)} testID={`place-tile-${venue.id}`} style={styles.tile}>
+    <ScalePress {...pressProps} onPress={() => openPlace(venue, reading)} accessibilityRole="button" accessibilityLabel={tileLabel(venue, reading)} testID={`place-tile-${venue.id}`} style={styles.tile}>
       <View style={styles.tileArt}>
         <PlaceArt venue={venue} now={now} size={TILE_WIDTH} radius={RADIUS.mediaInCard} />
         <Glow bucket={venue.liveNow} size={TILE_WIDTH} />
@@ -153,19 +135,19 @@ export const LiveTile = memo(function LiveTile({ venue, now }: { venue: VenueLis
         <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} numberOfLines={1} style={[font('bodyStrong', bold), styles.ink]}>
           {venue.name}
         </Text>
-        <MetaLine parts={[placeArea(venue)]} distance={distanceText(venue.distance)} />
+        <PlaceMeta lead={[placeArea(venue)].filter(Boolean).join(' · ')} distance={distanceText(venue.distance, reading)} />
       </View>
     </ScalePress>
   )
 })
 
 /** An Open tonight card: 200 × 132 art, then the name, the type line and one line about tonight. */
-export const OpenCard = memo(function OpenCard({ venue, now }: { venue: VenueListItem; now: number }) {
+export const OpenCard = memo(function OpenCard({ venue, now, reading }: { venue: VenueListItem; now: number; reading: DistanceShown }) {
   const bold = useBoldText()
   const tonight = tonightEvent(venue.nextEvent, now)
   const hours = tonight ? null : hoursLine(venue.tonight, now)
   return (
-    <ScalePress {...pressProps} onPress={() => openPlace(venue)} accessibilityRole="button" accessibilityLabel={openLabel(venue, now)} testID={`place-open-${venue.id}`} style={styles.openCard}>
+    <ScalePress {...pressProps} onPress={() => openPlace(venue, reading)} accessibilityRole="button" accessibilityLabel={openLabel(venue, now, reading)} testID={`place-open-${venue.id}`} style={styles.openCard}>
       <View style={styles.openArt}>
         <PlaceArt venue={venue} now={now} size={OPEN_CARD_WIDTH} radius={RADIUS.mediaInCard} />
       </View>
@@ -173,7 +155,7 @@ export const OpenCard = memo(function OpenCard({ venue, now }: { venue: VenueLis
         <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} numberOfLines={1} style={[font('bodyStrong', bold), styles.ink]}>
           {venue.name}
         </Text>
-        <MetaLine parts={[guestTypeLabel(venue), placeArea(venue)]} distance={distanceText(venue.distance)} />
+        <PlaceMeta lead={[guestTypeLabel(venue), placeArea(venue)].filter(Boolean).join(' · ')} distance={distanceText(venue.distance, reading)} />
         {tonight ? (
           <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} numberOfLines={1} style={[font('meta', bold), styles.ink]}>
             <Text style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.tabular]}>
@@ -195,31 +177,71 @@ export const OpenCard = memo(function OpenCard({ venue, now }: { venue: VenueLis
 })
 
 /** Live now: the heading with its count, then the tiles (one snapping rail). */
-export const LiveSection = memo(function LiveSection({ venues, total, now, onSeeAll, focused }: { venues: VenueListItem[]; total: number; now: number; onSeeAll: () => void; focused: boolean }) {
+export const LiveSection = memo(function LiveSection({
+  venues,
+  total,
+  now,
+  reading,
+  onSeeAll,
+  focused,
+}: {
+  venues: VenueListItem[]
+  total: number
+  now: number
+  reading: DistanceShown
+  onSeeAll: () => void
+  focused: boolean
+}) {
   return (
     <View style={styles.section}>
       <View style={styles.gutter}>
         <SectionHeader live title="Live now" count={total} action={focused ? undefined : { label: 'See all', onPress: onSeeAll }} testID="places-live-header" />
       </View>
-      <Rail data={venues} itemWidth={TILE_WIDTH} renderItem={({ item }) => <LiveTile venue={item} now={now} />} testID="places-live-rail" />
+      <Rail data={venues} itemWidth={TILE_WIDTH} renderItem={({ item }) => <LiveTile venue={item} now={now} reading={reading} />} testID="places-live-rail" />
     </View>
   )
 })
 
 /** Open tonight: the heading with its count, then the cards. */
-export const OpenSection = memo(function OpenSection({ venues, total, now, onSeeAll, focused }: { venues: VenueListItem[]; total: number; now: number; onSeeAll: () => void; focused: boolean }) {
+export const OpenSection = memo(function OpenSection({
+  venues,
+  total,
+  now,
+  reading,
+  onSeeAll,
+  focused,
+}: {
+  venues: VenueListItem[]
+  total: number
+  now: number
+  reading: DistanceShown
+  onSeeAll: () => void
+  focused: boolean
+}) {
   return (
     <View style={styles.section}>
       <View style={styles.gutter}>
         <SectionHeader title="Open tonight" count={total} action={focused ? undefined : { label: 'See all', onPress: onSeeAll }} testID="places-open-header" />
       </View>
-      <Rail data={venues} itemWidth={OPEN_CARD_WIDTH} renderItem={({ item }) => <OpenCard venue={item} now={now} />} testID="places-open-rail" />
+      <Rail data={venues} itemWidth={OPEN_CARD_WIDTH} renderItem={({ item }) => <OpenCard venue={item} now={now} reading={reading} />} testID="places-open-rail" />
     </View>
   )
 })
 
 /** Near you: five rows, or (without a fix) the location card. "Show on map" lifts the drawer to half and fits the pins. */
-export const NearSection = memo(function NearSection({ venues, hasFix, onAsk, onShowOnMap }: { venues: VenueListItem[]; hasFix: boolean; onAsk: () => void; onShowOnMap?: () => void }) {
+export const NearSection = memo(function NearSection({
+  venues,
+  hasFix,
+  reading,
+  onAsk,
+  onShowOnMap,
+}: {
+  venues: VenueListItem[]
+  hasFix: boolean
+  reading: DistanceShown
+  onAsk: () => void
+  onShowOnMap?: () => void
+}) {
   return (
     <View style={styles.section}>
       <View style={styles.gutter}>
@@ -228,7 +250,7 @@ export const NearSection = memo(function NearSection({ venues, hasFix, onAsk, on
       {hasFix ? (
         <View>
           {venues.map((venue, i) => (
-            <QuietRow key={venue.id} venue={venue} n={i + 1} label={nearLabel(venue, i + 1)} testID={`place-near-${venue.id}`} />
+            <QuietRow key={venue.id} venue={venue} reading={reading} n={i + 1} label={nearLabel(venue, i + 1, reading)} testID={`place-near-${venue.id}`} />
           ))}
         </View>
       ) : (

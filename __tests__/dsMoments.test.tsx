@@ -16,10 +16,17 @@ import { MomentMatch, type MomentMatchProps } from '../components/ds/MomentMatch
 import { ASK_AT, MomentPour, PANEL_TOP, ROOM_AT } from '../components/ds/MomentPour'
 import { MomentReady } from '../components/ds/MomentReady'
 import { MomentRecap, type MomentRecapProps } from '../components/ds/MomentRecap'
+
 import { COLOR, DURATION, MATERIAL, RADIUS, SPACE, SPRING } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 import { markOffline, markOnline } from '../lib/networkStatus'
 import { dismissModals } from '../lib/pendingRoute'
+
+// The chat glyph as something a query can find (lucide draws bare paths).
+jest.mock('lucide-react-native/icons/message-circle', () => {
+  const { View } = jest.requireActual('react-native')
+  return { __esModule: true, default: () => <View testID="glyph-message-circle" /> }
+})
 
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
 jest.mock('react-native-reanimated', () => {
@@ -68,10 +75,10 @@ const PHOTO = 'https://example.com/me.jpg'
 
 function match(props: Partial<MomentMatchProps> = {}) {
   const p: MomentMatchProps = {
-    you: { kind: 'photo', uri: PHOTO },
+    you: { kind: 'photo', uri: PHOTO, name: 'Asha' },
     them: { kind: 'creature', pseudonym: 'Velvet Heron' },
     name: 'Velvet Heron',
-    reason: 'Both into live music',
+    tonight: { question: 'What are you hoping to find tonight?', answer: 'Someone to split a cab back to Koramangala' },
     opener: 'Which set are you here for?',
     onSayHi: jest.fn(),
     onClose: jest.fn(),
@@ -81,14 +88,16 @@ function match(props: Partial<MomentMatchProps> = {}) {
   return { p, el: <MomentMatch {...p} /> }
 }
 
-describe('<MomentMatch> · It’s mutual (#11, ROUND3 D · 4.4)', () => {
-  it('says it, with why and the opener, then Say hi and Keep looking', async () => {
+describe('<MomentMatch> · You both waved (Wave M-A, SCRUM-1042)', () => {
+  it('says it, with tonight’s question and their answer as the opener, then Say hi and Keep looking', async () => {
     const { p, el } = match()
     await render(el)
-    expect(screen.getByText('It’s mutual')).toBeTruthy()
-    expect(screen.getByText('You and Velvet Heron matched · Both into live music')).toBeTruthy()
-    expect(screen.getByText('TRY')).toBeTruthy()
-    expect(screen.getByText('“Which set are you here for?”')).toBeTruthy()
+    expect(screen.getByText('You both waved')).toBeTruthy()
+    expect(screen.queryByText(/mutual|matched/)).toBeNull()
+    expect(screen.getByText('You and Velvet Heron · anonymous chat open')).toBeTruthy()
+    expect(screen.getByText('START WITH TONIGHT’S QUESTION')).toBeTruthy()
+    expect(screen.getByText('What are you hoping to find tonight?')).toBeTruthy()
+    expect(screen.getByText('Velvet Heron: “Someone to split a cab back to Koramangala”').props.numberOfLines).toBe(3)
     await advance(1260)
     await fireEvent.press(screen.getByRole('button', { name: 'Say hi' }))
     expect(p.onSayHi).toHaveBeenCalledTimes(1)
@@ -96,25 +105,55 @@ describe('<MomentMatch> · It’s mutual (#11, ROUND3 D · 4.4)', () => {
     expect(p.onClose).toHaveBeenCalledTimes(1)
   })
 
+  it('Say hi carries the board’s chat glyph (owner ruling 2026-11-13, Wave item 1)', async () => {
+    const { el } = match({ testID: 'mm' })
+    await render(el)
+    expect(within(screen.getByTestId('mm-say-hi')).queryByTestId('glyph-message-circle')).toBeTruthy()
+  })
+
+  it('at the largest text the words and Say hi share one scroll, so the opener never runs under the buttons (drive, iOS AX XXXL)', async () => {
+    const { el } = match({ testID: 'mm' })
+    await render(el)
+    const scroll = screen.getByTestId('mm-scroll')
+    expect(within(scroll).getByText('You both waved')).toBeTruthy()
+    expect(within(scroll).getByTestId('mm-actions')).toBeTruthy()
+    expect(StyleSheet.flatten(scroll.props.contentContainerStyle)).toMatchObject({ flexGrow: 1 })
+  })
+
   it('is announced once, everything in it from t0', async () => {
     await render(match().el)
     expect(announce).toHaveBeenCalledTimes(1)
-    expect(announce).toHaveBeenCalledWith('It’s mutual. You and Velvet Heron matched, Both into live music. Try: Which set are you here for?', { queue: true })
+    expect(announce).toHaveBeenCalledWith(
+      'You both waved. You and Velvet Heron, anonymous chat open. Start with tonight’s question: What are you hoping to find tonight? Velvet Heron said: Someone to split a cab back to Koramangala',
+      { queue: true }
+    )
+  })
+
+  it('with no question tonight (or no answer), the opener to try, never an empty card', async () => {
+    await render(match({ tonight: null }).el)
+    expect(screen.getByText('TRY')).toBeTruthy()
+    expect(screen.getByText('“Which set are you here for?”')).toBeTruthy()
+    await screen.unmount()
+    await render(match({ tonight: { question: 'What are you hoping to find tonight?', answer: null } }).el)
+    expect(screen.getByText('What are you hoping to find tonight?')).toBeTruthy()
+    expect(screen.queryByText(/Velvet Heron: /)).toBeNull()
   })
 
   it.each([
-    ['photo · photo', { kind: 'photo', uri: PHOTO }, { kind: 'photo', uri: PHOTO }, true],
-    ['photo · creature', { kind: 'photo', uri: PHOTO }, { kind: 'creature', pseudonym: 'Velvet Heron' }, false],
+    ['photo · photo', { kind: 'photo', uri: PHOTO, name: 'Asha' }, { kind: 'photo', uri: PHOTO, name: 'Asha' }, true],
+    ['photo · creature', { kind: 'photo', uri: PHOTO, name: 'Asha' }, { kind: 'creature', pseudonym: 'Velvet Heron' }, false],
     ['creature · creature', { kind: 'creature', pseudonym: 'Cosmic Panda' }, { kind: 'creature', pseudonym: 'Velvet Heron' }, false],
   ] as const)('%s: never shows a face either person hid', async (_, you, them, theirPhoto) => {
     await render(match({ you, them }).el)
     expect(!!screen.queryByTestId('m-them-body', HIDDEN)).toBe(theirPhoto)
   })
 
-  it('the faces meet on M.pop, three hearts arc, and H.match lands on the frame the bump does', async () => {
+  it('the faces meet on M.pop, two hands rise and meet (no hearts), and H.match lands on the frame the bump does', async () => {
     await render(match().el)
     expect(sprungWith('pop')).toBe(true)
-    expect(screen.getAllByTestId(/^m-heart-/, HIDDEN)).toHaveLength(3)
+    expect(screen.queryAllByTestId(/^m-heart-/, HIDDEN)).toHaveLength(0)
+    expect(screen.getByTestId('m-hand-you', HIDDEN)).toBeTruthy()
+    expect(screen.getByTestId('m-hand-them', HIDDEN)).toBeTruthy()
     await advance(999)
     expect(haptic.match).not.toHaveBeenCalled()
     await advance(1)
@@ -146,11 +185,12 @@ describe('<MomentMatch> · It’s mutual (#11, ROUND3 D · 4.4)', () => {
     expect(screen.getByTestId('m-actions', HIDDEN).props.pointerEvents).toBe('box-none')
   })
 
-  it('Reduce Motion: the faces placed, no hearts, H.match at once', async () => {
+  it('Reduce Motion: the faces and hands placed, crossfades only, H.match at once', async () => {
     reduceMotion.mockReturnValue(true)
     await render(match().el)
     expect(sprungWith('pop')).toBe(false)
-    expect(screen.queryAllByTestId(/^m-heart-/, HIDDEN)).toHaveLength(0)
+    expect(screen.getByTestId('m-hand-you', HIDDEN)).toBeTruthy()
+    expect(screen.queryByTestId('m-spark', HIDDEN)).toBeNull()
     await advance(0)
     expect(haptic.match).toHaveBeenCalledTimes(1)
   })
@@ -194,17 +234,17 @@ function blend(props: Partial<MomentBlendProps> = {}) {
   return { p, el: <MomentBlend {...p} /> }
 }
 
-describe('<MomentBlend> · It’s a Blend (Flow 10.8, §21.5)', () => {
-  it('crew × crew: the counts, nobody named, the shared facets, Open the Blend and Later', async () => {
+describe('<MomentBlend> · It’s a Mix (Flow 10.8, §21.5)', () => {
+  it('crew × crew: the counts, nobody named, the shared facets, Open the Mix and Later', async () => {
     const { p, el } = blend()
     await render(el)
-    expect(screen.getByText('It’s a Blend')).toBeTruthy()
+    expect(screen.getByText('It’s a Mix')).toBeTruthy()
     expect(screen.getByText('Nebula + Orbit · 3 + 4 people')).toBeTruthy()
     expect(screen.getByText('Nobody’s named yet. Everyone’s on tonight’s names until your crew chooses to reveal.')).toBeTruthy()
     expect(screen.getByText('You both: Dance floor · Friendship')).toBeTruthy()
-    expect(announce).toHaveBeenCalledWith('It’s a Blend. Nebula and Orbit, 7 people.', { queue: true })
+    expect(announce).toHaveBeenCalledWith('It’s a Mix. Nebula and Orbit, 7 people.', { queue: true })
     await advance(1200)
-    await fireEvent.press(screen.getByRole('button', { name: 'Open the Blend' }))
+    await fireEvent.press(screen.getByRole('button', { name: 'Open the Mix' }))
     expect(p.onOpen).toHaveBeenCalledTimes(1)
     await fireEvent.press(screen.getByRole('button', { name: 'Later' }))
     expect(p.onLater).toHaveBeenCalledTimes(1)
@@ -278,6 +318,18 @@ describe('<MomentReady> · the one celebration (Flow 2)', () => {
     await advance(1)
     expect(onDone).toHaveBeenCalledTimes(1)
     expect(haptic.success).toHaveBeenCalledTimes(1)
+  })
+
+  it('the stage root is never flattened, before or after done (SCRUM-921: Android crashed with "child already has a parent")', async () => {
+    // `done` flips the root's pointerEvents and accessibility props, which are what make Fabric flatten a View or not. A
+    // root that can be flattened is re-parented under its children on that flip, in the same batch as the Ready screen
+    // being replaced, and Android dies in addViewAt. jest cannot see the native crash; it can pin the one prop that stops it.
+    await render(<MomentReady onDone={jest.fn()} testID="r" />)
+    expect(screen.getByTestId('r', HIDDEN).props.collapsable).toBe(false)
+    expect(screen.getByTestId('r', HIDDEN).props.pointerEvents).toBe('auto')
+    await advance(1300)
+    expect(screen.getByTestId('r', HIDDEN).props.pointerEvents).toBe('none')
+    expect(screen.getByTestId('r', HIDDEN).props.collapsable).toBe(false)
   })
 
   it('a tap on the mark skips (it is not a hit target)', async () => {
@@ -465,7 +517,7 @@ describe('<MomentPour> · the check-in success (motion #9)', () => {
 
 function recap(props: Partial<MomentRecapProps> = {}) {
   const p: MomentRecapProps = {
-    face: { kind: 'photo', uri: PHOTO },
+    face: { kind: 'photo', uri: PHOTO, name: 'Asha' },
     title: 'Vinyl Night',
     venue: 'Toit',
     minutes: 135,
@@ -575,7 +627,7 @@ describe('/preview/ds-p5', () => {
     }
     expect(screen.getByTestId('ds-recap-rated', HIDDEN)).toBeTruthy()
     expect(screen.getByTestId('ds-orbs-feed-late', HIDDEN)).toBeTruthy()
-    expect(screen.getByTestId('ds-emblem-orbit-field', HIDDEN)).toBeTruthy()
+    expect(screen.getByTestId('ds-scene-stage', HIDDEN)).toBeTruthy()
   })
 })
 

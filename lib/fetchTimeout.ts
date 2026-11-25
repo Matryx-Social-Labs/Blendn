@@ -25,8 +25,8 @@
  *
  * ## Aborts are not network errors
  *
- * `apiClient` retries on `error instanceof TypeError`, which is what `fetch`
- * throws when the connection genuinely fails. An abort is not a `TypeError`, so
+ * `apiClient` retries when `isNetworkFailure(error)`: what `fetch` throws when the connection genuinely fails (a `TypeError`
+ * from the XHR fetch, a `FetchError` from `expo/fetch`: see below). An abort is not one, so
  * it falls straight through to the error return without burning retries — which
  * is what we want, since the deadline has already covered the waiting. Use
  * `isTimeoutError` to tell the user which of the two happened; "took too long"
@@ -143,4 +143,35 @@ export async function settleWithin<T>(work: Promise<T>, ms: number, fallback: T)
   } finally {
     clearTimeout(timer)
   }
+}
+
+/**
+ * Words a native transport uses for "the network did not carry it", for the failures that reach us as a plain `Error` (a body
+ * that drops mid-read, where `expo/fetch` errors the stream with the native text as it is). iOS (NSURLError) and Android
+ * (OkHttp/java.net) both. Deliberately not "timed out" (that is the deadline's, `isTimeoutError`) and not "aborted".
+ */
+const NATIVE_NETWORK_TEXT =
+  /network (request failed|connection|is unreachable)|internet connection|offline|unable to resolve host|unknownhost|no address associated|failed to connect|connection (reset|refused|abort|closed|lost)|software caused connection|unexpected end of stream|econn|enotfound|hostname could not be found|could not connect to the server|socket/i
+
+/**
+ * Did this reject because the network did not carry the request (airplane mode, no signal, no route), rather than because we
+ * gave up or the answer was bad?
+ *
+ * One rule for both transports, because they reject differently (SCRUM-898):
+ * - the XHR `fetch` rejects with a `TypeError` ("Network request failed");
+ * - `expo/fetch`, the global `fetch` since SDK 56, rejects with a `FetchError` -- an `Error`, never a `TypeError` -- whose
+ *   message is "fetch failed: <native text>", on Android and iOS alike; a body that drops while it is read rejects with a
+ *   plain `Error(<native text>)`.
+ * `apiClient` used to ask `instanceof TypeError` alone, so on Android (and in practice iOS) offline fell through to the
+ * generic failure: no retry, `networkStatus` left 'unknown', and no screen's OfflineBanner ever drawn.
+ *
+ * Our own deadline (`AbortError`) and an abort the transport reports ("The operation was aborted.") are never the network.
+ */
+export function isNetworkFailure(error: unknown): boolean {
+  if (isTimeoutError(error)) return false
+  if (error instanceof TypeError) return true
+  if (!(error instanceof Error)) return false
+  const text = error.message
+  if (/operation was aborted/i.test(text)) return false
+  return /^fetch failed:/i.test(text) || NATIVE_NETWORK_TEXT.test(text)
 }

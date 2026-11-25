@@ -1,7 +1,10 @@
 import { barHeight, barTop } from '../../lib/barGeometry'
+import { handRoomPerson } from '../../lib/roomPersonHandoff'
+import { CHECK_OUT_CONSEQUENCE, CHECK_OUT_LABEL, CHECKING_OUT_LABEL, STAY_LABEL, checkOutCaption, checkOutQuestion } from '../../lib/switchCopy'
 import { router } from 'expo-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { BackHandler, Platform, StyleSheet, Text, View } from 'react-native'
+import type { MutableRefObject } from 'react'
+import { Platform, StyleSheet, View } from 'react-native'
 import Animated, {
   Easing,
   FadeIn,
@@ -17,55 +20,76 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { scheduleOnRN } from 'react-native-worklets'
 
 import { apiClient } from '../../lib/apiClient'
-import { blendnClosed, isLiveHint, openPass, takePendingPerson, useDoor, usePendingPerson } from '../../lib/blendnOverlay'
-import { crewsThatMayLikePeople, crewMessage, type BlendRef, type CrewsAtEvent } from '../../lib/crews'
+import { interestNames } from '../../lib/meProfile'
+import { usePassReach } from '../../lib/usePassReach'
+import { blendnClosed, getLeftNotice, isLiveHint, openPass, setDoor, setLeftNotice, setLiveRoomChat, setRoomUp, setRoomTab, takePendingPerson, takeReturnTo, useRoomTab, useDoor, usePendingPerson } from '../../lib/blendnOverlay'
+import type { RoomTab } from '../../lib/roomTab'
+import { useChatTabUnread } from '../../lib/useChatTabUnread'
+import { RoomChat } from '../chat/RoomChat'
+import { blendWith, crewsThatMayLikePeople, crewMessage, crewWaveState, type BlendRef, type CrewsAtEvent } from '../../lib/crews'
+import { showCrewSafetyActions } from '../../lib/crewSafety'
+import { askOpenToCrews, waveBackAtCrew, type WaveBackOutcome } from '../../lib/crewWaveBack'
 import { crewsApi } from '../../lib/crewsApi'
-import { COLOR, DURATION, EASING, FONT_FAMILY, MATERIAL, PRESS, RADIUS, SIZE, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
-import type { TrayButton, TrayExtra } from '../../lib/locationFix'
+import { COLOR, DURATION, EASING, MATERIAL, RADIUS, REDUCE_MOTION, SIZE, SPACE } from '../../lib/design/tokens'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
-import { overlapOf } from '../../lib/overlapLine'
 import { useRoomCancelled } from '../../lib/useRoomCancelled'
-import { useFriendsHere, useMessageFriend } from '../../lib/friendsHere'
-import { useOffline } from '../OfflineBanner'
-import { everyoneHead, meetNext, reasonLine, reasonLines } from '../../lib/roomMoments'
+import { firstNameOf, useFriendsHere } from '../../lib/friendsHere'
+import { everyoneHead, meetNext } from '../../lib/roomMoments'
 import { eventRoomDoor } from '../../lib/eventRoomDoor'
-import { roomRecap, type RoomRecap as Recap } from '../../lib/roomRecap'
+import { recapPeopleOpen, roomRecap, type RoomRecap as Recap } from '../../lib/roomRecap'
 import { bannerState } from '../../lib/roomVisibility'
-import { newestWave, useRoomWaves, wavedAtYouLabel, waveShown } from '../../lib/roomWaves'
+import { isCrewWave, useReceivedWaves } from '../../lib/receivedWaves'
+import { ignoreCrewWaves, useRoomWaves, waveKey, waveShown, type RoomWave } from '../../lib/roomWaves'
+import { wavedAgo, WAVE_SETTLE_MS, WAVE_SETTLE_REDUCED_MS } from '../../lib/waves'
 import { showUserSafetyActions } from '../../lib/safetyUtils'
 import { showSheet } from '../../lib/sheet'
+import { isMuted, muteLabel, useRoomMute } from '../../lib/roomMembership'
+import { MuteSheet } from '../chat/RoomSheets'
 import { useAuth } from '../../lib/useAuth'
 import { useCheckInFlow } from '../../lib/useCheckInFlow'
 import { useLatest } from '../../lib/useLatest'
+import { useFocusedBackHandler } from '../../lib/useFocusedBackHandler'
 import { useRoom, type RoomPerson } from '../../lib/useRoom'
 import { useRoomControls } from '../../lib/useRoomControls'
+import { myMainPhoto } from '../../lib/myPhoto'
+import { markSeed } from '../../lib/creatureSeed'
+import { myRoomFace, roomSettingsRoute } from '../../lib/roomState'
 import { useTonight, type TonightEvent } from '../../lib/useTonight'
 import { isNightRated, markNightRated, useRatedNights } from '../../lib/ratedNights'
+import { CrewSheet } from '../crews/CrewSheet'
 import { crewCards, openBlend, useCrewActions, useCrewsHere } from '../crews/CrewsView'
-import { VisibilityBanner, type Visibility } from '../ds/Banner'
+import type { Visibility } from '../ds/Banner'
 import type { Face } from '../ds/Facepile'
 import { IconButton } from '../ds/IconButton'
 import { MomentBlend, type BlendCrew, type BlendPerson } from '../ds/MomentBlend'
 import { MomentMatch } from '../ds/MomentMatch'
 import { MomentPour, ORBS_LIFT_MS, type PourFrame } from '../ds/MomentPour'
 import { MomentRecap } from '../ds/MomentRecap'
+import { PeopleFromTonight } from './PeopleFromTonight'
 import { PersonCard, type PersonVariant } from '../ds/PersonCard'
+import { HoldToConfirm } from '../ds/HoldToConfirm'
 import { Sheet } from '../ds/Sheet'
-import { CONTROL_FONT_CAP, font, HueProvider, minTarget, useBoldText, useIncreaseContrast } from '../ds/shared'
+import { HueProvider, useIncreaseContrast } from '../ds/shared'
 import { Toast, type ToastKind } from '../ds/Toast'
 import { ConnectSheet } from '../grid/ConnectSheet'
-import ScalePress from '../motion/ScalePress'
 import { Material } from '../ui/Material'
+import { CheckInTray, useCheckInTray } from './CheckInTray'
 import { CrewsFoot, CrewsHead, PeopleCrewStrip, RoomCrewCard } from './RoomCrews'
-import { faceOf, RoomSkeleton, useNow } from './RoomSections'
+import { useWithCrew, WithCrewChip } from '../crews/WithCrewChip'
+import { personFace } from '../../lib/personFace'
+import { faceOf, RoomSkeleton, RoomYouCard, useNow } from './RoomSections'
+import { RoomInfoSheet } from './RoomInfoSheet'
+import { contextLine, lensView } from '../../lib/roomLens'
 import { FriendsHere } from './FriendsHere'
 import { RoomCancelled } from './RoomCancelled'
 import { RoomStage, useStage } from './RoomStage'
+import { RoomBar, roomBarHeight } from './RoomBar'
+import { RoomTabs } from './RoomTabs'
 import { RoomView } from './RoomView'
 import { TonightView } from './TonightView'
 import { WaveToast } from './WaveToast'
+import { WavedAtYouStrip } from './WavedAtYouStrip'
 import { markCoachUsed, useCoachMark } from '../../lib/coachMarks'
-import { parseBadges } from '../../lib/profileBadges'
 import { useCoachMarkSpot } from '../ds/CoachMarkHost'
 
 /** Under the top bar's 44 pt circles: Flow 4 sets the title 70 below the safe area (124 on a 54 pt status bar). */
@@ -82,16 +106,6 @@ const MORE_STEP = 20
 
 const gentle = Easing.bezier(...EASING.gentle)
 /** Motion #9, after the pour: the Room crossfades in over D.base (200 ms under Reduce Motion). */
-/**
- * B8 (Prompt 10, approved): a glass pill enters as a 16 pt rise over `base`;
- * the glass stays opaque throughout and only its contents fade. Reduce Motion:
- * it is simply there, and the contents fade.
- */
-const GLASS_RISE = SPACE.lg
-const glassRise = FadeInUp.duration(DURATION.base)
-  .easing(Easing.bezier(...EASING.entrance))
-  .withInitialValues({ opacity: 1, transform: [{ translateY: GLASS_RISE }] })
-const glassContentsIn = FadeIn.duration(DURATION.base).easing(gentle)
 
 /** A first line built from what you share — something to say that isn't "hey". */
 export function openerFor(p: RoomPerson): string {
@@ -106,31 +120,34 @@ export function openerFor(p: RoomPerson): string {
 type Sides = { ours: BlendCrew; theirs: BlendCrew | BlendPerson } | { ours: BlendPerson; theirs: BlendCrew }
 type MadeBlend = { sides: Sides; ref: BlendRef; title: string }
 
-/** Ask who a like goes out as: a crew id, null for "Just me", undefined when they cancel. */
-function chooseAs(crews: CrewsAtEvent['myCrews'], title: string): Promise<string | null | undefined> {
+/** Ask who a like goes out as: a crew id, null for "Just me" (offered only for a crew card), undefined when they cancel. */
+function chooseAs(crews: CrewsAtEvent['myCrews'], title: string, justMe = true): Promise<string | null | undefined> {
   return new Promise((resolve) =>
     showSheet({
       kind: 'actions',
       hue: 'rose',
       title,
-      message: 'Your crew chat says who liked on its behalf.',
+      // A wave at a crew is said in your crew's chat; one at a person is not (admin #1007), and shows them the crew alone.
+      message: justMe ? 'Your crew chat says who waved on its behalf.' : 'They see your crew, never you.',
       onDismiss: () => resolve(undefined),
       actions: [
         ...crews.map((c) => ({ label: c.name, then: () => resolve(c.crewId) })),
-        { label: 'Just me', then: () => resolve(null) },
+        ...(justMe ? [{ label: 'Just me', then: () => resolve(null) }] : []),
         { label: 'Cancel', cancel: true as const },
       ],
     })
   )
 }
 
-type Tray = { visible: boolean; title: string; message: string; buttons: TrayButton[]; extra?: TrayExtra }
-const NO_TRAY: Tray = { visible: false, title: '', message: '', buttons: [] }
 /** round4/r4.js, "The Room". */
 const ROOM_COACH_TEXT = 'People here can’t see your name or photo until you choose to show them. You decide, per event.'
 
 /** A card to open: someone on the roster, or (a wave from someone it doesn't list) only their name: the thin card. */
 type OpenCard = { id: string; name: string }
+/** The person sheet shows this many of their interests (state 2 B's chips, the combined board). */
+const SHEET_INTERESTS = 3
+/** Who the Connect sheet is for, and the opener they tapped to get there (SCRUM-1042), if any. */
+type ConnectTarget = OpenCard & { draft?: string }
 
 /**
  * The Blend'n screen — what the disc in the middle of the bar opens, always
@@ -146,21 +163,32 @@ type OpenCard = { id: string; name: string }
 export function BlendnScreen() {
   const stage = useRef<{ close(): void }>(null)
   const close = useCallback(() => stage.current?.close(), [])
+  /** The content's own layer that back should close first (People from tonight over the Recap), or false. */
+  const backGuardRef = useRef<(() => boolean) | null>(null)
 
-  // Android back closes the overlay rather than leaving the tabs underneath.
-  useEffect(() => {
-    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+  // Android back closes the overlay rather than leaving the tabs underneath — while it is the screen in front: a chat or
+  // a DM pushed from the Room goes back to the Room first (SCRUM-952).
+  useFocusedBackHandler(
+    useCallback(() => {
+      if (backGuardRef.current?.()) return true
       close()
       return true
-    })
-    return () => sub.remove()
-  }, [close])
+    }, [close])
+  )
 
   // The Room is people: the rose world, one hue for the whole screen (People | Crews, the chips, the sheets).
   return (
     <HueProvider value="rose">
-      <RoomStage ref={stage} onClosed={blendnClosed}>
-        <BlendnContent onClose={close} />
+      <RoomStage
+        ref={stage}
+        onClosed={() => {
+          const back = takeReturnTo()
+          blendnClosed()
+          // Opened from an event page ("Blend in"): back to it, not to the Pulse it stepped through (ROOM-13).
+          if (back) router.push({ pathname: '/event/[id]', params: { id: back } as never })
+        }}
+      >
+        <BlendnContent onClose={close} backGuardRef={backGuardRef} />
       </RoomStage>
     </HueProvider>
   )
@@ -182,12 +210,11 @@ function useScrolledPast(): boolean {
   return scrolled
 }
 
-function BlendnContent({ onClose }: { onClose: () => void }) {
+function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGuardRef: MutableRefObject<(() => boolean) | null> }) {
   const insets = useSafeAreaInsets()
   const scrolled = useScrolledPast()
   const contrast = useIncreaseContrast()
   const reduceMotion = useReducedMotion()
-  const bold = useBoldText()
   const room = useRoom()
   const tonight = useTonight()
   const waves = useRoomWaves()
@@ -200,20 +227,8 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
   const [toast, setToast] = useState<{ key: number; kind: ToastKind; text: string } | null>(null)
   const say = useCallback((text: string, kind: ToastKind = 'info') => setToast({ key: Date.now(), kind, text }), [])
 
-  // Friends here (plans/friends-in-room.md C1): the friends at this event who let friends see them.
-  const offline = useOffline()
+  // Friends here (plans/friends-in-room.md C1): the friends at this event who let friends see them; Message is on their screen.
   const friendsHere = useFriendsHere(room.event?.id ?? null, room.status === 'ready')
-  const refreshFriends = friendsHere.refresh
-  const friendChat = useMessageFriend(
-    useCallback(
-      (text: string) => {
-        say(text, 'error')
-        // They may have gone (an unfriend, a block, a check-out): read again.
-        void refreshFriends()
-      },
-      [say, refreshFriends]
-    )
-  )
 
   /*
    * The end of the night. Kept as a snapshot rather than derived: the sweeper
@@ -223,6 +238,26 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
    */
   const [recap, setRecap] = useState<Recap | null>(null)
   const [dismissedRecap, setDismissedRecap] = useState<string | null>(null)
+  const [peopleOpen, setPeopleOpen] = useState(false)
+  // The Room's tab (Flow 5 R-A): People from the disc; Chat when an entry asked for it, as it opens or while it is open.
+  const askedTab = useRoomTab()
+  // Android back closes People from tonight before it closes the overlay (M5); in the Room, Chat goes back to People first.
+  useEffect(() => {
+    backGuardRef.current = () => {
+      if (peopleOpen) {
+        setPeopleOpen(false)
+        return true
+      }
+      if (askedTab === 'chat') {
+        setRoomTab('people')
+        return true
+      }
+      return false
+    }
+    return () => {
+      backGuardRef.current = null
+    }
+  }, [backGuardRef, peopleOpen, askedTab])
   const endedRecap =
     room.status === 'ready' && room.event ? roomRecap({ event: room.event, checkedInAt: room.checkedInAt, people: room.people }, now) : null
   if (endedRecap && endedRecap.eventId !== dismissedRecap && recap?.eventId !== endedRecap.eventId) setRecap(endedRecap)
@@ -250,28 +285,22 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
   }, [recapEventId])
 
   // --- sheets (check-in flow) -------------------------------------------------
-  const [tray, setTray] = useState<Tray>(NO_TRAY)
-  const closeTray = useCallback(() => setTray((t) => ({ ...t, visible: false })), [])
-  const showTray = useCallback(
-    (title: string, message: string, buttons?: TrayButton[], extra?: TrayExtra) =>
-      setTray({
-        visible: true,
-        title,
-        message,
-        buttons: buttons?.length ? buttons : [{ label: 'Close', kind: 'secondary', onPress: closeTray }],
-        extra,
-      }),
-    [closeTray]
-  )
+  const { tray, showTray, closeTray } = useCheckInTray()
 
   /*
-   * The pass Tonight docks: the event an event page's "Blend in" asked for
-   * (Flow 3 #04–#06; the server is the gate, so it docks inside the fence or
-   * not), else the one whose fence you're standing in. Tonight's own copy of
-   * it wins when it has one: its counts are live.
+   * The pass Tonight docks follows the deck's front card (SCRUM-965, owner 2026-10-31): the card in front owns the hold, its
+   * reach and its "Hold to switch". The deck leads with the anchor, the event an event page's "Blend in" asked for (Flow 3
+   * #04–#06; the server is the gate), else the fence you stand in, so that card is in front when Tonight opens. With no
+   * anchor there is no pass: the deck alone. Tonight's own copy of an event wins when it has one: its counts are live.
    */
   const door = useDoor()
-  const liveInside = (door ? (tonight.events.find((e) => e.id === door.id) ?? door) : tonight.events.find((e) => e.id === tonight.insideEventId)) ?? null
+  const anchor = (door ? (tonight.events.find((e) => e.id === door.id) ?? door) : tonight.events.find((e) => e.id === tonight.insideEventId)) ?? null
+  const liveDeck = useMemo(() => (anchor ? [anchor, ...tonight.events.filter((e) => e.id !== anchor.id)] : tonight.events), [anchor, tonight.events])
+  /** The one front-card index, kept with the anchor it was swiped under: another anchor starts at its own card. */
+  const [swiped, setSwiped] = useState<{ anchorId: string | null; index: number }>({ anchorId: null, index: 0 })
+  const frontIndex = Math.min(swiped.anchorId === (anchor?.id ?? null) ? swiped.index : 0, Math.max(liveDeck.length - 1, 0))
+  const livePass = anchor ? liveDeck[frontIndex] : null
+  const onFront = useCallback((index: number) => setSwiped({ anchorId: anchor?.id ?? null, index }), [anchor?.id])
   /*
    * Tonight as it was when the hold committed, held until the check-in is done
    * (and, under a hand-off, its crossfade).
@@ -280,9 +309,12 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
    * landed mid-pour: the deck vanished, the pass changed under the flood and
    * the Room's "is this the one" test lost its event (PR #401 drive 2).
    */
-  const [held, setHeld] = useState<{ events: TonightEvent[]; insideEvent: TonightEvent | null } | null>(null)
-  const tonightEvents = held ? held.events : tonight.events
-  const insideEvent = held ? held.insideEvent : liveInside
+  const [held, setHeld] = useState<{ events: TonightEvent[]; insideEvent: TonightEvent | null; deckKey: string | null } | null>(null)
+  const tonightEvents = held ? held.events : liveDeck
+  const insideEvent = held ? held.insideEvent : livePass
+  const deckKey = held ? held.deckKey : (anchor?.id ?? null)
+  // Away from the door, or location off: the pass docks with its hold disabled (owner ruling 2026-10-28).
+  const passReachNow = usePassReach(livePass, tonight.insideEventId, tonight.location)
   /*
    * The Room is there to hand off to: loaded, or waited for long enough.
    * ponytail: a fixed ceiling, so a room that doesn't load straight after the
@@ -332,10 +364,11 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
    * places am I inside" from the server (SCRUM-704).
    */
   const switchFrom = room.status === 'ready' && room.event && door && door.id !== room.event.id && !roomOver ? room.event : null
+  /** The front card is the room you are in: nothing to switch, the pass reads "You're in". */
+  const passIsRoom = !!switchFrom && insideEvent?.id === switchFrom.id
   const switchFromNow = useLatest(switchFrom)
   const insideEventNow = useLatest(insideEvent)
   /** The room a switch left, and the event it switched into: the toast is for that landing only. */
-  const leftRoom = useRef<{ title: string; toId: string } | null>(null)
   const roomReady = (room.status === 'ready' && !switchFrom) || roomWaitOver
   const roomReadyNow = useLatest(roomReady)
   const roomShown = useRef<(() => void) | null>(null)
@@ -344,14 +377,25 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
     roomShown.current?.()
     roomShown.current = null
   }, [roomReady])
+  // "With {crew}" at the hold (crews 4-A2): the crew the hold tells, and whether that hold has landed for this door.
+  const withCrew = useWithCrew(insideEvent?.id ?? null)
+  /** The door whose hold told its crew (`crewTold`). */
+  const [crewLandedAt, setCrewLandedAt] = useState<string | null>(null)
   const checkIn = useCheckInFlow({
     eventId: insideEvent?.id ?? '',
     showTray,
     closeTray,
+    withCrewId: withCrew.withCrewId,
     onCheckedIn: (outcome) => {
       if (outcome.kind !== 'checkedIn') return
+      // Told only when the server says so (`crewTold`): crews off or a ban leave the check-in and say you came in on your own.
+      setCrewLandedAt(outcome.crewTold ? (insideEventNow.current?.id ?? null) : null)
       const from = switchFromNow.current
-      leftRoom.current = from && insideEventNow.current ? { title: from.title, toId: insideEventNow.current.id } : null
+      // The server names the room it took you out of (`left`); the screen's own switch is the fallback for an older one.
+      const leftTitle = outcome.left[0] ?? from?.title
+      setLeftNotice(leftTitle && insideEventNow.current ? { title: leftTitle, toId: insideEventNow.current.id } : null)
+      // The card checked into is the door now: the room it opens is this one, not a switch from the old door's.
+      if (insideEventNow.current) setDoor(insideEventNow.current)
       setPourEntrance(true)
       setPourPlaying(true)
       setPourStill(false)
@@ -439,15 +483,18 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
   // #07: the switch landed: an info toast, no haptic.
   const roomEventId = room.event?.id ?? null
   useEffect(() => {
-    const left = leftRoom.current
+    const left = getLeftNotice()
     if (mode !== 'room' || !left) return
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- the toast for the landing the overlay's store was told of
     if (roomEventId === left.toId) say(`You left ${left.title}.`)
-    leftRoom.current = null
+    setLeftNotice(null)
   }, [mode, roomEventId, say])
-  // The pass moved on (another door, or none): a switch it was carrying is no longer this one.
+  // A notice nobody saw dies with the overlay: it is not for the next time it opens.
+  useEffect(() => () => setLeftNotice(null), [])
+  // The pass moved on to another door: a switch it was carrying is no longer this one. (An event page's hold has no door of its own.)
   const doorId = door?.id ?? null
   useEffect(() => {
-    if (leftRoom.current && leftRoom.current.toId !== doorId) leftRoom.current = null
+    if (doorId && getLeftNotice()?.toId !== doorId) setLeftNotice(null)
   }, [doorId])
 
   // --- your controls in the room --------------------------------------------
@@ -464,20 +511,45 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
   }, [controls, onClose])
 
   const eventId = room.event?.id ?? null
+  // An event page that checked someone in keeps its "You're in" pour up until this Room is whole behind it (SCRUM-966).
+  const roomWhole = mode === 'room' && room.settled
+  useEffect(() => {
+    setRoomUp(roomWhole ? eventId : null)
+    return () => setRoomUp(null)
+  }, [roomWhole, eventId])
   const eventTitle = room.event?.title ?? ''
   const chatGroupId = room.chatGroupId
+  // ⋯'s Mute row (audit B-1): the room's mute as Room info reads it, and the same sheet to change it.
+  const roomMute = useRoomMute(chatGroupId)
+  const roomMuted = isMuted(roomMute)
+  const [muting, setMuting] = useState<string | null>(null)
+  // `chat/[id]` for this room opens the Chat tab rather than a screen of its own, while the Room is up.
+  const liveChat = mode === 'room' ? chatGroupId : null
+  // Kept after the overlay closes, so a push for this room still opens Chat; the check-in ending clears it (setLiveHint).
+  useEffect(() => {
+    if (liveChat) setLiveRoomChat(liveChat)
+  }, [liveChat])
+  // The Chat tab only exists for a room with a chat: without one, People. Shown, not stored: a push opens the Room before
+  // its chat lookup returns, and a lookup that failed once (it retries) must not leave the Room on People for good.
+  const tab: RoomTab = askedTab === 'chat' && mode === 'room' && room.settled && !chatGroupId ? 'people' : askedTab
+  const chatUnread = useChatTabUnread({ chatGroupId: liveChat, eventId, tab, myId: user?.id })
+  // Chat's feed scrolls down to read back: the stage's drag-to-close waits for People (the chevron and Back still close).
+  const { setDragToClose } = useStage()
+  const chatShown = tab === 'chat' && mode === 'room'
+  useEffect(() => setDragToClose(!chatShown), [chatShown, setDragToClose])
   /** Your pseudonym tonight, once the server has said it (a match's answer): never guessed. */
-  const [myPseudonym, setMyPseudonym] = useState<string | null>(null)
-  if (room.match?.you && room.match.you !== myPseudonym) setMyPseudonym(room.match.you)
-  const myPhoto = user?.image ?? user?.profile?.photos?.[0] ?? null
-  const myName = user?.name?.trim() || 'You'
+  const myPseudonym = room.match?.you ?? room.pseudonym ?? null
+  const myPhoto = myMainPhoto(user)
+  const myName = firstNameOf(user?.name?.trim() || 'You')
+  /** The creature's seed while anonymous: never your real name. */
+  const myMarkSeed = myPseudonym ?? markSeed('You', eventId ?? 'room')
   /** Your face as this room knows it: your photo when you are named, else your creature (once its pseudonym is known). */
-  const myFace: Face = controls.revealed && myPhoto ? { kind: 'photo', uri: myPhoto } : myPseudonym ? { kind: 'creature', pseudonym: myPseudonym } : myPhoto ? { kind: 'photo', uri: myPhoto } : { kind: 'creature', pseudonym: myName }
+  const myFace: Face = myRoomFace({ revealed: controls.revealed, name: user?.name ?? null, photo: myPhoto, pseudonym: myPseudonym, eventId })
 
   // --- crews (R2-D1: People | Crews, the strip, crew cards, Liking as) ---------
   const [gridView, setGridView] = useState<'people' | 'crews'>('people')
   // Read in the Room, and on the pass once the server has said yes (its "Tell your crew" strip).
-  const crews = useCrewsHere(mode === 'room' ? eventId : checkIn.youreIn ? (insideEvent?.id ?? null) : null)
+  const crews = useCrewsHere(mode === 'room' ? eventId : checkIn.youreIn ? (insideEvent?.id ?? null) : null, mode === 'room' ? room.hereCount : undefined)
   const myCrewsHere = crews.state.status === 'ready' ? crews.state.data.myCrews : []
   const soloCrews = crewsThatMayLikePeople(myCrewsHere, crews.mine ?? [])
   /*
@@ -485,7 +557,7 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
    * null for "Just me", undefined before they make one. The app never picks a
    * crew for somebody (lib/crews.ts): with one crew here that crew is the
    * answer, with several the like asks, and the answer becomes the choice.
-   * Every label (the chip, "Like for {crew}", "Liked for {crew}") and every
+   * Every label (the chip, "Wave for {crew}", "Waved for your crew") and every
    * request reads these same values.
    */
   const [likingAs, setLikingAs] = useState<string | null | undefined>(undefined)
@@ -512,16 +584,33 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
       const theirs: BlendCrew = { kind: 'crew', name: card.name, emblemSeed: card.emblemSeed, count: card.presentCount }
       setBlend({
         ref,
-        title: `Blend with ${card.name}`,
+        title: `Mix with ${card.name}`,
         sides: ours
           ? { ours: { kind: 'crew', name: ours.name, emblemSeed: emblemOf(ours.crewId), count: ours.presentCount }, theirs }
-          : { ours: { kind: 'person', pseudonym: myPseudonym ?? myName }, theirs },
+          : { ours: { kind: 'person', pseudonym: myMarkSeed }, theirs },
       })
     },
   })
+  /** The crew whose sheet is open (board crews/05-room A), read live from the list so a wave or a block shows at once. */
+  const [sheetCrewId, setSheetCrewId] = useState<string | null>(null)
+  const sheetCrew = crewCards(crews).find((c) => c.crewId === sheetCrewId) ?? null
+  /** Each row closes the sheet first; its next step (a confirm, the report, the Mix) waits for it to have left, as the card's does. */
+  const afterCrewSheet = useRef<(() => void) | null>(null)
+  const fromCrewSheet = (then: (card: NonNullable<typeof sheetCrew>) => void) => {
+    if (!sheetCrew) return
+    afterCrewSheet.current = () => then(sheetCrew)
+    setSheetCrewId(null)
+  }
+  /** Gone: the next step, if a row asked for one. The id goes too, so a crew that left the room and came back never reopens it. */
+  const crewSheetGone = () => {
+    setSheetCrewId(null)
+    const next = afterCrewSheet.current
+    afterCrewSheet.current = null
+    next?.()
+  }
   /** The chip's menu: your crews here and "Just me". Cancel changes nothing. */
-  const chooseLikingAs = async (among = myCrewsHere, title = 'Liking as…') => {
-    const answer = await chooseAs(among, title)
+  const chooseLikingAs = async (among = myCrewsHere, title = 'Sending as…', justMe = true) => {
+    const answer = await chooseAs(among, title, justMe)
     if (answer !== undefined) setLikingAs(answer)
     return answer
   }
@@ -535,7 +624,7 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
   const [shownCard, setShownCard] = useState<OpenCard | null>(null)
   if (open && open !== shownCard) setShownCard(open)
   const card = open ?? shownCard
-  const [connectTo, setConnectTo] = useState<OpenCard | null>(null)
+  const [connectTo, setConnectTo] = useState<ConnectTarget | null>(null)
   const [connecting, setConnecting] = useState(false)
   const [connectError, setConnectError] = useState<string | undefined>()
   // The Room's coach mark: once the pour has handed off, with nothing over the Room; never to someone already shown.
@@ -560,14 +649,12 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
     target: roomCoachTarget,
     text: ROOM_COACH_TEXT,
     place: 'below',
-    radius: RADIUS.rowInCard,
+    radius: RADIUS.tile,
     onDismiss: roomCoach.dismiss,
     onLost: roomCoach.lose,
     testID: 'room-coach-mark',
   })
-  /** Waves you sent: on their way, or settled to "Waved" (a repeat inside ten minutes is "Waved" too). */
-  const [sent, setSent] = useState<Record<string, 'busy' | 'waved'>>({})
-  /** A like or wave the server refused, said on that person's card (R3-D4 4.3), until the next try or the card closes. */
+  /** A wave the server refused, said on that person's card (R3-D4 4.3), until the next try or the card closes. */
   const [refusals, setRefusals] = useState<Record<string, { text: string; checkIn?: boolean }>>({})
   const forget = (id: string) =>
     setRefusals((r) => {
@@ -578,6 +665,28 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
     })
   const cardPerson = card ? (room.people.find((p) => p.id === card.id) ?? null) : null
   /*
+   * State 2 C on the sheet: one line, the latest event you have both been to. Asked only for somebody the room shows
+   * you (a photo arrives only then); the server applies the same rule again and answers [] otherwise.
+   */
+  const [sharedLine, setSharedLine] = useState<{ id: string; line: { latest: string; more: number } | null; interests: string[] } | null>(null)
+  const sharedFor = cardPerson?.photo ? cardPerson.id : null
+  useEffect(() => {
+    if (!sharedFor) return
+    let live = true
+    // Their interests too (state 2 B's chips): the deck sends only the ones you share, the profile the rest once shown.
+    Promise.all([apiClient.getSharedEvents(sharedFor, 1), apiClient.getPublicProfile(sharedFor)])
+      .then(([r, p]) => {
+        const first = r.success ? r.data?.events[0] : undefined
+        const shown = p.success && p.data?.identityVisible
+        const interests = shown ? interestNames(p.data?.interests).slice(0, SHEET_INTERESTS) : []
+        if (live) setSharedLine({ id: sharedFor, line: first ? { latest: first.title, more: Math.max(0, (r.data?.pagination.totalCount ?? 1) - 1) } : null, interests })
+      })
+      .catch(() => undefined)
+    return () => {
+      live = false
+    }
+  }, [sharedFor])
+  /*
    * What waits for the card to have left: Block / Report, the ConnectSheet, a
    * crew chooser. iOS drops a Modal presented while another is still leaving,
    * so a safety sheet opened in the same tick could silently not appear.
@@ -585,6 +694,14 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
   const afterCard = useRef<(() => void) | null>(null)
   const closeCardThen = (next: () => void) => {
     afterCard.current = next
+    setOpen(null)
+  }
+  // A match or a Blend made from the card is the news: the card makes way, and the moment plays once it has gone (iOS holds one Modal at a time).
+  // Each new one, not just the first (a second match can replace the first without passing through none); state adjusted in render.
+  const landed: object | string | null = room.match?.conversationId ?? blend ?? null
+  const [madeWayFor, setMadeWayFor] = useState<object | string | null>(null)
+  if (landed && landed !== madeWayFor) {
+    setMadeWayFor(landed)
     setOpen(null)
   }
   const cardGone = () => {
@@ -608,46 +725,102 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
   }, [pending, takenPending])
 
   const openCard = useCallback((p: OpenCard) => setOpen({ id: p.id, name: p.name }), [])
-  const like = useCallback(
+  /**
+   * Wave, or wave back (SCRUM-1042). The hand swings until ✓ Waved (07-motion: 800 ms; Reduce Motion, the crossfade).
+   * A refusal is the card's one neutral line when it is open on them, else a toast (R3-D4 4.3). No haptic: the press
+   * played `H.select`, and a mutual's `H.match` belongs to the moment.
+   */
+  const wave = useCallback(
     async (p: RoomPerson) => {
       forget(p.id)
-      const answer = await room.like(p.id)
+      const answer = await room.wave(p.id, reduceMotion ? WAVE_SETTLE_REDUCED_MS : WAVE_SETTLE_MS)
       if (answer.kind !== 'refused') return
-      // The card's one neutral line when it is open on them; a toast when the like was a double tap (R3-D4 4.3). No haptic.
       if (open?.id === p.id) setRefusals((r) => ({ ...r, [p.id]: { text: answer.refusal.message, checkIn: answer.refusal.checkIn } }))
       else say(answer.refusal.message)
     },
-    [room, open?.id, say]
+    [room, open?.id, say, reduceMotion]
   )
-  const wave = useCallback(
-    async (id: string) => {
-      if (sent[id]) return
-      forget(id)
-      setSent((w) => ({ ...w, [id]: 'busy' }))
-      const answer = await room.sendWave(id)
-      if (answer.kind === 'refused') {
-        setSent((w) => {
-          const next = { ...w }
-          delete next[id]
-          return next
-        })
-        setRefusals((r) => ({ ...r, [id]: { text: answer.refusal.message, checkIn: answer.refusal.checkIn } }))
-        return
-      }
-      setSent((w) => ({ ...w, [id]: 'waved' }))
+  /*
+   * Waves to you (Wave PR (b), board 03): the strip under your room name (S-A), the toast's Wave back (L-A) and the list
+   * (See all). A wave back answers someone the received list returned even after they left (until the room closes).
+   */
+  const { page: receivedPage, reload: reloadReceived } = useReceivedWaves(mode === 'room' ? eventId : null)
+  const [answering, setAnswering] = useState<string | null>(null)
+  const waveBack = useCallback(
+    async (id: string, name: string) => {
+      setAnswering(id)
+      const answer = await room.wave(id, reduceMotion ? WAVE_SETTLE_REDUCED_MS : WAVE_SETTLE_MS, { name })
+      setAnswering(null)
+      reloadReceived()
+      if (answer.kind === 'refused') say(answer.refusal.message)
     },
-    [room, sent]
+    [room, reduceMotion, reloadReceived, say]
   )
+  /** A crew that waved at you, answered as yourself: a Mix when it was mutual; gone, off and errors each say so. */
+  const waveBackCrew = async (crew: { crewId: string; name: string; emblemSeed: string | null }) => {
+    if (!eventId || answering) return
+    const settled = (outcome: WaveBackOutcome) => {
+      reloadReceived()
+      if (outcome.kind === 'gone') return say('They’ve left the room')
+      if (outcome.kind === 'error') return say(outcome.text, 'error')
+      crews.markLiked(crew.crewId)
+      if (!outcome.blend) return
+      const here = crewCards(crews).find((c) => c.crewId === crew.crewId)
+      const seed = crew.emblemSeed ?? here?.emblemSeed
+      // The moment draws their emblem and how many are here; without both (not on the loaded page) the Mix opens itself.
+      if (!here || !seed) return openBlend(outcome.blend, blendWith(crew.name))
+      setBlend({
+        ref: outcome.blend,
+        title: blendWith(crew.name),
+        sides: { ours: { kind: 'person', pseudonym: myMarkSeed }, theirs: { kind: 'crew', name: crew.name, emblemSeed: seed, count: here.presentCount } },
+      })
+    }
+    setAnswering(`crew:${crew.crewId}`)
+    const outcome = await waveBackAtCrew(eventId, crew.crewId)
+    setAnswering(null)
+    if (outcome.kind === 'notOpen') return askOpenToCrews(eventId, crew, settled)
+    settled(outcome)
+  }
+  const crewSafety = (crewId: string, name: string) =>
+    showCrewSafetyActions({ crewId, name }, () => {
+      crews.drop(crewId)
+      ignoreCrewWaves(crewId)
+    })
+  /** A crew's emblem from the list or from its wave; the socket sends none. */
+  const crewSeed = (crewId: string): string | null =>
+    crewCards(crews).find((c) => c.crewId === crewId)?.emblemSeed ?? receivedPage?.crewWaves?.find((c) => c.crewId === crewId)?.emblemSeed ?? null
+  const seeAllWaves = useCallback(() => {
+    if (eventId) router.push({ pathname: '/waves/[eventId]', params: { eventId, title: room.event?.title ?? '' } } as never)
+  }, [eventId, room.event?.title])
+  /** Block or Report from a wave (anti-spam W7): either removes them, and every wave of theirs, from this room. */
+  const waveSafety = useCallback((id: string, name: string) => showUserSafetyActions(name, id, () => room.remove(id), () => room.remove(id)), [room])
+  const toastWave = (w: RoomWave) => void ('fromCrewId' in w ? waveBackCrew({ crewId: w.fromCrewId, name: w.fromName, emblemSeed: crewSeed(w.fromCrewId) }) : waveBack(w.fromUserId, w.fromName))
+
   const openProfile = useCallback(
-    (p: OpenCard) => {
+    (p: OpenCard, seen?: RoomPerson) => {
       setOpen(null)
-      // The event travels with the id (the profile's Like needs the room), and the pseudonym titles it until the server says who they are.
+      // P-A page: the room's card goes with them (lead pills, In common), in memory, never in the link.
+      if (seen) {
+        const { workField, sharedIntents, interests, overlaps, badges, age, tonightAnswer, workIntent, arrivedAt, wave: waved, wavedAt } = seen
+        handRoomPerson(p.id, {
+          person: { workField, sharedIntents, interests, overlaps, badges, age, tonightAnswer, workIntent, arrivedAt, wave: waved, wavedAt },
+          lens: room.lens,
+          context: room.event ? contextLine(room.lens, room.event) : null,
+        })
+      }
+      // The event travels with the id (the profile's Wave needs the room), and the pseudonym titles it until the server says who they are.
+      // What the room knows of them goes too: the profile cannot ask a handle whether you waved or both waved (SCRUM-953).
       router.push({
         pathname: '/user/[id]',
-        params: { id: p.id, ...(eventId ? { eventId, roomSeed: `${eventId}:${p.id}` } : {}), ...(p.name ? { pseudonym: p.name } : {}) } as never,
+        params: {
+          id: p.id,
+          ...(eventId ? { eventId, roomSeed: `${eventId}:${p.id}` } : {}),
+          ...(p.name ? { pseudonym: p.name } : {}),
+          ...(seen?.conversationId ? { conversationId: seen.conversationId } : {}),
+        } as never,
       })
     },
-    [eventId]
+    [eventId, room.lens, room.event]
   )
   /** Into the DM. `draft` is the opener the match moment suggested: it waits in the composer, never sent for you. */
   const sayHi = useCallback((conversationId: string, p: { id: string; name: string }, draft?: string | null) => {
@@ -657,53 +830,60 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
       params: { conversationId, otherUserName: p.name, otherUserId: p.id, ...(draft ? { draft } : {}) } as never,
     })
   }, [])
+  /** Meet next's Say hi: the conversation a mutual opened, or the chats list when the deck says you both waved but not where. */
+  const sayHiTo = useCallback(
+    (p: RoomPerson) => {
+      if (p.conversationId) return sayHi(p.conversationId, p)
+      setOpen(null)
+      router.navigate('/(tabs)/chat' as never)
+    },
+    [sayHi]
+  )
   /** Block and Report, once the card has left (`closeCardThen`). Either removes them, and their waves, from this room. */
   const safety = (p: OpenCard) => closeCardThen(() => showUserSafetyActions(p.name, p.id, () => room.remove(p.id), () => room.remove(p.id)))
   /*
-   * A like on your crew's behalf. The answer is `{ liked: true }` whatever the
-   * server learned about them, so all this may say is that the like went,
-   * unless it made a Blend.
+   * A wave at a person on your crew's behalf (admin #1007). A refusal about them answers as a wave that stood, so all this may
+   * say is that the wave went, unless it made a Mix.
    */
-  const likeForCrew = async (p: RoomPerson, crewId: string) => {
+  const waveForCrew = async (p: RoomPerson, crewId: string) => {
     if (!eventId || likingForCrew.current) return
     likingForCrew.current = true
     try {
-      const result = await crewsApi.likePersonAsCrew(eventId, p.id, crewId)
+      const result = await crewsApi.wavePersonAsCrew(eventId, p.id, crewId)
       if (!result.success || !result.data) {
-        say(crewMessage(result, 'card', 'Couldn’t send the like. Try again.'), 'error')
+        say(crewMessage(result, 'card', 'Couldn’t send the wave. Try again.'), 'error')
         return
       }
       const crew = myCrewsHere.find((c) => c.crewId === crewId)
       if (result.data.blend && crew) {
         setBlend({
           ref: result.data.blend,
-          title: `Blend with ${p.name}`,
+          title: `Mix with ${p.name}`,
           sides: { ours: { kind: 'crew', name: crew.name, emblemSeed: emblemOf(crew.crewId), count: crew.presentCount }, theirs: { kind: 'person', pseudonym: p.name } },
         })
-      } else say('Liked for your crew', 'success')
+      } else say('Waved for your crew', 'success')
     } finally {
       likingForCrew.current = false
     }
   }
   /*
    * The card's crew like. A definite crew likes as it; 'ask' closes the card,
-   * asks (your crews that may like people, and "Just me"), and the answer is
-   * both this like and the choice from now on.
+   * asks which of your crews that may like people, and the answer is both this
+   * like and the choice from now on. A person's own gesture is Wave, on the card.
    */
   const cardCrewLike = (p: RoomPerson) => {
     if (personAs === 'ask') {
       closeCardThen(() => {
-        void chooseLikingAs(soloCrews, `Like ${p.name} as…`).then((answer) => {
-          if (answer === null) void like(p)
-          else if (answer) void likeForCrew(p, answer)
+        void chooseLikingAs(soloCrews, 'Wave for which crew?', false).then((answer) => {
+          if (answer) void waveForCrew(p, answer)
         })
       })
       return
     }
-    if (personAs) closeCardThen(() => void likeForCrew(p, personAs.crewId))
+    if (personAs) closeCardThen(() => void waveForCrew(p, personAs.crewId))
   }
-  /** The grid's double tap likes as the card would; when the card would ask, a double tap just opens it. */
-  const doubleTapLike = personAs === 'ask' ? null : personAs ? (p: RoomPerson) => void likeForCrew(p, personAs.crewId) : (p: RoomPerson) => void like(p)
+  /** The grid's double tap is your crew's like, when one crew is the answer; a person is waved at from their card. */
+  const doubleTapLike = personAs && personAs !== 'ask' ? (p: RoomPerson) => void waveForCrew(p, personAs.crewId) : null
   /*
    * "Check in" beside a lapsed check-in (R3-D4 4.3): back to the pass. This
    * room's event is docked as the door and the room re-read; once the server
@@ -744,28 +924,47 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
       say('The chat for this event is not open yet.')
       return
     }
-    router.push({ pathname: '/chat/[id]', params: { id: String(chatGroupId), roomName: eventTitle || 'Event chat', eventTitle } as never })
+    setRoomTab('chat')
   }, [chatGroupId, eventId, eventTitle, say])
 
+  /** Room settings (who sees you, your room name), from the you-card's Change. */
+  const openRoomSettings = () => {
+    const ev = room.event
+    if (ev) router.push(roomSettingsRoute(ev.id, { pseudonym: myPseudonym, revealed: controls.revealed }))
+  }
+  /** ⋯ in the room bar opens Room info as a sheet over the room (Flow 5 C6, I-A; owner call D1, A). */
+  const [infoOpen, setInfoOpen] = useState(false)
+
   // --- waves to you (SCRUM-630); a blocked or reported person's are dropped at the source (`ignoreWavesFrom`) ---
-  const dockWave = newestWave(waves.received, now)
   const waveKeys = useMemo(() => Object.fromEntries(Object.values(waves.received).map((w) => [w.fromUserId, w.at])), [waves.received])
 
   // --- meet next, held while a card is open (#52: never reshuffle under a card) ---
-  const shuffle = useMemo(() => meetNext(room.people, { now, eventId: room.event?.id ?? '' }), [room.people, now, room.event?.id])
+  // Re-worked out at the window's mark, not on the screen's next 15 s tick: the pill's own 1 s clock read "0:00" until then.
+  const [markPassed, setMarkPassed] = useState(0)
+  const shuffleNow = Math.max(now, markPassed)
+  const shuffle = useMemo(() => meetNext(room.people, { now: shuffleNow, eventId: room.event?.id ?? '' }), [room.people, shuffleNow, room.event?.id])
+  useEffect(() => {
+    const at = shuffle.nextShuffleAt
+    const id = setTimeout(() => setMarkPassed(Math.max(Date.now(), at)), Math.max(0, at - Date.now()))
+    return () => clearTimeout(id)
+  }, [shuffle.nextShuffleAt])
   const [heldPicks, setHeldPicks] = useState(shuffle.picks)
   if (!open && heldPicks !== shuffle.picks) setHeldPicks(shuffle.picks)
   const head = everyoneHead(room.people, { hasMore: room.hasMore, hereCount: room.hereCount })
+  /** H-1's pile: the first faces of whoever else is inside now (never someone who has left). */
+  const youPile = useMemo(() => room.people.filter((p) => p.insideNow !== false).slice(0, 4).map(faceOf), [room.people])
   const moreLeft = room.hereCount - 1 - room.people.length
   /** This session's arrivals, for #25's entrance. */
   const arrivingIds = useMemo(() => new Set(room.arrivals.map((a) => a.id)), [room.arrivals])
 
   const topInset = insets.top + TOP_CHROME
+  /** The People list starts under the room bar (R-A: the you-card at 184 under a bar ending at 158). */
+  const roomTop = roomBarHeight(insets.top) + SPACE.xl + SPACE.xxs
+  const inRoomBar = mode === 'room' && !!room.event
   const matchPerson = room.match?.person ?? null
   const visibility: Visibility = bannerState(controls.revealed, controls.listed, controls.readiness.ok)
 
   // --- the card's variant and state ------------------------------------------------
-  const cardOverlap = cardPerson ? overlapOf(cardPerson) : null
   const cardVariant: PersonVariant = !cardPerson ? 'thin' : cardPerson.matched ? 'matched' : cardPerson.insideNow ? 'here' : 'was'
   const refusal = card ? refusals[card.id] : undefined
   /** The chip shows a definite answer only: hidden while there is nothing to choose between (solo), or a like would still ask. */
@@ -775,21 +974,38 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
     <View style={styles.fill}>
       {/* Below the Room: Tonight (or the Recap, or the skeleton), held under a hand-off until its crossfade is done. */}
       {!tonightUp ? null : mode === 'ended' && recap ? (
-        <Animated.View key="ended" style={styles.layer} entering={FadeIn.duration(DURATION.base)} exiting={FadeOut.duration(DURATION.quick)}>
-          <MomentRecap
-            face={myFace}
-            title={recap.title}
-            minutes={recap.minutes}
-            matches={recap.matched}
-            rated={ratedEvent === recap.eventId || isNightRated(recap.eventId)}
-            onRate={() => router.push({ pathname: '/rate/[eventId]', params: { eventId: recap.eventId } as never })}
-            onBack={() => {
-              setDismissedRecap(recap.eventId)
-              setRecap(null)
-            }}
-            onClose={onClose}
-            testID="room-recap"
-          />
+        <Animated.View key="ended" style={styles.layer} exiting={FadeOut.duration(DURATION.quick)}>
+          {/* Under People from tonight the Recap is not there for a screen reader: a swipe never walks past the deck. */}
+          <View
+            // Never flattened: its opacity comes and goes, and a flattened layer moves the Recap between parents (SCRUM-1048).
+            collapsable={false}
+            style={[styles.layer, peopleOpen && styles.underPeople]}
+            pointerEvents={peopleOpen ? 'none' : 'auto'}
+            accessibilityElementsHidden={peopleOpen}
+            importantForAccessibility={peopleOpen ? 'no-hide-descendants' : 'auto'}
+          >
+            <MomentRecap
+              face={myFace}
+              title={recap.title}
+              venue={room.event?.venueName}
+              onPeople={room.event && room.people.length > 0 && recapPeopleOpen(room.event.endsAt, now, room.chatClosesAt) ? () => setPeopleOpen(true) : undefined}
+              minutes={recap.minutes}
+              matches={recap.matched}
+              rated={ratedEvent === recap.eventId || isNightRated(recap.eventId)}
+              onRate={() => router.push({ pathname: '/rate/[eventId]', params: { eventId: recap.eventId } as never })}
+              onBack={() => {
+                setDismissedRecap(recap.eventId)
+                setRecap(null)
+              }}
+              onClose={onClose}
+              testID="room-recap"
+            />
+          </View>
+          {peopleOpen ? (
+            <Animated.View style={styles.layer} accessibilityViewIsModal entering={FadeIn.duration(DURATION.base)} exiting={FadeOut.duration(DURATION.quick)}>
+              <PeopleFromTonight people={room.people} hasMore={room.hasMore} loadingMore={room.loadingMore} onMore={() => void room.loadMore()} onBack={() => setPeopleOpen(false)} />
+            </Animated.View>
+          ) : null}
         </Animated.View>
       ) : mode === 'loading' ? (
         <RoomSkeleton topInset={topInset} />
@@ -806,31 +1022,41 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
           importantForAccessibility={mode === 'room' || cancelled ? 'no-hide-descendants' : 'auto'}
         >
           <TonightView
+            active={mode === 'tonight'}
             events={tonightEvents}
             loading={tonight.status === 'loading'}
             error={tonight.status === 'error'}
             offline={tonight.offline}
             location={tonight.location}
             onRetry={() => void tonight.refresh()}
+            deckKey={deckKey}
+            onFront={onFront}
             insideEvent={insideEvent}
-            switchFrom={switchFrom?.title}
+            // Judged before the hold, never during it: a check-in in flight is the server's to answer.
+            reach={held || checkIn.checkingIn ? 'open' : passReachNow}
+            switchFrom={switchFrom && !passIsRoom ? switchFrom.title : undefined}
             // Under the hand-off the check-in is over, but the pass fading out still reads "You're in", never a re-armed hold.
             checkingIn={checkIn.checkingIn || mode === 'room'}
-            youreIn={checkIn.youreIn || mode === 'room'}
+            youreIn={checkIn.youreIn || mode === 'room' || passIsRoom}
             onPassFrame={setPassFrame}
             onOpenEvent={(id) => router.push({ pathname: '/event/[id]', params: { id } as never })}
-            onSeeAll={() => router.push('/nearby-events')}
+            onSeeAll={() => router.navigate({ pathname: '/(tabs)/events', params: { seeAll: 'tonight' } })}
             onBrowse={() => {
               onClose()
               router.navigate('/(tabs)/events')
             }}
             onCheckIn={() => {
-              setHeld({ events: tonight.events, insideEvent: liveInside })
+              setHeld({ events: liveDeck, insideEvent: livePass, deckKey: anchor?.id ?? null })
               void checkIn.start()
             }}
             onRoomRetry={room.status === 'error' ? room.retry : undefined}
             // Not while the pour plays: the pass growing under it moved the flood (R2-D1's row comes after).
-            crewStrip={pourPlaying || mode === 'room' ? null : <PeopleCrewStrip myCrews={myCrewsHere} mine={crews.mine} eventTitle={insideEvent?.title ?? ''} actions={crewActions} inset={false} />}
+            crewChip={
+              withCrew.crew ? (
+                <WithCrewChip crew={withCrew.crew} on={checkIn.youreIn ? crewLandedAt === insideEvent?.id : withCrew.on} landed={checkIn.youreIn} onToggle={withCrew.toggle} />
+              ) : null
+            }
+            crewStrip={pourPlaying || mode === 'room' || !checkIn.youreIn ? null : <PeopleCrewStrip eventId={insideEvent?.id ?? ''} myCrews={myCrewsHere} mine={crews.mine} eventTitle={insideEvent?.title ?? ''} inset={false} />}
             topInset={topInset}
             bottomInset={insets.bottom}
           />
@@ -844,54 +1070,58 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
           style={[styles.layer, roomFadeStyle]}
           onLayout={() => setRoomLaidOut(true)}
           // Out of a pour the crossfade is `roomFade`'s; otherwise the Room's own entrance.
-          entering={pourEntrance ? undefined : reduceMotion ? FadeIn : FadeInUp.duration(DURATION.medium)}
-          exiting={FadeOut.duration(DURATION.quick)}
+          entering={pourEntrance ? undefined : reduceMotion ? FadeIn.duration(REDUCE_MOTION.duration.base) : FadeInUp.duration(DURATION.medium)}
+          // Gone at once when the night is over: the Recap beneath is opaque from its first frame and must not have the Room's faces through it (SCRUM-962).
+          exiting={mode === 'ended' ? undefined : FadeOut.duration(DURATION.quick)}
           pointerEvents={mode === 'room' ? 'auto' : 'none'}
           // Under the cancelled card the Room is not there for a screen reader: a swipe never walks past it.
           accessibilityElementsHidden={mode !== 'room' || !!cancelled}
           importantForAccessibility={mode === 'room' && !cancelled ? 'auto' : 'no-hide-descendants'}
         >
+          <RoomTabs
+            tab={tab}
+            people={
           <RoomView
-            title={room.event.title}
-            hereCount={room.hereCount}
-            checkedInAt={room.checkedInAt}
-            me={myFace}
+            lens={room.lens}
             people={room.people}
-            arrivals={room.arrivals}
             connection={room.connection}
-            visibility={
+            you={
               <View ref={roomCoachTarget}>
-                <VisibilityBanner
+                <RoomYouCard
+                  face={myFace}
+                  name={controls.revealed ? myName : (myPseudonym ?? 'Your room name')}
+                  self={{ name: user?.name?.trim() || myName, face: myPhoto ? { kind: 'photo', uri: myPhoto, name: user?.name?.trim() || myName } : myFace }}
+                  checkedInAt={room.checkedInAt}
+                  hereCount={room.hereCount}
+                  others={youPile}
                   state={visibility}
-                  name={controls.revealed ? myName : (myPseudonym ?? undefined)}
-                  missing={controls.readiness.missing || undefined}
-                  busy={controls.revealBusy}
-                  onAction={
-                    visibility === 'hidden'
-                      ? () => router.push('/settings')
-                      : visibility === 'blocked'
-                        ? () => router.push('/edit-profile')
-                        : () => {
-                            markCoachUsed('room_reveal')
-                            void controls.toggleReveal()
-                          }
-                  }
-                  testID="room-visibility"
+                  onChange={() => {
+                    if (visibility === 'hidden') return router.push('/settings')
+                    markCoachUsed('room_reveal')
+                    openRoomSettings()
+                  }}
                 />
               </View>
             }
-            segments={showSegments}
+            waves={
+              <WavedAtYouStrip
+                page={receivedPage}
+                now={now}
+                sending={answering}
+                onWaveBack={(w) => void (isCrewWave(w) ? waveBackCrew(w) : waveBack(w.userId, w.displayName))}
+                onSeeAll={seeAllWaves}
+                onSafety={(w) => (isCrewWave(w) ? crewSafety(w.crewId, w.name) : waveSafety(w.userId, w.displayName))}
+              />
+            }
+            crewsHere={showSegments && crews.state.status === 'ready' ? crews.state.data.total : null}
             view={gridView}
             onView={setGridView}
-            crewStrip={<PeopleCrewStrip myCrews={myCrewsHere} mine={crews.mine} eventTitle={eventTitle} actions={crewActions} />}
+            crewStrip={<PeopleCrewStrip eventId={eventId ?? ''} myCrews={myCrewsHere} mine={crews.mine} eventTitle={eventTitle} />}
             friendsPresent={friendsHere.total > 0 && friendsHere.friends.length > 0}
             friendsHere={
               <FriendsHere
                 friends={friendsHere.friends}
                 total={friendsHere.total}
-                opening={friendChat.opening}
-                offline={offline}
-                onMessage={(f) => void friendChat.message(f)}
                 onSeeAll={() => router.push({ pathname: '/room/friends-here', params: { eventId: eventId ?? '' } } as never)}
               />
             }
@@ -902,14 +1132,20 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
                   checkInKey={room.checkedInAt ?? ''}
                   crews={crews}
                   likingAs={chipAs === undefined ? undefined : chipAs ? { name: chipAs.name, emblemSeed: emblemOf(chipAs.crewId) } : null}
-                  pseudonym={myPseudonym ?? myName}
+                  pseudonym={myMarkSeed}
                   onLikingAs={() => void chooseLikingAs()}
                 />
               ) : null
             }
             crewCards={crewCards(crews)}
             renderCrew={(crewCard, index) => (
-              <RoomCrewCard card={crewCard} actions={crewActions} as={crewCardAs && crewCardAs !== 'ask' ? crewCardAs.name : null} index={index} />
+              <RoomCrewCard
+                card={crewCard}
+                actions={crewActions}
+                as={crewCardAs && crewCardAs !== 'ask' ? crewCardAs.name : null}
+                index={index}
+                onOpen={() => setSheetCrewId(crewCard.crewId)}
+              />
             )}
             crewsFoot={<CrewsFoot crews={crews} />}
             picks={heldPicks}
@@ -924,16 +1160,23 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
             waveKeys={waveKeys}
             onOpen={openCard}
             onLike={doubleTapLike}
-            chatGroupId={room.chatGroupId}
-            chatHistory={room.chatHistory}
-            myId={user?.id}
-            dockWave={dockWave ? { kind: 'wave', id: `wave-${dockWave.fromUserId}`, fromUserId: dockWave.fromUserId, fromName: dockWave.fromName, at: dockWave.at } : null}
-            onOpenChat={() => void openChat()}
-            onOpenPerson={(id) => openCard({ id, name: waves.received[id]?.fromName ?? 'Someone' })}
+            onWave={(p) => void wave(p)}
+            onSayHi={sayHiTo}
             enter={enter}
             hidden={mode !== 'room'}
-            topInset={topInset}
+            topInset={roomTop}
             bottomInset={insets.bottom}
+          />
+            }
+            chat={
+              chatGroupId ? (
+                <RoomChat
+                  id={chatGroupId}
+                  params={{ id: chatGroupId, roomName: eventTitle, eventTitle, eventId: room.event.id, kind: 'event' }}
+                  embedded={{ top: roomBarHeight(insets.top), onBack: () => setRoomTab('people') }}
+                />
+              ) : null
+            }
           />
         </Animated.View>
       ) : null}
@@ -944,55 +1187,54 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
        * without it, the faces and the hero ran under the close, Check out and the status bar. Mounted, not faded: glass
        * never fades (§5.2 rule 6), so Reduce Motion has nothing to change. Increase Contrast adds the hairline.
        */}
-      {mode === 'ended' || !scrolled ? null : (
+      {mode === 'ended' || inRoomBar || !scrolled ? null : (
         <View testID="blendn-bar" pointerEvents="none" style={[styles.barGlass, { height: barHeight(insets.top, Platform.OS === 'android') }]}>
           <Material role="bar" style={StyleSheet.absoluteFill} />
           {contrast ? <View testID="blendn-bar-contrast" style={styles.contrast} /> : null}
         </View>
       )}
-      {mode === 'ended' ? null : (
+      {inRoomBar && room.event ? (
+        <RoomBar
+          insetTop={insets.top}
+          event={room.event.title}
+          hereCount={room.hereCount}
+          tab={tab}
+          chatUnread={chatUnread}
+          onTab={(next) => (next === 'chat' ? void openChat() : setRoomTab('people'))}
+          onClose={onClose}
+          onInfo={() => setInfoOpen(true)}
+        />
+      ) : mode === 'ended' ? null : (
         <View style={[styles.topBar, { top: barTop(insets.top) }]} pointerEvents="box-none">
           <IconButton icon="chevron-down" accessibilityLabel="Close Blend’n" onPress={onClose} testID="blendn-close" />
-          {mode === 'room' && room.event ? (
-            <Animated.View entering={reduceMotion ? undefined : glassRise} style={styles.topActions}>
-              <ScalePress
-                onPress={() => setConfirmingOut(true)}
-                pressedScale={PRESS.scale}
-                hitSlop={(minTarget() - SIZE.tag) / 2}
-                accessibilityRole="button"
-                accessibilityLabel="Check out"
-                accessibilityHint="Asks first. Removes you from the room; checking back in needs your location again."
-                testID="room-check-out"
-                style={styles.checkOut}
-              >
-                <Animated.Text entering={glassContentsIn} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.ink]}>
-                  Check out
-                </Animated.Text>
-              </ScalePress>
-              <IconButton
-                icon="settings-2"
-                accessibilityLabel="Room settings"
-                accessibilityHint="Why you are here tonight, and whether people can see your name"
-                onPress={() => router.push({ pathname: '/event-preferences/[eventId]', params: { eventId: room.event!.id } as never })}
-                testID="room-settings"
-              />
-            </Animated.View>
-          ) : null}
         </View>
       )}
 
-      {/* A wave while you're here: the ✓ capsule, which opens their card (R3-D4 4.2). */}
-      {waves.latest ? (
+      {/* A wave while you're here: L-A, Wave back inline; L-B, a fold opens the list (board 03). */}
+      {waves.toast ? (
         <WaveToast
-          key={`${waves.latest.fromUserId}:${waves.latest.at}`}
-          wave={waves.latest}
-          onOpen={() => {
-            const w = waves.latest
-            if (w) openCard({ id: w.fromUserId, name: w.fromName })
-          }}
-          onDone={() => waves.latest && waveShown(waves.latest)}
+          key={`${waveKey(waves.toast.waves[0])}:${waves.toast.waves[0].at}`}
+          toast={waves.toast}
+          onOpen={(w) => openCard({ id: w.fromUserId, name: w.fromName })}
+          onWaveBack={toastWave}
+          onSeeAll={seeAllWaves}
+          onSafety={(w) => ('fromCrewId' in w ? crewSafety(w.fromCrewId, w.fromName) : waveSafety(w.fromUserId, w.fromName))}
+          emblemOf={crewSeed}
+          onDone={() => waves.toast && waveShown(waves.toast)}
         />
       ) : null}
+
+      <CrewSheet
+        visible={sheetCrew !== null}
+        card={sheetCrew}
+        wave={{ state: sheetCrew ? crewWaveState(sheetCrew) : 'idle', as: crewCardAs && crewCardAs !== 'ask' ? crewCardAs.name : null }}
+        onClose={() => setSheetCrewId(null)}
+        onDismissed={crewSheetGone}
+        onWave={() => fromCrewSheet((c) => void crewActions.wave(c))}
+        onHideTonight={() => fromCrewSheet((c) => crews.hideTonight(c.crewId))}
+        onBlock={() => fromCrewSheet(crewActions.block)}
+        onReport={() => fromCrewSheet(crewActions.report)}
+      />
 
       <PersonCard
         visible={open !== null}
@@ -1003,21 +1245,17 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
         onDismissed={cardGone}
         variant={cardVariant}
         person={{
-          face: cardPerson ? faceOf(cardPerson) : { kind: 'creature', pseudonym: card?.name ?? '' },
+          face: cardPerson ? faceOf(cardPerson) : personFace({ named: false, name: card?.name ?? '' }),
           name: cardPerson?.name ?? card?.name ?? '',
           age: cardPerson?.age,
-          reason: cardPerson ? (cardPerson.matched ? 'You matched' : reasonLine(cardPerson)) : undefined,
-          // The line says overlaps[0]; the panel keeps the rest, never the same sentence twice.
-          reasons: cardPerson ? reasonLines(cardPerson).filter((r) => r !== cardOverlap?.line) : undefined,
-          overlap: cardOverlap ?? undefined,
-          chips: cardPerson ? [...cardPerson.interests.slice(0, 8), ...(cardPerson.sign ? [cardPerson.sign] : [])] : undefined,
-          badges: parseBadges(cardPerson?.badges)?.map((b) => b.kind),
+          // P-A: their deck card through the room's lens; a photo arrives only once they have shown you who they are.
+          ...(cardPerson ? lensView(cardPerson, room.lens, room.event, !!cardPerson.photo, now) : {}),
+          shared: cardPerson?.photo && sharedLine?.id === cardPerson.id ? sharedLine.line : null,
+          interests: cardPerson?.photo && sharedLine?.id === cardPerson.id ? sharedLine.interests : undefined,
         }}
-        liked={!!cardPerson && (cardPerson.liked || cardPerson.pending) && !cardPerson.matched}
         requested={!!cardPerson?.requested}
-        waving={!!card && sent[card.id] === 'busy'}
-        waved={!!card && sent[card.id] === 'waved'}
-        wavedAtYou={card ? (wavedAtYouLabel(waves.received[card.id]?.at, now) ?? undefined) : undefined}
+        wave={cardPerson?.wave ?? 'none'}
+        wavedAtYou={cardPerson?.wavedAt ? (wavedAgo(cardPerson.wavedAt, now) ?? undefined) : undefined}
         refusal={refusal ? { text: refusal.text, action: refusal.checkIn ? { label: 'Check in', onPress: checkInAgain } : undefined } : undefined}
         crewLike={
           cardPerson && personAs && !cardPerson.matched
@@ -1026,27 +1264,47 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
               : { name: personAs.name, emblemSeed: emblemOf(personAs.crewId), onPress: () => cardCrewLike(cardPerson) }
             : undefined
         }
-        onLike={() => cardPerson && void like(cardPerson)}
-        onWave={() => card && void wave(card.id)}
+        onWave={() => cardPerson && void wave(cardPerson)}
         onMessage={() => {
           if (!card) return
           const to = card
           closeCardThen(() => setConnectTo(to))
         }}
-        onSayHi={() => cardPerson?.conversationId && sayHi(cardPerson.conversationId, cardPerson)}
+        onSayHi={() => cardPerson && sayHiTo(cardPerson)}
+        onOpener={(text) => {
+          if (!card) return
+          if (cardPerson?.matched && cardPerson.conversationId) return sayHi(cardPerson.conversationId, cardPerson, text)
+          const to = card
+          closeCardThen(() => setConnectTo({ ...to, draft: text }))
+        }}
         onMore={() => card && safety(card)}
-        onViewProfile={() => card && openProfile(card)}
+        onViewProfile={() => card && openProfile(card, cardPerson ?? undefined)}
         testID="person-card"
       />
 
+      <RoomInfoSheet
+        visible={infoOpen && !!room.event}
+        onClose={() => setInfoOpen(false)}
+        eventId={room.event?.id ?? null}
+        title={room.event?.title ?? ''}
+        chatGroupId={chatGroupId}
+        hereCount={room.hereCount}
+        faces={youPile}
+        mutedLabel={roomMuted ? (muteLabel(roomMute) ?? 'Muted') : null}
+        onMute={() => setMuting(chatGroupId)}
+        onSeeAll={() => setRoomTab('people')}
+        onCheckOut={() => setConfirmingOut(true)}
+      />
+      <MuteSheet chatGroupId={muting} onClose={() => setMuting(null)} />
       <ConnectSheet
         // A new person is a new draft: the sheet keeps none from the last (SCREENS Flow 4, ConnectSheet).
-        key={connectTo?.id ?? 'none'}
+        key={connectTo ? `${connectTo.id}:${connectTo.draft ?? ''}` : 'none'}
         visible={connectTo !== null}
         displayName={connectTo?.name ?? ''}
         theyAreRevealed={Boolean(room.people.find((p) => p.id === connectTo?.id)?.photo)}
         sending={connecting}
         error={connectError}
+        draft={connectTo?.draft}
         onDismiss={() => {
           setConnectTo(null)
           setConnectError(undefined)
@@ -1090,10 +1348,13 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
       */}
       {room.match ? (
         <MomentMatch
-          you={controls.revealed && myPhoto ? { kind: 'photo', uri: myPhoto } : { kind: 'creature', pseudonym: room.match.you ?? myPseudonym ?? myName }}
-          them={matchPerson?.photo ? { kind: 'photo', uri: matchPerson.photo } : { kind: 'creature', pseudonym: room.match.name }}
+          // A new match is a new moment: it plays, buzzes and is said again.
+          key={room.match.conversationId}
+          you={myRoomFace({ revealed: controls.revealed, name: user?.name ?? null, photo: myPhoto, pseudonym: room.match.you ?? myPseudonym, eventId })}
+          them={matchPerson ? faceOf(matchPerson) : personFace({ named: false, name: room.match.name })}
           name={room.match.name}
-          reason={matchPerson ? reasonLine(matchPerson) : null}
+          // M-A: tonight's question and their answer, else a line to try.
+          tonight={room.lens?.question ? { question: room.lens.question, answer: matchPerson?.tonightAnswer ?? null } : null}
           opener={matchPerson ? openerFor(matchPerson) : null}
           onClose={room.clearMatch}
           onSayHi={() => {
@@ -1124,29 +1385,28 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
         <MomentPour key={checkIn.pours} testID="blendn-pour" frame={passFrame ?? undefined} venue={insideEvent?.venue ?? ''} ready={pourMayHandOff} asks={checkIn.asks} onDone={onPourDone} />
       ) : null}
 
-      <Sheet
-        visible={tray.visible}
-        onClose={checkIn.dismissTray}
-        title={tray.title}
-        body={tray.message}
-        icon={tray.extra?.icon}
-        actions={tray.buttons.map((b) => ({ label: b.label, onPress: b.onPress, loading: b.loading, disabled: b.disabled, kind: b.kind ?? (b.variant === 'primary' ? 'primary' : b.variant === 'destructive' ? 'destructive' : 'secondary') }))}
-        testID="blendn-tray"
-      >
-        {tray.extra?.detail ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.secondary]}>{tray.extra.detail}</Text> : null}
-      </Sheet>
+      <CheckInTray tray={tray} onClose={checkIn.dismissTray} testID="blendn-tray" />
 
       <Sheet
         visible={confirmingOut}
         onClose={() => setConfirmingOut(false)}
-        title="Check out of this event?"
-        body="You’ll leave the room and its people. To come back in you’ll need to check in again, with your location."
-        actions={[
-          { label: 'Stay', kind: 'secondary', onPress: () => setConfirmingOut(false) },
-          { label: 'Check out', kind: 'destructive', loading: controls.checkOutBusy, onPress: () => void checkOut() },
-        ]}
+        title={checkOutQuestion(null)}
+        body={CHECK_OUT_CONSEQUENCE}
+        actions={[{ label: STAY_LABEL, kind: 'tertiary', onPress: () => setConfirmingOut(false) }]}
         testID="check-out-confirm"
-      />
+      >
+        {/* The event page's neutral hold (buttons board C): one look for Check out. */}
+        <HoldToConfirm
+          kind="neutral"
+          label={CHECK_OUT_LABEL}
+          busyLabel={CHECKING_OUT_LABEL}
+          srLabel="Check out"
+          consequence={checkOutCaption(room.event?.title)}
+          onConfirm={() => void checkOut()}
+          busy={controls.checkOutBusy}
+          testID="check-out-confirm-hold"
+        />
+      </Sheet>
 
       {toast ? <Toast key={toast.key} kind={toast.kind} text={toast.text} onDismiss={() => setToast(null)} testID="blendn-toast" /> : null}
     </View>
@@ -1157,6 +1417,8 @@ const styles = StyleSheet.create({
   fill: { flex: 1 },
   /** Tonight and the Room are one absolute stack: as flex siblings, a Room mounted under the pour halved Tonight's height (drive 3). */
   layer: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 },
+  /** The Recap kept mounted (its state) under People from tonight, which has no background of its own: drawn away. */
+  underPeople: { opacity: 0 },
   ink: { color: COLOR.textPrimary },
   secondary: { color: COLOR.textSecondary },
   topBar: {
@@ -1167,14 +1429,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  topActions: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
   barGlass: { position: 'absolute', top: 0, left: 0, right: 0 },
   contrast: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 1, backgroundColor: MATERIAL.hairlineIncreaseContrast },
-  checkOut: {
-    height: SIZE.tag,
-    paddingHorizontal: SPACE.md,
-    borderRadius: RADIUS.capsule,
-    backgroundColor: COLOR.surface,
-    justifyContent: 'center',
-  },
+
 })

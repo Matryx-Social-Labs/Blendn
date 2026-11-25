@@ -1,6 +1,6 @@
 import { router, useFocusEffect } from 'expo-router'
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
-import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native'
 import Animated from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
@@ -9,24 +9,25 @@ import { RowsCard } from '../../components/crews/RowsCard'
 import { Button } from '../../components/ds/Button'
 import { CrewRow } from '../../components/ds/CrewCard'
 import { SectionHeader } from '../../components/ds/SectionHeader'
-import { font, HueProvider, useBoldText } from '../../components/ds/shared'
+import { HueProvider } from '../../components/ds/shared'
 import { StateScreen } from '../../components/ds/StateScreen'
 import { TopBar } from '../../components/ds/TopBar'
 import { emptyOut, fadeIn, riseIn } from '../../components/board/boardMotion'
 import { useSkeletonCrossfade } from '../../components/motion/useSkeletonCrossfade'
 import { SkeletonBlock } from '../../components/Skeleton'
 import { useToastDock } from '../../components/toastDock'
-import { type Crew, type CrewInvite } from '../../lib/crews'
-import { crewsApi } from '../../lib/crewsApi'
+import { moreCrewInvites, readMyCrews, useCrewInvites } from '../../lib/crewInvites'
+import { crewBadge, type Crew } from '../../lib/crews'
 import { crewRowSub, inviteRows } from '../../lib/crewsScreens'
-import { COLOR, MAX_FONT_SCALE, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
+import { COLOR, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import { useReducedMotion } from '../../lib/motion'
 import { ONBOARDING_ROUTES } from '../../lib/onboarding'
 import { useTopBarState } from '../../lib/useTopBarState'
 
 type Load =
   | { kind: 'loading' }
-  | { kind: 'ready'; crews: Crew[]; invites: CrewInvite[]; invitesTotal: number; invitesCursor: string | null }
+  /** The invites are not here: they are the one shared list (`useCrewInvites`), so an answer in Notifications leaves this screen too. */
+  | { kind: 'ready'; crews: Crew[] }
   /** The set-up and age gate (403): the server's sentence, and the way through it. */
   | { kind: 'gate'; line: string }
   | { kind: 'failed' }
@@ -39,8 +40,6 @@ const DOCK_GAP = SPACE.xl
 const FIRST_ITEM_MS = 600
 /** Three rows of the card, so the list does not jump when it lands. */
 const SKELETON_ROWS = 3
-/** D-L18: what the footnote means, in one plain sentence. */
-export const FOOTNOTE = 'Once you’ve checked in somewhere, you’ll see where your crew is.'
 
 /**
  * Your crews, and the invites waiting for you (Flow 10 · 10.1).
@@ -51,9 +50,9 @@ export const FOOTNOTE = 'Once you’ve checked in somewhere, you’ll see where 
  * primary. A lapsed invite dims and says Expired.
  */
 function CrewsScreenContent() {
-  const bold = useBoldText()
   const insets = useSafeAreaInsets()
   const [load, setLoad] = useState<Load>({ kind: 'loading' })
+  const invites = useCrewInvites()
   const [refreshing, setRefreshing] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
   const [moreFailed, setMoreFailed] = useState(false)
@@ -69,7 +68,7 @@ function CrewsScreenContent() {
    * drop as the list rises in (Reduce Motion: a crossfade, no drop). Only that step plays: a first load, a refresh and a list
    * that stays a list never do. State adjusted in render, so the list that replaces the empty one is the one that rises.
    */
-  const isEmpty = load.kind === 'ready' && load.crews.length === 0 && load.invites.length === 0
+  const isEmpty = load.kind === 'ready' && load.crews.length === 0 && invites.invites.length === 0
   const [wasEmpty, setWasEmpty] = useState(false)
   const [firstItem, setFirstItem] = useState(false)
   if (isEmpty !== wasEmpty) {
@@ -84,10 +83,9 @@ function CrewsScreenContent() {
   }, [firstItem])
 
   const read = useCallback(async () => {
-    const result = await crewsApi.myCrews()
+    const result = await readMyCrews()
     if (result.success && result.data) {
-      const { crews, invites, invitesPagination } = result.data
-      setLoad({ kind: 'ready', crews, invites, invitesTotal: invitesPagination?.totalCount ?? invites.length, invitesCursor: invitesPagination?.hasMore ? invitesPagination.nextCursor : null })
+      setLoad({ kind: 'ready', crews: result.data.crews })
       setMoreFailed(false)
     }
     else if (result.errorCode === 'FORBIDDEN') setLoad({ kind: 'gate', line: result.error ?? '' })
@@ -110,18 +108,12 @@ function CrewsScreenContent() {
 
   /** The next page of invites, onto the ones shown; a failure keeps them and offers the retry. */
   const moreInvites = async () => {
-    if (load.kind !== 'ready' || !load.invitesCursor || loadingMore) return
+    if (load.kind !== 'ready' || !invites.cursor || loadingMore) return
     setLoadingMore(true)
     setMoreFailed(false)
-    const result = await crewsApi.myCrews(load.invitesCursor)
+    const landed = await moreCrewInvites()
     setLoadingMore(false)
-    if (!result.success || !result.data) return setMoreFailed(true)
-    const page = result.data.invitesPagination
-    setLoad((now) => {
-      if (now.kind !== 'ready') return now
-      const seen = new Set(now.invites.map((i) => i.crewId))
-      return { ...now, invites: [...now.invites, ...result.data!.invites.filter((i) => !seen.has(i.crewId))], invitesCursor: page?.hasMore ? page.nextCursor : null, invitesTotal: page?.totalCount ?? now.invitesTotal }
-    })
+    setMoreFailed(!landed)
   }
 
   const openNew = () => router.push('/crews/new')
@@ -150,7 +142,7 @@ function CrewsScreenContent() {
         testID="crews-gate"
       />
     )
-  } else if (!load.crews.length && !load.invites.length) {
+  } else if (!load.crews.length && !invites.invites.length) {
     body = (
       <Animated.View exiting={emptyOut(reduceMotion)}>
         <StateScreen
@@ -163,18 +155,18 @@ function CrewsScreenContent() {
       </Animated.View>
     )
   } else {
-    const rows = inviteRows(load.invites)
+    const rows = inviteRows(invites.invites)
     body = (
       <Animated.View entering={firstItem ? (reduceMotion ? fadeIn(0) : riseIn(0)) : arrive} style={styles.sections}>
         {rows.length ? (
           <View style={styles.section}>
-            <SectionHeader title="Invites" count={load.invitesTotal} />
+            <SectionHeader title="Invites" count={invites.total} />
             <RowsCard testID="crews-invites">
               {rows.map((row) => (
                 <InviteRow key={row.invite.crewId} row={row} onSee={() => seeInvite(row.invite.crewId)} />
               ))}
             </RowsCard>
-            {load.invitesCursor ? (
+            {invites.cursor ? (
               <Button
                 kind="secondary"
                 size="md"
@@ -197,13 +189,11 @@ function CrewsScreenContent() {
                   emblemSeed={crew.emblemSeed}
                   size={crew.size}
                   sub={crewRowSub(crew.size)}
+                  badge={crewBadge(crew.badges)}
                   onPress={() => router.push({ pathname: '/crews/[crewId]', params: { crewId: crew.crewId } })}
                 />
               ))}
             </RowsCard>
-            <Text style={[font('meta', bold), styles.footnote]} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} testID="crews-footnote">
-              {FOOTNOTE}
-            </Text>
           </View>
         ) : null}
       </Animated.View>
@@ -211,7 +201,7 @@ function CrewsScreenContent() {
   }
 
   // The dock is a crew screen's one action once there is a list to put a crew in.
-  const docked = load.kind === 'ready' && (load.crews.length > 0 || load.invites.length > 0)
+  const docked = load.kind === 'ready' && (load.crews.length > 0 || invites.invites.length > 0)
   // The Android snackbar stands above the docked button (the toast adds the bottom inset itself).
   useToastDock(docked ? dockHeight + DOCK_GAP : 0)
 
@@ -242,7 +232,7 @@ function CrewsScreenContent() {
 
 function CrewsSkeleton() {
   return (
-    <View style={styles.sections} accessibilityLabel="Loading your crews">
+    <View accessible style={styles.sections} accessibilityLabel="Loading your crews">
       <SkeletonBlock width="100%" height={(SIZE.primary + SPACE.sm) * SKELETON_ROWS} borderRadius={RADIUS.sheet} />
     </View>
   )
@@ -254,7 +244,6 @@ const styles = StyleSheet.create({
   centred: { justifyContent: 'center' },
   sections: { gap: SECTION_GAP },
   section: { gap: SPACE.md },
-  footnote: { color: COLOR.textTertiary, paddingHorizontal: SPACE.xs },
   dock: { position: 'absolute', left: SPACE.gutter, right: SPACE.gutter },
 })
 

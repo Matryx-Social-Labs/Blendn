@@ -5,6 +5,7 @@ import { Icon } from '../ui/Icon'
 import { COLOR, FONT_FAMILY, ICON, MAX_FONT_SCALE, PRESS, RADIUS, SPACE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { tint } from '../../lib/theme'
+import { HostTag } from './BroadcastNotice'
 import { BUBBLE, plural } from './chatShared'
 import { CONTROL_FONT_CAP, font, IC_HAIRLINE, minTarget, PRESSED_WASH, useBoldText, useIncreaseContrast, useSelection } from './shared'
 
@@ -28,8 +29,8 @@ export type PollBubbleProps = {
   closed?: boolean
   /** A vote or a change, while it is open. */
   onVote?: (index: number) => void
-  /** Who asked, as the label names them. */
-  from?: string
+  /** The host's public name, as the room's host card names them (audit C-1); absent, the poll just says HOST. */
+  host?: string
   /**
    * The server's own words for counts it withheld under the floor ("Results appear once more people vote"). Given, the
    * options draw no per-option "Fewer than 5" and the foot says this: the number five is the server's to name, not ours.
@@ -66,22 +67,22 @@ function footLine(options: PollOption[], picked: number | undefined, closed: boo
  * ("One more, 7 votes"), then the foot line. No long-press menu. Increase
  * Contrast: the hairline.
  */
-export function PollBubble({ question, options, picked, closed = false, onVote, from = 'the organizer', withheldLine, previewPressed, testID }: PollBubbleProps) {
+export function PollBubble({ question, options, picked, closed = false, onVote, host, withheldLine, previewPressed, testID }: PollBubbleProps) {
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const shown = (picked !== undefined || closed) && options.some((o) => o.votes !== undefined)
   const total = options.reduce((sum, o) => sum + (o.votes ?? 0), 0)
-  const head = from === 'the organizer' ? 'Organizer' : from
 
   return (
     <View testID={testID} style={[styles.bubble, contrast && IC_HAIRLINE]}>
-      <View accessible accessibilityLabel={`Poll from ${from}: ${question}`} style={styles.words}>
+      <View accessible accessibilityLabel={`Poll from the host${host ? `, ${host}` : ''}: ${question}`} style={styles.words}>
         <View style={styles.head}>
           <Icon name="chart-column" size={ICON.inline} color={COLOR.textSecondary} />
-          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>
-            Poll · {head}
-            {closed ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={styles.primary}> · Closed</Text> : null}
+          <Text numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary, styles.headName]}>
+            {host ? `Poll · ${host}` : 'Poll'}
           </Text>
+          <HostTag />
+          {closed ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.primary]}>· Closed</Text> : null}
         </View>
         <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.primary]}>
           {question}
@@ -180,6 +181,8 @@ const styles = StyleSheet.create({
   },
   words: { gap: SPACE.sm },
   head: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
+  /** A long org name gives way to HOST and Closed, as the host card's name does. */
+  headName: { flexShrink: 1 },
   option: {
     borderRadius: OPTION_RADIUS,
     backgroundColor: COLOR.surface,

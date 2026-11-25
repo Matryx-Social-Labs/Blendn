@@ -9,7 +9,7 @@ import { eventFromApi } from '../lib/api'
 import {
   DRAWER_HANDLE_HEIGHT,
   DRAWER_HEADER_HEIGHT,
-  DRAWER_PEEK_LINE,
+  drawerPeekLine,
   DRAWER_SEGMENTED_HEIGHT,
   drawerContentHeight,
   drawerSnapPoints,
@@ -110,10 +110,19 @@ describe('the peek line makes room only when a pane has one', () => {
   const screen = { height: 800, topChrome: 100, tabBarTop: 700 }
   it('peek rises by the line; full and half do not move', () => {
     const plain = drawerSnapPoints(screen)
-    const withLine = drawerSnapPoints({ ...screen, peekExtra: DRAWER_PEEK_LINE })
-    expect(withLine.peek).toBe(plain.peek - DRAWER_PEEK_LINE)
+    const withLine = drawerSnapPoints({ ...screen, peekExtra: drawerPeekLine() })
+    expect(withLine.peek).toBe(plain.peek - drawerPeekLine())
     expect(withLine.full).toBe(plain.full)
     expect(withLine.half).toBe(plain.half)
+  })
+
+  // SCRUM-1090 drive: at the largest text the line drew at 2x in a 28 pt room, cut by the tab bar.
+  it('the room grows with the text size, up to the meta role\'s cap, and never shrinks below the default', () => {
+    expect(drawerPeekLine(1)).toBe(28)
+    expect(drawerPeekLine(1.5)).toBe(38)
+    expect(drawerPeekLine(3.1)).toBe(48)
+    // Control: a smaller system text keeps the default room, so peek does not drop behind the tab bar.
+    expect(drawerPeekLine(0.82)).toBe(28)
   })
 })
 
@@ -169,7 +178,8 @@ describe('the Events | Places switch is the drawer’s title tabs, tap only', ()
 
   it('uses TitleTabs, which has no drag (it would compete with the drawer and map gestures), with the city chip trailing', () => {
     expect(shell).toMatch(/<TitleTabs[\s\S]*?testID="home-segmented"/)
-    expect(shell).toContain('testID="home-city"')
+    // The city chip is its own part now (`CityChip`, capped at the board's 148 pt).
+    expect(shell).toContain('<CityChip ')
     expect(shell).toContain('onPress={browse.openCityPicker}')
     expect(shell).not.toMatch(/SegmentedControl|draggable/)
   })

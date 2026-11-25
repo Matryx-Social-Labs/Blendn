@@ -16,7 +16,7 @@ jest.mock('expo-router', () => ({
   },
 }))
 jest.mock('../lib/crewsApi', () => ({
-  crewsApi: { crewsAt: jest.fn(), myCrews: jest.fn(), openToCrews: jest.fn(), here: jest.fn(), likeCrew: jest.fn(), report: jest.fn() },
+  crewsApi: { crewsAt: jest.fn(), myCrews: jest.fn(), openToCrews: jest.fn(), waveCrew: jest.fn(), report: jest.fn() },
 }))
 const mockCheckInListeners = new Set<() => void>()
 jest.mock('../lib/checkIn', () => ({
@@ -30,10 +30,13 @@ jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: jest.fn(
 jest.mock('../lib/logger', () => ({ Logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() } }))
 
 import { router } from 'expo-router'
-import { CrewsFoot, CrewsHead } from '../components/blendn/RoomCrews'
-import { useCrewActions, useCrewsHere } from '../components/crews/CrewsView'
+import { CrewsFoot, CrewsHead, RoomCrewCard } from '../components/blendn/RoomCrews'
+import { CREW_ARRIVALS_RELOAD_MS, useCrewActions, useCrewsHere } from '../components/crews/CrewsView'
 import { OPEN_TO_CREWS_LABEL, type CrewCard, type CrewsAtEvent } from '../lib/crews'
 import { crewsApi } from '../lib/crewsApi'
+import { minTarget } from '../components/ds/shared'
+import { TYPE } from '../lib/design/tokens'
+import { OPACITY } from '../lib/theme'
 
 const api = crewsApi as jest.Mocked<typeof crewsApi>
 
@@ -109,6 +112,63 @@ describe('"Open to joining a crew tonight" (M7, M11)', () => {
     await act(async () => answer({ success: true, data: { openToCrews: true } }))
     expect(toggle().props.accessibilityState).toEqual({ checked: true, disabled: false })
   })
+
+  it('a write answers the failed read: no retry races it, and the tap is what shows (motion audit M19)', async () => {
+    api.crewsAt.mockResolvedValue(page([], false))
+    api.openToCrews.mockResolvedValueOnce({ success: false, error: 'Too many requests', errorCode: 'RATE_LIMITED' })
+    await render(<Harness checkInKey="ci-m19" />)
+    await waitFor(() => screen.getByText(/Couldn’t check whether this is on/))
+    const toggle = () => screen.getByRole('switch', { name: OPEN_TO_CREWS_LABEL })
+
+    let written: (v: unknown) => void = () => {}
+    api.openToCrews.mockReturnValueOnce(new Promise((r) => (written = r)) as never)
+    await fireEvent.press(toggle())
+    // The write is the read now. A retry sent beside it answered from before the tap and won (iOS drive, 2026-11-10):
+    // the switch showed off while the server held on.
+    expect(screen.queryByText(/Couldn’t check whether this is on/)).toBeNull()
+    await act(async () => written({ success: true, data: { openToCrews: true } }))
+    expect(toggle().props.accessibilityState).toEqual({ checked: true, disabled: false })
+    expect(api.openToCrews).toHaveBeenCalledTimes(2)
+  })
+
+  it('a write that fails hands the retry back', async () => {
+    api.crewsAt.mockResolvedValue(page([], false))
+    api.openToCrews.mockResolvedValueOnce({ success: false, error: 'Too many requests', errorCode: 'RATE_LIMITED' })
+    await render(<Harness checkInKey="ci-m19b" />)
+    await waitFor(() => screen.getByText(/Couldn’t check whether this is on/))
+    api.openToCrews.mockResolvedValueOnce({ success: false, error: 'Offline', errorCode: 'NETWORK_ERROR' })
+    await fireEvent.press(screen.getByRole('switch', { name: OPEN_TO_CREWS_LABEL }))
+    await waitFor(() => screen.getByText(/Couldn’t check whether this is on/))
+    expect(screen.getByRole('switch', { name: OPEN_TO_CREWS_LABEL }).props.accessibilityState).toEqual({ checked: false, disabled: false })
+  })
+})
+
+describe('the retry lines are full targets that answer a press (motion audit M12)', () => {
+  const reachesTarget = async (testID: string, line: number) => {
+    const retry = screen.getByTestId(testID)
+    expect(retry.props.accessibilityRole).toBe('button')
+    expect(line + 2 * (retry.props.hitSlop as number)).toBeGreaterThanOrEqual(minTarget())
+    // A line of text with no wash: the press shows as a dim while the finger is down.
+    expect(StyleSheet.flatten(retry.props.style)?.opacity).toBeUndefined()
+    await fireEvent(retry, 'responderGrant', { nativeEvent: { timestamp: 0 }, persist: () => {}, currentTarget: { measure: () => {} } })
+    expect(StyleSheet.flatten(screen.getByTestId(testID).props.style)?.opacity).toBe(OPACITY.pressed)
+  }
+
+  it('"Couldn’t check whether this is on"', async () => {
+    api.crewsAt.mockResolvedValue(page([], false))
+    api.openToCrews.mockResolvedValueOnce({ success: false, error: 'Too many requests', errorCode: 'RATE_LIMITED' })
+    await render(<Harness checkInKey="ci-m12a" />)
+    await waitFor(() => screen.getByText(/Couldn’t check whether this is on/))
+    await reachesTarget('room-solo-retry', TYPE.meta.lineHeight)
+  })
+
+  it('"The crews didn’t load"', async () => {
+    api.crewsAt.mockResolvedValueOnce({ success: false, error: 'Offline', errorCode: 'NETWORK_ERROR' } as never)
+    api.openToCrews.mockResolvedValue({ success: true, data: { openToCrews: false } })
+    await render(<Harness checkInKey="ci-m12b" />)
+    await waitFor(() => screen.getByText(/The crews didn’t load/))
+    await reachesTarget('room-crews-retry', TYPE.body.lineHeight)
+  })
 })
 
 describe('no crew yet (10-7 · 16)', () => {
@@ -144,6 +204,56 @@ describe('the crews here, a page at a time (M9)', () => {
     await waitFor(() => expect(api.crewsAt).toHaveBeenCalledTimes(2))
   })
 
+  describe('a crewmate who comes in after you (4-A3: the strip names them without leaving the room)', () => {
+    const crew = { crewId: 'c1', name: 'Nebula' } as never
+    const arrivals = async (mine: unknown[]) => {
+      jest.useFakeTimers()
+      api.myCrews.mockResolvedValue({ success: true, data: { crews: mine as never, invites: [] } })
+      api.crewsAt.mockResolvedValue(page([], false))
+      const hook = await renderHook(({ n }: { n: number }) => useCrewsHere('e1', n), { initialProps: { n: 2 } })
+      await waitFor(() => expect(api.crewsAt).toHaveBeenCalledTimes(1))
+      return hook
+    }
+    afterEach(() => jest.useRealTimers())
+
+    it('re-reads when the room count rises, at most once a window, and the last arrival in a burst is still read', async () => {
+      const { rerender } = await arrivals([crew])
+      await rerender({ n: 3 })
+      await rerender({ n: 4 })
+      await rerender({ n: 5 })
+      await act(async () => jest.advanceTimersByTime(CREW_ARRIVALS_RELOAD_MS))
+      expect(api.crewsAt).toHaveBeenCalledTimes(2)
+      await act(async () => jest.advanceTimersByTime(CREW_ARRIVALS_RELOAD_MS * 3))
+      expect(api.crewsAt).toHaveBeenCalledTimes(2)
+    })
+
+    it('a read still waiting when the room changes is dropped, never read for the last room', async () => {
+      api.myCrews.mockResolvedValue({ success: true, data: { crews: [crew], invites: [] } })
+      api.crewsAt.mockResolvedValue(page([], false))
+      const { rerender } = await renderHook(({ id, n }: { id: string; n: number }) => useCrewsHere(id, n), { initialProps: { id: 'e1', n: 2 } })
+      await waitFor(() => expect(api.crewsAt).toHaveBeenCalledTimes(1))
+      jest.useFakeTimers()
+      await rerender({ id: 'e1', n: 3 })
+      await rerender({ id: 'e2', n: 3 })
+      await act(async () => jest.advanceTimersByTime(CREW_ARRIVALS_RELOAD_MS * 2))
+      expect(api.crewsAt.mock.calls.map((c) => c[0])).toEqual(['e1', 'e2'])
+    })
+
+    it('control: someone leaving reads nothing', async () => {
+      const { rerender } = await arrivals([crew])
+      await rerender({ n: 1 })
+      await act(async () => jest.advanceTimersByTime(CREW_ARRIVALS_RELOAD_MS * 2))
+      expect(api.crewsAt).toHaveBeenCalledTimes(1)
+    })
+
+    it('control: with no crew, a room of thousands filling up reads nothing', async () => {
+      const { rerender } = await arrivals([])
+      for (let n = 3; n < 40; n++) await rerender({ n })
+      await act(async () => jest.advanceTimersByTime(CREW_ARRIVALS_RELOAD_MS * 2))
+      expect(api.crewsAt).toHaveBeenCalledTimes(1)
+    })
+  })
+
   it('a new event starts over: nothing of the last one shows', async () => {
     let second: (v: unknown) => void = () => {}
     api.crewsAt.mockResolvedValueOnce(page([card('old-event')], false)).mockReturnValueOnce(new Promise((r) => (second = r)) as never)
@@ -154,20 +264,20 @@ describe('the crews here, a page at a time (M9)', () => {
     await act(async () => second(page([card('new-event')], false)))
   })
 
-  it('M8: two likes of a card at once send one', async () => {
+  it('M8: two waves of a card at once send one', async () => {
     api.crewsAt.mockResolvedValue(page([card('a')], false))
     let finish: (v: unknown) => void = () => {}
-    api.likeCrew.mockReturnValue(new Promise((r) => (finish = r)) as never)
+    api.waveCrew.mockReturnValue(new Promise((r) => (finish = r)) as never)
     const { result } = await renderHook(() => {
       const crews = useCrewsHere('e1')
       return useCrewActions('e1', crews)
     })
     await act(async () => {
-      void result.current.like(card('a'))
-      void result.current.like(card('a'))
+      void result.current.wave(card('a'))
+      void result.current.wave(card('a'))
     })
-    expect(api.likeCrew).toHaveBeenCalledTimes(1)
-    await act(async () => finish({ success: true, data: { liked: true, blend: null } }))
+    expect(api.waveCrew).toHaveBeenCalledTimes(1)
+    await act(async () => finish({ success: true, data: { liked: true, waved: true, blend: null } }))
   })
 
   it('a failed page says so and offers the retry', async () => {
@@ -201,5 +311,17 @@ describe('the crews here, a page at a time (M9)', () => {
     })
     const s = result.current.state
     expect(s.status === 'ready' ? s.data.crews.map((c) => c.crewId) : []).toEqual(['fresh'])
+  })
+})
+
+describe('the Room crew card’s badge (YOU-06)', () => {
+  const actions = { wave: jest.fn(), report: jest.fn() } as never
+  it('draws “Out together often” once when the server sends the tier, and nothing when it does not', async () => {
+    await render(<RoomCrewCard card={{ ...card('nebula'), badges: [{ kind: 'nights_together', label: 'Out together often' }] }} actions={actions} as={null} index={0} onOpen={jest.fn()} />)
+    expect(screen.getAllByLabelText('Badge: Out together often')).toHaveLength(1)
+  })
+  it('no badge key, no pill', async () => {
+    await render(<RoomCrewCard card={card('orbit')} actions={actions} as={null} index={0} onOpen={jest.fn()} />)
+    expect(screen.queryByLabelText(/^Badge:/)).toBeNull()
   })
 })

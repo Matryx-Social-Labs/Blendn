@@ -55,9 +55,14 @@ export function guestTypeLabel(venue: { venueType?: string | null; venueTypeLabe
   return venue.venueType === 'other' || venue.venueTypeLabel === OTHER_LABEL ? 'Venue' : venue.venueTypeLabel
 }
 
-/** Which plate a venue_type is drawn on. */
+/** The plate a venue_type has; null for none (no type, or one with no plate), so the caller picks its own fallback. */
+export function plateOf(venueType: string | null | undefined): PlateKey | null {
+  return venueType && Object.hasOwn(PLATE_BY_TYPE, venueType) ? PLATE_BY_TYPE[venueType] : null
+}
+
+/** Which plate a venue_type is drawn on: the bar's for a type with none. */
 export function plateFor(venueType: string | null | undefined): PlateKey {
-  return (venueType && PLATE_BY_TYPE[venueType]) || 'bar'
+  return plateOf(venueType) ?? 'bar'
 }
 
 /** The area a place is named by on its lines: the server's `area` (§C4) when it sends one, else the street address, else the city. */
@@ -76,13 +81,34 @@ export type PlaceAreaSummary = { slug: string; name: string; count: number; live
 /** Ten kilometres and over the decimal is noise ("11 km", not "11.2 km"), and it is what clipped Nearby's column (drive 4 D-4). */
 const WHOLE_KM_FROM = 10
 
-/** "350 m" under a kilometre (to the nearest 50), "4.8 km" up to ten, "11 km" from there; null with no fix. */
-export function distanceText(km: number | null | undefined): string | null {
-  if (km == null || !Number.isFinite(km) || km < 0) return null
-  if (km < 1) return `${Math.max(50, Math.round((km * 1000) / 50) * 50)} m`
+/**
+ * How a distance was measured. `approximate`: from a fix good only to kilometres (iOS Precise off, Android's coarse grant,
+ * or any radius over a kilometre: `readingOf` in lib/mapPresence.ts), the server's own `distance` included, which it
+ * measures from the coordinates the phone sends. Required, so no caller can forget to say (SCRUM-1080).
+ */
+export type DistanceReading = 'exact' | 'approximate'
+
+/** Whether a list shows distances and how they are said; false without a fix in the city you are in. */
+export type DistanceShown = DistanceReading | false
+
+/** The word that says a distance is a guess at the district ("about 1 km"). */
+export const ABOUT = 'about '
+
+/**
+ * "350 m" under a kilometre (to the nearest 50), "4.8 km" up to ten, "11 km" from there ("7,510 km"); null with no fix, or
+ * `false` (browsing a city the phone is not in). From an approximate fix, "about 1 km": whole kilometres and never under one,
+ * never metres (pulse-map 06 frame 2).
+ */
+export function distanceText(km: number | null | undefined, reading: DistanceShown): string | null {
+  if (!reading || km == null || !Number.isFinite(km) || km < 0) return null
+  if (reading === 'approximate') return `${ABOUT}${Math.max(1, Math.round(km)).toLocaleString('en-US')} km`
+  // Judged on the shown metres, so 0.99 is "1.0 km", never "1000 m".
+  const metres = Math.max(50, Math.round((km * 1000) / 50) * 50)
+  if (metres < 1000) return `${metres} m`
   // Judged on the shown tenth, so 9.96 is "10 km", never "10.0 km".
   const tenths = Math.round(km * 10) / 10
-  return tenths < WHOLE_KM_FROM ? `${tenths.toFixed(1)} km` : `${Math.round(km)} km`
+  // Grouped past a thousand ("7,510 km"): the edge marker can point at a city a continent away.
+  return tenths < WHOLE_KM_FROM ? `${tenths.toFixed(1)} km` : `${Math.round(km).toLocaleString('en-US')} km`
 }
 
 /** Tonight's event at a place, in the one date grammar: "Live", "In 25 min", "9 PM". Null when it is another day. */
@@ -130,10 +156,10 @@ export function splitPlaces(venues: readonly VenueListItem[], now: number): Plac
   return strata
 }
 
-/** "350 m" read aloud: "350 metres", "4.8 kilometres". */
-export function spokenDistance(km: number | null | undefined): string | null {
-  const text = distanceText(km)
-  return text && text.replace(/ m$/, ' metres').replace(/ km$/, ' kilometres')
+/** "350 m" read aloud: "350 metres", "4.8 kilometres", "about 1 kilometre". */
+export function spokenDistance(km: number | null | undefined, reading: DistanceShown): string | null {
+  const text = distanceText(km, reading)
+  return text && text.replace(/ m$/, ' metres').replace(/ km$/, text === `${ABOUT}1 km` ? ' kilometre' : ' kilometres')
 }
 
 const SPOKEN_BUCKET = { '5-9': '5 to 9 people live', '10-19': '10 to 19 people live', '20+': '20 or more people live' } as const
@@ -155,14 +181,14 @@ export function hoursLine(tonight: VenueListItem['tonight'], now: number): { lea
 }
 
 /** What a live tile is read as: "{name}. {type}, {area}, {distance}. 10 to 19 people live." */
-export function tileLabel(venue: VenueListItem): string {
-  const where = [guestTypeLabel(venue), placeArea(venue), spokenDistance(venue.distance)].filter(Boolean).join(', ')
+export function tileLabel(venue: VenueListItem, reading: DistanceShown): string {
+  const where = [guestTypeLabel(venue), placeArea(venue), spokenDistance(venue.distance, reading)].filter(Boolean).join(', ')
   return [venue.name, where, spokenBucket(venue.liveNow)].filter(Boolean).join('. ')
 }
 
 /** What an Open tonight card is read as: "{name}. {type}, {area}, {distance}. Tonight 9 PM, {title}." or "Open till 1 AM." */
-export function openLabel(venue: VenueListItem, now: number): string {
-  const where = [guestTypeLabel(venue), placeArea(venue), spokenDistance(venue.distance)].filter(Boolean).join(', ')
+export function openLabel(venue: VenueListItem, now: number, reading: DistanceShown): string {
+  const where = [guestTypeLabel(venue), placeArea(venue), spokenDistance(venue.distance, reading)].filter(Boolean).join(', ')
   const tonight = tonightEvent(venue.nextEvent, now)
   const hours = hoursLine(venue.tonight, now)
   const line = tonight ? `${/^\d/.test(tonight.when) ? `Tonight ${tonight.when}` : tonight.when}, ${tonight.title}.` : hours ? `${hours.lead} ${hours.time}.` : null
@@ -170,8 +196,8 @@ export function openLabel(venue: VenueListItem, now: number): string {
 }
 
 /** What a Near you row is read as: "2 of 5 nearest. {name}, {type}, {area}, {distance}". */
-export function nearLabel(venue: VenueListItem, n: number): string {
-  const where = [venue.name, guestTypeLabel(venue), placeArea(venue), spokenDistance(venue.distance)].filter(Boolean).join(', ')
+export function nearLabel(venue: VenueListItem, n: number, reading: DistanceShown): string {
+  const where = [venue.name, guestTypeLabel(venue), placeArea(venue), spokenDistance(venue.distance, reading)].filter(Boolean).join(', ')
   return `${n} of ${NEAR_COUNT} nearest. ${where}`
 }
 
@@ -433,12 +459,12 @@ export function placeRows(view: PlaceView): PlaceRow[] {
 
 /** What a tile, a row or a quiet row is read as: name, type, distance, live bucket, tonight's event. */
 /** `now` only for a row whose words change with the clock (a tile, an open row); a quiet row passes none, so its memo holds. */
-export function placeLabel(venue: VenueListItem, now?: number): string {
+export function placeLabel(venue: VenueListItem, reading: DistanceShown, now?: number): string {
   const tonight = now === undefined ? null : tonightEvent(venue.nextEvent, now)
   return [
     venue.name,
     guestTypeLabel(venue),
-    distanceText(venue.distance),
+    distanceText(venue.distance, reading),
     bucketLabel(venue.liveNow),
     tonight ? `${tonight.when}, ${tonight.title}` : null,
   ]

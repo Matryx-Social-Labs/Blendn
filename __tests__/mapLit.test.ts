@@ -26,11 +26,14 @@ import {
   type LitBuilding,
   type LitPlace,
   type Ring,
+  stackedChip,
+  stackLine,
+  withDistance,
 } from '../lib/mapLit'
 import { buildingHeights, CITY_BUILDINGS, cityColour, EMBER_MAP_STYLE, LABELS_FROM_LAYER_ID } from '../lib/mapStyleEmber'
 import { MAP_THEME } from '../lib/mapTheme'
 import { refreshPhoneZone } from '../lib/time'
-import { EMBER } from '../lib/theme'
+import { COLOR } from '../lib/design/tokens'
 
 /**
  * The lit look of the home map (step 2c; research §4.2, prototype v2): what a
@@ -275,10 +278,13 @@ describe('the ground glow', () => {
   })
 
   it('is the theme radius on the ground, and stops growing past its zoom cap', () => {
-    const [, , , z0, px0, z1, px1] = glowRadius()
-    const mpp = (z: number) => (40_075_016.686 * Math.cos((MAP_THEME.glow.referenceLatitude * Math.PI) / 180)) / (512 * 2 ** z)
+    // Toronto, not Bengaluru: a metre is fewer pixels at 13° than at 43.7°, so a fixed 13 drew Toronto's glows too big.
+    const TORONTO = 43.65
+    const [, , , z0, px0, z1, px1] = glowRadius(TORONTO)
+    const mpp = (z: number) => (40_075_016.686 * Math.cos((TORONTO * Math.PI) / 180)) / (512 * 2 ** z)
     expect(px0 * mpp(z0)).toBeCloseTo(MAP_THEME.glow.radiusM, 6)
     expect(px1 * mpp(z1)).toBeCloseTo(MAP_THEME.glow.radiusM, 6)
+    expect(glowRadius(TORONTO)[4]).toBeGreaterThan(glowRadius(13)[4])
     expect(z1).toBe(MAP_THEME.glow.maxZoom)
     expect(MAP_THEME.glow.maxZoom).toBeLessThanOrEqual(18)
   })
@@ -301,12 +307,12 @@ describe('chips above the roofs', () => {
     refreshPhoneZone()
   })
 
-  it('name India’s zone on a phone that is not there: "Fri · 8 PM IST" (RC 7, the zone-name rule)', () => {
+  it('name India’s zone on a phone that is not there: "Tonight · 8 PM" (RC 7, the zone-name rule)', () => {
     process.env.TZ = 'America/Los_Angeles'
     refreshPhoneZone()
     try {
       const now = Date.UTC(2026, 9, 9, 6, 0)
-      expect(chipLine({ kind: 'event', live: false, startsAt: '2026-10-09T14:30:00Z', bucket: null }, now)).toBe('Fri · 8 PM IST')
+      expect(chipLine({ kind: 'event', live: false, startsAt: '2026-10-09T14:30:00Z', bucket: null, timeZone: 'Asia/Kolkata' }, now)).toBe('Tonight · 8 PM')
     } finally {
       process.env.TZ = 'Asia/Kolkata'
       refreshPhoneZone()
@@ -332,7 +338,9 @@ describe('chips above the roofs', () => {
     const now = Date.UTC(2026, 9, 9, 6, 0) // Fri 9 Oct, 11:30 IST
     expect(chipLine({ kind: 'event', live: true, startsAt: null, bucket: null }, now)).toBe('LIVE ●')
     // Fri 9 Oct 14:30Z is 8 PM in India, whatever the phone's zone.
-    expect(chipLine({ kind: 'event', live: false, startsAt: '2026-10-09T14:30:00Z', bucket: null }, now)).toBe('Fri · 8 PM')
+    expect(chipLine({ kind: 'event', live: false, startsAt: '2026-10-09T14:30:00Z', bucket: null, timeZone: 'Asia/Kolkata' }, now)).toBe('Tonight · 8 PM')
+    // The event's own zone, not India's for everything (SCRUM-998): Toronto's 10:30 AM, named on a phone in India.
+    expect(chipLine({ kind: 'event', live: false, startsAt: '2026-10-09T14:30:00Z', bucket: null, timeZone: 'America/Toronto' }, now)).toBe('Today · 10:30 AM')
     expect(chipLine({ kind: 'event', live: false, startsAt: 'garbage', bucket: null }, now)).toBe('')
     // Past six days, the date; never the year, even across New Year (review L6): the line is a pin's width.
     expect(chipLine({ kind: 'event', live: false, startsAt: '2027-01-02T14:30:00Z', bucket: null }, Date.UTC(2026, 11, 22, 6))).toBe('Sat 2 Jan · 8 PM')
@@ -343,7 +351,7 @@ describe('chips above the roofs', () => {
   it("put a late-night start on India’s day, not UTC’s", () => {
     const now = Date.UTC(2026, 9, 9, 6, 0)
     // Fri 9 Oct 20:00Z is Sat 10 Oct, 1:30 AM in India.
-    expect(chipLine({ kind: 'event', live: false, startsAt: '2026-10-09T20:00:00Z', bucket: null }, now)).toBe('Sat · 1:30 AM')
+    expect(chipLine({ kind: 'event', live: false, startsAt: '2026-10-09T20:00:00Z', bucket: null }, now)).toBe('Tomorrow · 1:30 AM')
   })
 
   it('name the date for a start more than six days off, so "Fri" is never the wrong Friday', () => {
@@ -356,7 +364,7 @@ describe('chips above the roofs', () => {
     const now = Date.UTC(2026, 9, 9, 6, 0)
     expect(chipSpeech({ title: 'Design Week', kind: 'event', live: true, startsAt: null, bucket: null }, now)).toBe('Design Week, live now')
     expect(chipSpeech({ title: 'Lupa', kind: 'venue', live: false, startsAt: null, bucket: 'quiet' }, now)).toBe('Lupa')
-    expect(chipSpeech({ title: 'Jazz', kind: 'event', live: false, startsAt: '2026-10-09T14:30:00Z', bucket: null }, now)).toBe('Jazz, starts Fri 8 PM')
+    expect(chipSpeech({ title: 'Jazz', kind: 'event', live: false, startsAt: '2026-10-09T14:30:00Z', bucket: null }, now)).toBe('Jazz, starts Tonight 8 PM')
     expect(chipSpeech({ title: 'Jazz', kind: 'event', live: true, startsAt: null, bucket: null }, now)).not.toMatch(/●/)
   })
 })
@@ -383,11 +391,12 @@ describe("the map theme is the one place for the map’s look", () => {
     }
   )
 
-  it('takes the app tokens from lib/theme.ts instead of copying them (review M7)', () => {
+  it('takes the app tokens from lib/design/tokens instead of copying them (review M7)', () => {
     const theme = read('lib/mapTheme.ts')
-    const appColours = (Object.values(EMBER) as unknown[]).filter((v): v is string => typeof v === 'string' && v.startsWith('#'))
+    const appColours = (Object.values(COLOR) as unknown[]).filter((v): v is string => typeof v === 'string' && v.startsWith('#'))
     for (const hex of appColours) expect(theme.toUpperCase()).not.toContain(`'${hex.toUpperCase()}'`)
-    expect(MAP_THEME.event.crown).toBe(EMBER.accent)
+    // The retired Ember accent, the map's own value until the Pulse map board restyles the crown.
+    expect(MAP_THEME.event.crown).toBe('#FF906D')
   })
 
   const lum = (hex: string) => {
@@ -560,5 +569,83 @@ describe('the home map hands the lighting pass what the person can see', () => {
     const hook = readFileSync(join(__dirname, '..', 'components', 'home', 'useMapLighting.ts'), 'utf8')
     expect(hook).toContain('pickChips(')
     expect(hook).toContain('m.project(c.at)')
+  })
+})
+
+/*
+ * Several events at one venue (pulse-map 12 A, owner 2026-11-18): the light is the one mark, and its chip says how many.
+ * Before, dedupeLit kept one and dropped the rest without a word: three events at Church Street Social read as one.
+ */
+describe('one lit place carries every event in it', () => {
+  it('counts the pins a building or a spot holds, and keeps all their ids (so none keeps a dot)', () => {
+    const [kept] = dedupeLit([place({ id: 'a' }), place({ id: 'b', live: true }), place({ id: 'c' })])
+    expect(kept).toMatchObject({ id: 'b', count: 3 })
+    expect([...kept.ids].sort()).toEqual(['a', 'b', 'c'])
+  })
+
+  it('control: different buildings are one event each', () => {
+    const next = [square(10, 30)]
+    const two = dedupeLit([place({ id: 'a' }), place({ id: 'b', building: building({ footprint: next, key: footprintKey(next) }) })])
+    expect(two.map((p) => [p.id, p.count, p.ids])).toEqual([
+      ['a', 1, ['a']],
+      ['b', 1, ['b']],
+    ])
+  })
+
+  it('a chip for several names the venue and says how many; the line stays the next one’s', () => {
+    const pin = { kind: 'event' as const, live: false, startsAt: null, timeZone: null, bucket: null, title: 'Chef’s Table', place: 'Church Street Social' }
+    expect(stackedChip(pin, 3)).toEqual({ title: 'Church Street Social', count: 3, speech: 'Church Street Social, 3 events. Chef’s Table' })
+    // No venue name from the server: the event's own title, still with its count (nothing invented).
+    expect(stackedChip({ ...pin, place: null }, 2)).toEqual({ title: 'Chef’s Table', count: 2, speech: 'Chef’s Table, 2 events' })
+  })
+
+  it('control: one event is its own chip, no count', () => {
+    const pin = { kind: 'event' as const, live: true, startsAt: null, timeZone: null, bucket: null, title: 'Chef’s Table', place: 'Church Street Social' }
+    expect(stackedChip(pin, 1)).toEqual({ title: 'Chef’s Table', count: 1, speech: 'Chef’s Table, live now' })
+  })
+
+  it('a chip with a count is wider by its badge', () => {
+    const one = chipSizePx({ title: 'Toit', line: 'Live', kind: 'event' })
+    const three = chipSizePx({ title: 'Toit', line: 'Live', kind: 'event', count: 3 })
+    expect(three.width).toBeGreaterThan(one.width)
+  })
+})
+
+describe('the chip line (pulse-map 05, 12 A): when, then how far from you, in mono', () => {
+  const now = Date.UTC(2026, 9, 9, 6, 0) // Fri 9 Oct, 11:30 IST
+  const at: [number, number] = [77.6, 12.97]
+  // ~180 m due north (1° of latitude is ~111.2 km).
+  const north = (m: number): [number, number] => [77.6, 12.97 + m / 111_195]
+
+  it('adds the distance from your fix: "Tonight · 8 PM · 180 m", "3.1 km" past a kilometre', () => {
+    expect(withDistance('Tonight · 8 PM', north(180), at, 'exact')).toBe('Tonight · 8 PM · 200 m')
+    expect(withDistance('Sun · 12 PM', north(3100), at, 'exact')).toBe('Sun · 12 PM · 3.1 km')
+  })
+
+  it('never guesses a distance without a fix, and a line with no words is the distance alone', () => {
+    expect(withDistance('Tonight · 8 PM', north(180), null, 'exact')).toBe('Tonight · 8 PM')
+    expect(withDistance('', north(180), at, 'exact')).toBe('200 m')
+  })
+
+  it('says the card’s own distance when the screen already shows one (Android drive: the chip read 800 m over a card reading 850 m)', () => {
+    expect(withDistance('Tue · 12 PM', north(816), at, 'exact', 0.85)).toBe('Tue · 12 PM · 850 m')
+    // Still never without a fix, whatever is known.
+    expect(withDistance('Tue · 12 PM', north(816), null, 'exact', 0.85)).toBe('Tue · 12 PM')
+    // Nothing known: measured, as before.
+    expect(withDistance('Tue · 12 PM', north(816), at, 'exact', null)).toBe('Tue · 12 PM · 800 m')
+  })
+
+  it('from an approximate fix, the chip says "about 3 km" like the card under it, never "200 m" (SCRUM-1080)', () => {
+    expect(withDistance('Sun · 12 PM', north(3100), at, 'approximate')).toBe('Sun · 12 PM · about 3 km')
+    expect(withDistance('Tonight · 8 PM', north(180), at, 'approximate')).toBe('Tonight · 8 PM · about 1 km')
+    expect(withDistance('Tue · 12 PM', north(816), at, 'approximate', 5.4)).toBe('Tue · 12 PM · about 5 km')
+    expect(withDistance('Tonight · 8 PM', north(180), null, 'approximate')).toBe('Tonight · 8 PM')
+  })
+
+  it('says how many and when for several events at one venue: "3 tonight", "3 events" across days', () => {
+    const tonight = (h: number) => ({ kind: 'event' as const, live: false, startsAt: `2026-10-09T${h}:30:00Z`, bucket: null, timeZone: 'Asia/Kolkata' })
+    expect(stackLine([tonight(13), tonight(14), tonight(15)], now)).toBe('3 tonight')
+    expect(stackLine([tonight(13), { ...tonight(13), startsAt: '2026-10-10T14:30:00Z' }], now)).toBe('2 events')
+    expect(stackLine([tonight(13), { ...tonight(13), startsAt: 'garbage' }], now)).toBe('2 events')
   })
 })

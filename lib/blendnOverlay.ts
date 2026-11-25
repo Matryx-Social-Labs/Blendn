@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react'
 
+import type { RoomTab } from './roomTab'
 import type { TonightEvent } from './useTonight'
 
 /**
@@ -32,6 +33,11 @@ let pendingPerson: string | null = null
  * yet". Kept while the overlay is open.
  */
 let door: TonightEvent | null = null
+/**
+ * The event page the overlay was opened from ("Blend in"), to come back to when it closes (ROOM-13). The page steps back to
+ * the tabs to show the overlay (it is hosted there, under the root stack), so closing would otherwise land on the Pulse.
+ */
+let returnTo: string | null = null
 const listeners = new Set<() => void>()
 
 function notify() {
@@ -44,13 +50,67 @@ function set(next: boolean) {
   notify()
 }
 
-/** Open the overlay; with `personId`, at that person's card in the Room. */
+/**
+ * The Room's tab (Flow 5 C1): the overlay's, not the screen's, so every render and every mount for one open reads the
+ * same tab. It used to be handed over once, taken by the Room's first render, and a render React threw away or a remount
+ * then read People: a link to the room chat opened on People with its chat there (iOS drive, 2026-11-10).
+ */
+let roomTab: RoomTab = 'people'
+
+/** Open the overlay; with `personId`, at that person's card in the Room. People, always (the disc). */
 export function openBlendn(personId?: string): void {
-  if (personId) {
-    pendingPerson = personId
-    if (open) notify()
-  }
+  // Already open (a wave's banner over the Room): it re-reads its card and its tab.
+  const changed = !!personId || roomTab !== 'people'
+  roomTab = 'people'
+  if (personId) pendingPerson = personId
+  if (open && changed) notify()
   set(true)
+}
+
+/**
+ * Open the Room on its Chat tab: "Open the room", a push, a link, the Lobby handover (`chat/[id]`). Opened from an
+ * event page, closing it comes back to that page (ROOM-13), as "Blend in" does.
+ */
+export function openRoomChat(returnToEvent: string | null = null): void {
+  roomTab = 'chat'
+  returnTo = returnToEvent
+  if (open) notify()
+  set(true)
+}
+
+/** The tab the Room shows. Reading it never changes it. */
+export function getRoomTab(): RoomTab {
+  return roomTab
+}
+
+/** The Room's own switch (its tabs, Back, a chat it can't show). */
+export function setRoomTab(tab: RoomTab): void {
+  if (roomTab === tab) return
+  roomTab = tab
+  notify()
+}
+
+export function useRoomTab(): RoomTab {
+  return useSyncExternalStore(subscribe, getRoomTab, getRoomTab)
+}
+
+/** The tab in front (the tab bar says it), so a route that steps back to the tabs lands on it, not on the Pulse. */
+let currentTab = 'events'
+export function setCurrentTab(name: string): void {
+  currentTab = name
+}
+export const tabsPath = (): string => `/(tabs)/${currentTab}`
+
+/**
+ * The live room's chat id, set by the Room once it knows it: `chat/[id]` for this id opens the Chat tab. It outlives the
+ * overlay (mounted only while open) and goes when the check-in does (`setLiveHint`).
+ */
+let liveRoomChat: string | null = null
+export function setLiveRoomChat(chatGroupId: string | null): void {
+  liveRoomChat = chatGroupId
+}
+export function isLiveRoomChat(chatGroupId: string): boolean {
+  return liveRoomChat !== null && liveRoomChat === chatGroupId
 }
 
 /**
@@ -58,10 +118,35 @@ export function openBlendn(personId?: string): void {
  * in. From a pushed screen, get back to the tabs first (the overlay is under
  * the root stack).
  */
-export function openPass(event: TonightEvent): void {
+export function openPass(event: TonightEvent, options?: { returnToEvent?: boolean }): void {
   door = event
+  returnTo = options?.returnToEvent ? event.id : null
   if (open) notify()
   set(true)
+}
+
+/** The pass moved to another event (the card checked into): the same overlay, a new door. */
+export function setDoor(event: TonightEvent): void {
+  door = event
+  notify()
+}
+
+/**
+ * Open the overlay on the Room an event page has just checked someone into (SCRUM-966): the overlay draws the Room's skeleton
+ * rather than Tonight while it loads, and closing it comes back to that page (ROOM-13).
+ */
+export function openRoomOf(eventId: string): void {
+  liveEventId = eventId
+  returnTo = eventId
+  notify()
+  set(true)
+}
+
+/** The event to return to once, as the overlay closes: reading it clears it. */
+export function takeReturnTo(): string | null {
+  const id = returnTo
+  returnTo = null
+  return id
 }
 
 export function getDoor(): TonightEvent | null {
@@ -88,18 +173,64 @@ export function peekPendingPerson(): string | null {
  * loaded yet, the overlay draws the Room's skeleton (Flow 4 Room #01) rather
  * than Tonight's. A hint only; the Room's own load decides.
  */
-let liveHint = false
-export function setLiveHint(live: boolean): void {
-  liveHint = live
+let liveEventId: string | null = null
+/** That room's title (the same poll), so a page that is not the Room can name it: "You'll leave {room}". */
+let liveTitle: string | null = null
+/** The event you are checked into (the disc's poll), or null. The Going card says "You’re in" for it (SCRUM-882). */
+export function setLiveHint(eventId: string | null, title: string | null = null): void {
+  const nextTitle = eventId ? title : null
+  if (liveEventId === eventId && liveTitle === nextTitle) return
+  // Leaving the event (checked out, or in somewhere else) takes its chat; the first poll after launch does not.
+  if (liveEventId !== null && liveEventId !== eventId) liveRoomChat = null
+  liveEventId = eventId
+  liveTitle = nextTitle
+  notify()
 }
 export function isLiveHint(): boolean {
-  return liveHint
+  return liveEventId !== null
+}
+export function getLiveEventId(): string | null {
+  return liveEventId
+}
+export function useLiveEventId(): string | null {
+  return useSyncExternalStore(subscribe, getLiveEventId, getLiveEventId)
+}
+export function useLiveTitle(): string | null {
+  return useSyncExternalStore(subscribe, () => liveTitle, () => liveTitle)
+}
+
+/**
+ * The room a check-in took you out of, and the event it landed in: whichever door ran the check-in (Tonight's pass, or an event
+ * page's hold) leaves it here, and the Room says "You left {room}." once that event's room is the one shown (SCRUM-816, 969).
+ */
+let leftNotice: { title: string; toId: string } | null = null
+export function setLeftNotice(notice: { title: string; toId: string } | null): void {
+  leftNotice = notice
+}
+export function getLeftNotice(): { title: string; toId: string } | null {
+  return leftNotice
+}
+
+/**
+ * The event whose Room the overlay is showing, whole. An event page that checked someone in keeps its "You're in" pour over
+ * itself until this says the Room is behind it, then steps aside onto it (SCRUM-966).
+ */
+let roomUpId: string | null = null
+export function setRoomUp(eventId: string | null): void {
+  if (roomUpId === eventId) return
+  roomUpId = eventId
+  notify()
+}
+export function useRoomUp(eventId: string): boolean {
+  return useSyncExternalStore(subscribe, () => roomUpId === eventId, () => roomUpId === eventId)
 }
 
 /** Called by the overlay once its closing transition has finished. */
 export function blendnClosed(): void {
   pendingPerson = null
+  roomTab = 'people'
   door = null
+  returnTo = null
   set(false)
 }
 

@@ -15,6 +15,7 @@ import Animated, {
   type SharedValue,
 } from 'react-native-reanimated'
 import { scheduleOnRN } from 'react-native-worklets'
+import { DURATION, PRESS, SPRING } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { useReducedMotion } from '../../lib/motion'
 
@@ -33,8 +34,8 @@ export interface DeckFan {
 const DEPTHS = [0, 1, 2, 3]
 
 const EASE_OUT = Easing.bezier(0.23, 1, 0.32, 1)
-/** Settles a little slower than the default 400ms, so the fan is seen re-forming. */
-const SETTLE = { duration: 550, dampingRatio: 0.8 } as const
+/** The fan re-forms on `M.settle`. */
+const SETTLE = SPRING.settle
 /** Soft ease-out for the one-off deal. */
 const EASE_GENTLE = Easing.bezier(0.33, 1, 0.68, 1)
 /** Past this, or past `FLICK_VELOCITY`, a drag sends the card to the back. */
@@ -106,7 +107,12 @@ function DeckCard({
     }
   })
 
-  return <Animated.View style={[styles.card, cardStyle, style]}>{children}</Animated.View>
+  // Rasterised once and moved as a texture on Android: a rounded, clipped, rotating card is otherwise re-drawn through an offscreen layer every frame.
+  return (
+    <Animated.View renderToHardwareTextureAndroid style={[styles.card, cardStyle, style]}>
+      {children}
+    </Animated.View>
+  )
 }
 
 /**
@@ -147,6 +153,7 @@ export function SwipeDeck<T>({
   cardStyle,
   accessibilityLabel,
   accessibilityHint,
+  accessibilityValue,
   nextLabel = 'Next',
 }: {
   items: readonly T[]
@@ -167,6 +174,8 @@ export function SwipeDeck<T>({
   cardStyle?: StyleProp<ViewStyle>
   accessibilityLabel: string
   accessibilityHint?: string
+  /** Where the pile is, spoken after each adjust ("1 of 3"). */
+  accessibilityValue?: { text: string }
   /** The VoiceOver action that does the swap. */
   nextLabel?: string
 }) {
@@ -242,13 +251,13 @@ export function SwipeDeck<T>({
 
   const tap = Gesture.Tap()
     .onBegin(() => {
-      if (!reduceMotion) pressed.set(withTiming(0.97, { duration: 120, easing: EASE_OUT }))
+      if (!reduceMotion) pressed.set(withTiming(PRESS.scale, { duration: DURATION.press, easing: EASE_OUT }))
     })
     .onEnd(() => {
       scheduleOnRN(onPress, front.get())
     })
     .onFinalize(() => {
-      pressed.set(withTiming(1, { duration: 120, easing: EASE_OUT }))
+      pressed.set(withTiming(1, { duration: DURATION.press, easing: EASE_OUT }))
     })
 
   const pressStyle = useAnimatedStyle(() => ({ transform: [{ scale: pressed.get() }] }))
@@ -261,6 +270,7 @@ export function SwipeDeck<T>({
         accessibilityRole="button"
         accessibilityLabel={accessibilityLabel}
         accessibilityHint={accessibilityHint}
+        accessibilityValue={accessibilityValue}
         accessibilityActions={
           count > 1 ? [{ name: 'activate' }, { name: 'increment', label: nextLabel }] : [{ name: 'activate' }]
         }

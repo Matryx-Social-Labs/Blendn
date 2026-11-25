@@ -1,9 +1,13 @@
 import { Image } from 'expo-image'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { Pressable, ScrollView, StyleSheet, View, type NativeSyntheticEvent, type NativeScrollEvent } from 'react-native'
+import { PixelRatio, Pressable, ScrollView, StyleSheet, View, type NativeSyntheticEvent, type NativeScrollEvent } from 'react-native'
 
 import type { FeedMediaItem } from '../../lib/feedMedia'
+import { STILL_MS } from '../../lib/featuredLap'
+import { clipSource, focusStyle, videoFrame, type Focus, type Size } from '../../lib/mediaFit'
+import { useMediaSaver } from '../../lib/mediaSaver'
 import { COLOR, MATERIAL, RADIUS, SPACE } from '../../lib/design/tokens'
+import { ContainedCover } from '../ds/LinkPreviewCard'
 import { useReduceTransparency } from '../ds/shared'
 import { tint } from '../../lib/theme'
 import { useVideoPlayer, VideoView } from 'expo-video'
@@ -32,7 +36,7 @@ import { useReducedMotion } from '../../lib/motion'
  * never cut off mid-shot and a fixed dwell never freezes on its last frame.
  * Same rule as the feed, for the same reason: the length is the organiser's.
  */
-const IMAGE_DWELL_MS = 4000
+const IMAGE_DWELL_MS = STILL_MS
 
 /**
  * How long to wait for a clip to say *anything* before giving up on it.
@@ -60,8 +64,14 @@ export function SceneHeroMedia({
   paused = false,
   started = false,
   onClipInView,
+  autoAdvance = true,
+  pips = 'corner',
 }: {
   playlist: FeedMediaItem[]
+  /** `false`: the pager moves only when swiped (Flow 4 M31: a gallery never advances on its own). */
+  autoAdvance?: boolean
+  /** `center`: the poster's pips, 6 pt, the page's 16, 5 apart, 12 above the foot, no capsule (board `.pips`). */
+  pips?: 'corner' | 'center'
   width: number
   height: number
   /** Opens the lightbox at the item currently shown. */
@@ -80,6 +90,8 @@ export function SceneHeroMedia({
   const [manual, setManual] = useState(false)
   const reduceMotion = useReducedMotion()
   const reduceTransparency = useReduceTransparency()
+  const { lowPower, expensiveNetwork } = useMediaSaver()
+  const frame = { width, height }
   const scrollRef = useRef<ScrollView>(null)
 
   // `index` in a ref as well, so the timer can read the current page without
@@ -107,7 +119,7 @@ export function SceneHeroMedia({
    * motion that setting asks us not to start. The viewer swipes; a clip is its
    * poster until they press Play, then loops. Never while paused (WCAG 2.2.2).
    */
-  const autoAdvances = !manual && !reduceMotion && !paused && playlist.length > 1
+  const autoAdvances = autoAdvance && !manual && !reduceMotion && !paused && playlist.length > 1
   const autoAdvancesRef = useRef(autoAdvances)
 
   // The three refs above, refreshed on every commit rather than during render.
@@ -137,10 +149,12 @@ export function SceneHeroMedia({
   const clipInView = current?.kind === 'video'
   useEffect(() => onClipInView?.(clipInView), [clipInView, onClipInView])
   /*
-   * A clip mounts (and so plays) unless it is paused before anybody chose to play it: under Reduce Motion the hero is
-   * the poster, and the tap still opens the lightbox, whose player has its own controls (FeedMedia's rule).
+   * A clip mounts unless it is paused before anybody chose to play it: under Reduce Motion the hero is the poster, and the
+   * tap still opens the lightbox, whose player has its own controls (FeedMedia's rule). A clip with no poster of its own
+   * mounts anyway, paused, so its own first frame is the picture: never a dark square, never the event cover (SCRUM-1066
+   * option B, owner 2026-11-17). Play then plays that same player from its frame.
    */
-  const mountClip = !paused || started
+  const mountsClip = (item: FeedMediaItem) => !paused || started || (item.kind === 'video' && !item.posterUrl)
 
   const onMomentumEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const page = Math.round(e.nativeEvent.contentOffset.x / width)
@@ -170,9 +184,11 @@ export function SceneHeroMedia({
           >
             {/*
               The poster is painted for every page, and the player mounts over
-              the visible one. So a clip that is buffering shows the organiser's
-              own frame rather than black, and off-screen pages cost an image
-              each instead of a decoder each.
+              the visible one. So a clip that is buffering shows its own first
+              frame rather than black, and off-screen pages cost an image each
+              instead of a decoder each. Both cover the page the same way, so
+              the playing clip hides its poster exactly; a clip with no poster
+              shows the frame's dark surface until its first frame.
 
               `transition={0}`, deliberately. A cross-fade here fought the
               pager: the slide *is* the transition, and fading a new image in on
@@ -181,14 +197,7 @@ export function SceneHeroMedia({
               recycled view still holding the previous page's picture and then
               dissolve out of it — which is the other half of the same flash.
             */}
-            <Image
-              source={{ uri: item.kind === 'image' ? item.url : item.posterUrl }}
-              style={StyleSheet.absoluteFill}
-              contentFit="cover"
-              cachePolicy="memory-disk"
-              recyclingKey={item.kind === 'image' ? item.url : item.posterUrl}
-              transition={0}
-            />
+            <PagePicture item={item} frame={frame} />
             {/*
               Mounted only while it is the page in view — the Pulse's rule.
 
@@ -212,10 +221,13 @@ export function SceneHeroMedia({
               "it plays" stops depending on a prop transition that a two-item
               playlist never performs.
             */}
-            {item.kind === 'video' && i === index && mountClip ? (
+            {item.kind === 'video' && i === index && mountsClip(item) ? (
               <HeroVideo
                 key={`${item.url}-${i}`}
-                source={item.url}
+                source={clipSource(item, { frame, density: PixelRatio.get(), saver: lowPower || expensiveNetwork })}
+                frame={frame}
+                size={item.size}
+                focus={item.focus}
                 paused={paused}
                 /*
                  * Loops exactly when nothing is going to advance past it.
@@ -252,7 +264,13 @@ export function SceneHeroMedia({
         ))}
       </ScrollView>
 
-      {playlist.length > 1 ? (
+      {playlist.length > 1 && pips === 'center' ? (
+        <View testID="scene-hero-pips" style={styles.pips} pointerEvents="none">
+          {playlist.map((_, i) => (
+            <View key={i} style={[styles.pip, i === index && styles.pipOn]} />
+          ))}
+        </View>
+      ) : playlist.length > 1 ? (
         <View
           testID="scene-hero-dots"
           style={[styles.dots, { backgroundColor: reduceTransparency ? MATERIAL.scrimPillReduceTransparency : MATERIAL.scrimPill }]}
@@ -267,8 +285,37 @@ export function SceneHeroMedia({
   )
 }
 
+/**
+ * A page's picture, here and in the Pulse lead's turn.
+ *
+ * - A still: fit rule B (`ContainedCover auto`), because a flyer must not be cut; its size and point from the server
+ *   when it sent them.
+ * - A clip's poster: cropped exactly as the clip is (`HeroVideo`), so the swap from poster to playing clip does not move
+ *   the picture. With the clip's size, at its point (or the default focus, as the dashboard previews it); without it,
+ *   centred, as the player then is. No blurred copy: there are no bars.
+ * - A clip with no poster: nothing, and the frame's dark surface shows until the clip's own first frame.
+ */
+export function PagePicture({ item, frame }: { item: FeedMediaItem; frame: Size }) {
+  if (item.kind === 'image') return <ContainedCover uri={item.url} auto size={item.size} focus={item.focus} testID="media-still" />
+  if (!item.posterUrl) return null
+  return (
+    <Image
+      testID="media-poster"
+      source={{ uri: item.posterUrl }}
+      recyclingKey={item.posterUrl}
+      style={StyleSheet.absoluteFill}
+      contentFit="cover"
+      contentPosition={item.size ? focusStyle(item.size, frame, item.focus ?? null) : undefined}
+      accessible={false}
+    />
+  )
+}
+
 /** The empty band under the hero's caption: the pager dots live in it, so no title length can reach them. */
 export const HERO_CAPTION_FOOT = SPACE.xxl + SPACE.sm
+
+// design-exception: the board's pips are 5 apart (`.pips` gap), between SPACE.xs and SPACE.sm, as the Pulse lead's.
+const PIP = { on: SPACE.lg, off: 6, gap: 5 } as const
 
 const styles = StyleSheet.create({
   /*
@@ -296,10 +343,16 @@ const styles = StyleSheet.create({
     backgroundColor: tint(COLOR.textPrimary, 0.4),
   },
   dotActive: { backgroundColor: COLOR.textPrimary, width: 18 },
+  pips: { position: 'absolute', left: 0, right: 0, bottom: SPACE.md, flexDirection: 'row', justifyContent: 'center', gap: PIP.gap },
+  pip: { width: PIP.off, height: PIP.off, borderRadius: RADIUS.capsule, backgroundColor: tint(COLOR.textPrimary, 0.4) },
+  pipOn: { width: PIP.on, backgroundColor: COLOR.textPrimary },
+  /** The card's box: a shifted player is larger than the card, and must not spill onto the next page. */
+  clipBox: { position: 'absolute', left: 0, top: 0, right: 0, bottom: 0, overflow: 'hidden' },
+  shifted: { position: 'absolute' },
 })
 
 /**
- * A clip in the hero.
+ * A clip in the hero, and in the Pulse lead's turn (Featured C reuses it: the same watchdog, end event and first frame).
  *
  * Separate from `FeedVideo`, which infers looping from whether a callback was
  * passed. A hero clip has to loop or advance depending on whether the viewer
@@ -307,15 +360,34 @@ const styles = StyleSheet.create({
  *
  * Muted, like the feed. Sound belongs in the lightbox, where opening it is a
  * deliberate act.
+ *
+ * Cover at any ratio (owner 2026-11-18, "video fills the card"): a clip is cropped to the card, as Instagram, Netflix,
+ * Airbnb and TikTok do; never letterboxed, never over a blurred copy. Its poster (`PagePicture`) takes the same crop. With
+ * the clip's size from the server (task 21), the crop sits at the organizer's point, else the default focus: `VideoView`
+ * has no content position, so the player is drawn whole at the cover scale and shifted inside a clipped box
+ * (`videoFrame`). Without a size, centred, as the native aspect-fill does.
+ *
+ * `source` is read once: a network change mid-clip never swaps the copy that is playing (advisor 2026-11-25).
  */
-function HeroVideo({
+export function HeroVideo({
   source,
+  frame,
+  size,
+  focus,
   paused,
   loop,
   onEnded,
   onFailed,
+  onReady,
 }: {
+  /** The copy to play (`clipSource`). */
   source: string
+  /** The card, in points. */
+  frame: Size
+  /** The clip's size from the server, when it sent one. */
+  size?: Size
+  /** The organizer's focal point, when they picked one. */
+  focus?: Focus
   /** Holds the frame it is on; Play carries on from there. */
   paused: boolean
   loop: boolean
@@ -325,10 +397,14 @@ function HeroVideo({
    * moves on and the rest of the organiser's media is still seen.
    */
   onFailed: () => void
+  /** Ready to play, with the clip's length in seconds (the Pulse lead fills its pip over it). */
+  onReady?: (durationSec: number) => void
 }) {
-  const player = useVideoPlayer(source, (p) => {
+  const [opened] = useState(source)
+  const player = useVideoPlayer(opened, (p) => {
     p.muted = true
   })
+  const shift = size && frame.width > 0 && frame.height > 0 ? videoFrame(size, frame, focus ?? null) : null
 
   // `loop` can change after construction — a manual swipe flips it — so it is
   // assigned on every change rather than only in the setup callback.
@@ -351,7 +427,9 @@ function HeroVideo({
 
   const endedRef = useRef(onEnded)
   const failedRef = useRef(onFailed)
+  const readyRef = useRef(onReady)
   useLayoutEffect(() => {
+    readyRef.current = onReady
     endedRef.current = onEnded
     failedRef.current = onFailed
   })
@@ -391,6 +469,7 @@ function HeroVideo({
       if (status === 'readyToPlay') {
         settled = true
         clearTimeout(timer)
+        readyRef.current?.(player.duration)
       }
     })
 
@@ -401,13 +480,18 @@ function HeroVideo({
   }, [player])
 
   return (
-    <VideoView
-      player={player}
-      style={StyleSheet.absoluteFill}
-      contentFit="cover"
-      nativeControls={false}
-      allowsPictureInPicture={false}
-      accessible={false}
-    />
+    <View style={styles.clipBox} pointerEvents="none">
+      <VideoView
+        player={player}
+        style={shift ? [styles.shifted, shift] : StyleSheet.absoluteFill}
+        contentFit="cover"
+        // Android: a SurfaceView ignores the parent's clip, so a cover-cropped (zoomed) surface would spill past the card's
+        // rounded corners; a TextureView is clipped by it (pulse-media sheet 12).
+        surfaceType="textureView"
+        nativeControls={false}
+        allowsPictureInPicture={false}
+        accessible={false}
+      />
+    </View>
   )
 }

@@ -44,7 +44,7 @@ describe('a session the server ended is explained on the entry screen (SCRUM-142
     expect(events).toMatch(/await s\.removeItem\(ENDED_KEY\)/)
     expect(entry).toContain('consumeSessionEnd().then((end) => {')
     // The notice is capped at its role (DS-22): `maxFontSizeMultiplier` may stand before the style.
-    expect(entry).toMatch(/\{!error && notice && \(\s*<Text (?:maxFontSizeMultiplier=\{[^}]*\} )?style=\{\[[^}]*styles\.notice\]\} accessibilityRole="alert">/)
+    expect(entry).toMatch(/\{!error && notice && \(\s*<(?:Animated\.)?Text (?:entering=\{bannerFadeIn\} exiting=\{bannerOut\} )?(?:maxFontSizeMultiplier=\{[^}]*\} )?style=\{\[[^}]*styles\.notice\]\} accessibilityRole="alert" accessibilityLiveRegion="polite">/)
   })
 
   it('says what happened and what to do', () => {
@@ -54,7 +54,8 @@ describe('a session the server ended is explained on the entry screen (SCRUM-142
 
 describe('a refresh distinguishes rejected from failed', () => {
   it('reports a timeout or dropped connection as failed, not rejected', () => {
-    expect(src).toMatch(/catch \(error\) \{\s*Logger\.error\('api', 'Token refresh failed'[^}]*\}\)\s*return 'failed'/)
+    // A refresh that the network would not carry is still 'failed' (never 'rejected'); it may also mark the network offline (SCRUM-898).
+    expect(src).toMatch(/catch \(error\) \{\s*Logger\.error\('api', 'Token refresh failed'[^}]*\}\)\s*(?:if \(isNetworkFailure\(error\)\) markOffline\(\)\s*)?return 'failed'/)
     expect(src).toContain("if (response.status >= 500) return 'failed'")
     expect(src).toMatch(/if \(response\.status === 403\) \{[\s\S]*?\}\s*return 'rejected'/)
   })
@@ -77,7 +78,8 @@ describe('the reason travels with the sign-out (SCRUM-93)', () => {
     // told only "You were signed out" — the server had said why at refresh.
     const refresh = src.slice(src.indexOf('private async refreshTokens'))
     expect(refresh).toMatch(/if \(response\.status === 403\) \{[\s\S]*rejectedReason = body\.error/)
-    expect(src).toContain('markSessionExpired(rejectedReason, rejectedCode)')
+    expect(src).toContain('markSessionExpired(reason, code)')
+    expect(src).toContain('const reason = rejectedReason')
     expect(events).toMatch(/return stored === '1' \? true : stored/)
     expect(entry).toContain("setNotice(reason === 'expired' && sentence ? sentence : SESSION_END_NOTICE[reason])")
   })

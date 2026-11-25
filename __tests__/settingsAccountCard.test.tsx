@@ -36,6 +36,17 @@ jest.mock('../lib/notifications', () => ({
 jest.mock('expo-notifications', () => ({ getPermissionsAsync: jest.fn().mockResolvedValue({ status: 'granted', canAskAgain: true }) }))
 const mockShowToast = jest.fn()
 jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: mockShowToast }) }))
+const mockCaps: number[] = []
+jest.mock('../lib/fetchTimeout', () => {
+  const actual = jest.requireActual('../lib/fetchTimeout')
+  return {
+    ...actual,
+    settleWithin: (work: Promise<unknown>, ms: number, fallback: unknown) => {
+      mockCaps.push(ms)
+      return actual.settleWithin(work, 30, fallback)
+    },
+  }
+})
 jest.mock('../lib/haptics', () => ({ H: { destructive: jest.fn(), toggle: jest.fn(), error: jest.fn(), primary: jest.fn(), success: jest.fn() } }))
 const mockOffline = jest.fn()
 jest.mock('../lib/networkStatus', () => ({
@@ -73,7 +84,7 @@ beforeEach(() => {
 describe('the Account card', () => {
   it('an email account: signed in as, Password, Sign out, Sign out of every device', async () => {
     await render(<Screen />)
-    expect(await screen.findByLabelText('Signed in as, sam@example.com')).toBeTruthy()
+    expect(await screen.findByLabelText('sam@example.com, Signed in with email')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Password' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Sign out' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Sign out of every device' })).toBeTruthy()
@@ -82,23 +93,31 @@ describe('the Account card', () => {
   it('a Google account says so and has no Password row', async () => {
     mockMethod.mockReturnValue('google')
     await render(<Screen />)
-    expect(await screen.findByLabelText('Signed in with Google, sam@example.com')).toBeTruthy()
+    expect(await screen.findByLabelText('sam@example.com, Signed in with Google')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Password' })).toBeNull()
   })
 
   it('a session that predates the record names the email and offers no password it cannot be sure of', async () => {
     mockMethod.mockReturnValue(null)
     await render(<Screen />)
-    expect(await screen.findByLabelText('Signed in as, sam@example.com')).toBeTruthy()
+    expect(await screen.findByLabelText('sam@example.com, Signed in with email')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Password' })).toBeNull()
   })
 
   it("hands the session's signInMethod to the card and reads the session on opening, so an upgrader's Password row follows the server (SCRUM-742)", async () => {
     mockAuth.user = { id: 'u_me', email: 'sam@example.com', signInMethod: 'password' } as never
     await render(<Screen />)
-    await screen.findByLabelText('Signed in as, sam@example.com')
+    await screen.findByLabelText('sam@example.com, Signed in with email')
     expect(mockMethod).toHaveBeenCalledWith('password')
     expect(refreshAuthUser).toHaveBeenCalled()
+    mockAuth.user = { id: 'u_me', email: 'sam@example.com' } as never
+  })
+
+  it('with a name, the card leads with it and says how you sign in, the email after it (Me + settings A 05)', async () => {
+    mockAuth.user = { id: 'u_me', email: 'sam@example.com', name: 'Marc-André Lefebvre-Desrosiers' } as never
+    mockMethod.mockReturnValue('google')
+    await render(<Screen />)
+    expect(await screen.findByLabelText('Marc-André Lefebvre-Desrosiers, Signed in with Google · sam@example.com')).toBeTruthy()
     mockAuth.user = { id: 'u_me', email: 'sam@example.com' } as never
   })
 
@@ -177,6 +196,21 @@ describe('Sign out of every device', () => {
     expect(screen.getByText('Sign out everywhere?')).toBeTruthy()
     expect(mockShowToast).not.toHaveBeenCalled()
   })
+
+  // SCRUM-733: the spinner (and the sheet's disabled Cancel) lasted as long as a restored session's keychain took.
+  it('gives up waiting after the cap: nothing was signed out, Try again is offered, and Cancel works', async () => {
+    ;(signOutEverywhere as jest.Mock).mockReturnValue(new Promise(() => {}))
+    await render(<Screen />)
+    fireEvent.press(await screen.findByRole('button', { name: 'Sign out of every device' }))
+    await screen.findByText('Sign out everywhere?')
+    fireEvent.press(screen.getByRole('button', { name: 'Sign out everywhere' }))
+    // The cap is 20 s (past one request deadline); the test shortens the wait, not the number it asks for.
+    expect(mockCaps).toContain(20_000)
+    expect(await screen.findByText('Couldn’t reach Blend’n, so nothing was signed out. Try again.')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy()
+    fireEvent.press(screen.getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.queryByText('Sign out everywhere?')).toBeNull())
+  })
 })
 
 it('Get a copy of your data opens a prefilled email to support', async () => {
@@ -201,7 +235,10 @@ describe('Delete account while it runs', () => {
     await act(async () => fireEvent(step1[step1.length - 1], 'pressIn'))
     expect(H.destructive).toHaveBeenCalledTimes(1)
     fireEvent.press(step1[step1.length - 1])
-    fireEvent.press(await screen.findByRole('button', { name: 'Delete my account' }))
+    const confirm = await screen.findByRole('button', { name: 'Delete my account' })
+    // "For good?" asks for the password first (SCRUM-944 (3)).
+    await act(async () => fireEvent.changeText(screen.getByTestId('delete-password'), 'hunter22'))
+    fireEvent.press(confirm)
     expect(await screen.findByLabelText('Deleting account…')).toBeTruthy()
     await act(async () => finish({ success: false }))
     // It did not go through: the row is Delete account again.

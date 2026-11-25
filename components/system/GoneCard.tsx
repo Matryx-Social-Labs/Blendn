@@ -1,6 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 
-import { GlyphWell } from '../ds/StateScreen'
+import { GlyphWell, useSaidOnArrival } from '../ds/StateScreen'
 import { font, PRESSED_WASH, useBoldText } from '../ds/shared'
 import { Icon } from '../ui/Icon'
 import { COLOR, ICON, RADIUS, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
@@ -9,17 +9,19 @@ import { GONE, type GoneKind } from '../../lib/goneCopy'
 /**
  * "This isn't here any more" (guidelines/flow-15 `gone`, #11): a solid card, the 56 pt well, the object's own sentence and
  * a line under it, a chevron that says back. One component for every object that went away; tapping it goes back. It
- * replaces the content (the screen fades it in over `base`), plays no haptic, and is never a raw error.
+ * replaces the content (the screen fades it in over `base`), is said on arrival (M29), plays no haptic, and is never a raw error.
  */
 export function GoneCard({ kind, onBack, testID }: { kind: GoneKind; onBack: () => void; testID?: string }) {
   const bold = useBoldText()
   const copy = GONE[kind]
+  const said = `${copy.title}. ${copy.body}`
+  useSaidOnArrival(said)
   return (
     <Pressable
       testID={testID}
       onPress={onBack}
       accessibilityRole="button"
-      accessibilityLabel={`${copy.title}. ${copy.body}`}
+      accessibilityLabel={said}
       accessibilityHint="Goes back"
       style={({ pressed }) => [styles.card, pressed && { backgroundColor: PRESSED_WASH.ios }]}
     >

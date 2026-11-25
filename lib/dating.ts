@@ -180,7 +180,3 @@ export function mayDate(years: number | null | undefined): boolean {
   return typeof years === 'number' && years >= DATING_MIN_AGE
 }
 
-/** "Looking for" without the dating choice, however it was written. */
-export function withoutDatingChoice(values: readonly string[]): string[] {
-  return values.filter((v) => v.trim().toLowerCase() !== 'dating')
-}

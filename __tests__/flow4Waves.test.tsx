@@ -10,11 +10,12 @@ import { AccessibilityInfo } from 'react-native'
 
 import { WaveToast } from '../components/blendn/WaveToast'
 import { H } from '../lib/haptics'
-import { ignoreWavesFrom, listenForWaves, newestWave, useRoomWaves, WAVED_AT_YOU_MS, wavedAtYouLabel, waveShown } from '../lib/roomWaves'
+import { ignoreWavesFrom, listenForWaves, useRoomWaves, WAVED_AT_YOU_MS, wavedAtYouLabel, waveShown } from '../lib/roomWaves'
 
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
 const mockWaveListeners = new Set<(d: { eventId: string; fromUserId: string; fromName: string }) => void>()
 jest.mock('../lib/socketClient', () => ({
+  subscribeToRoomCrewWave: () => () => {},
   subscribeToRoomWave: (fn: (d: { eventId: string; fromUserId: string; fromName: string }) => void) => {
     mockWaveListeners.add(fn)
     return () => mockWaveListeners.delete(fn)
@@ -36,12 +37,12 @@ describe('the store', () => {
     await render(<Probe />)
     listenForWaves('e1')
     await send({ eventId: 'e2', fromUserId: 'a', fromName: 'Night Cat' })
-    expect(latest.latest).toBeNull()
+    expect(latest.toast).toBeNull()
     await send({ eventId: 'e1', fromUserId: 'a', fromName: 'Night Cat' })
-    expect(latest.latest).toMatchObject({ fromUserId: 'a', fromName: 'Night Cat' })
+    expect(latest.toast?.waves[0]).toMatchObject({ fromUserId: 'a', fromName: 'Night Cat' })
     expect(Object.keys(latest.received)).toEqual(['a'])
     await act(async () => listenForWaves('e3'))
-    expect(latest.latest).toBeNull()
+    expect(latest.toast).toBeNull()
     expect(latest.received).toEqual({})
     expect(mockWaveListeners.size).toBe(1)
   })
@@ -57,19 +58,19 @@ describe('the store', () => {
     listenForWaves('e1')
     await send({ eventId: 'e1', fromUserId: 'a', fromName: 'Night Cat' })
     await act(async () => ignoreWavesFrom('a'))
-    expect(latest.latest).toBeNull()
+    expect(latest.toast).toBeNull()
     expect(latest.received).toEqual({})
     await send({ eventId: 'e1', fromUserId: 'a', fromName: 'Night Cat' })
-    expect(latest.latest).toBeNull()
+    expect(latest.toast).toBeNull()
   })
 
-  it('shown once: the toast or banner marks it, the row and the chip stay', async () => {
+  it('shown once: the toast or banner marks it, and what was received stays', async () => {
     await render(<Probe />)
     listenForWaves('e1')
     await send({ eventId: 'e1', fromUserId: 'a', fromName: 'Night Cat' })
-    await act(async () => waveShown(latest.latest!))
-    expect(latest.latest).toBeNull()
-    expect(newestWave(latest.received, Date.now())?.fromName).toBe('Night Cat')
+    await act(async () => waveShown(latest.toast!))
+    expect(latest.toast).toBeNull()
+    expect(Object.values(latest.received).map((w) => w.fromName)).toEqual(['Night Cat'])
   })
 
   it('"Waved at you · N min" for ten minutes, then nothing', () => {
@@ -78,7 +79,6 @@ describe('the store', () => {
     expect(wavedAtYouLabel(now - 2 * 60_000, now)).toBe('2 min')
     expect(wavedAtYouLabel(now - WAVED_AT_YOU_MS, now)).toBeNull()
     expect(wavedAtYouLabel(undefined, now)).toBeNull()
-    expect(newestWave({ a: { eventId: 'e', fromUserId: 'a', fromName: 'x', at: now - WAVED_AT_YOU_MS } }, now)).toBeNull()
   })
 })
 
@@ -93,7 +93,7 @@ describe('the ✓ capsule (Room #07, R3-D4 13′)', () => {
     const arrive = jest.spyOn(H, 'arrive').mockImplementation(() => {})
     const onOpen = jest.fn()
     const onDone = jest.fn()
-    await render(<WaveToast wave={{ eventId: 'e1', fromUserId: 'a', fromName: 'Night Cat', at: Date.now() }} onOpen={onOpen} onDone={onDone} />)
+    await render(<WaveToast toast={{ waves: [{ eventId: 'e1', fromUserId: 'a', fromName: 'Night Cat', at: Date.now() }] }} onOpen={onOpen} onWaveBack={jest.fn()} onSeeAll={jest.fn()} onSafety={jest.fn()} onDone={onDone} />)
     expect(screen.getByText('Night Cat waved at you')).toBeTruthy()
     expect(arrive).toHaveBeenCalledTimes(1)
     await fireEvent.press(screen.getByRole('button', { name: 'Night Cat waved at you' }))
@@ -108,7 +108,7 @@ describe('the ✓ capsule (Room #07, R3-D4 13′)', () => {
     jest.useFakeTimers()
     jest.spyOn(H, 'arrive').mockImplementation(() => {})
     const onDone = jest.fn()
-    await render(<WaveToast wave={{ eventId: 'e1', fromUserId: 'a', fromName: 'Night Cat', at: Date.now() }} onOpen={jest.fn()} onDone={onDone} />)
+    await render(<WaveToast toast={{ waves: [{ eventId: 'e1', fromUserId: 'a', fromName: 'Night Cat', at: Date.now() }] }} onOpen={jest.fn()} onWaveBack={jest.fn()} onSeeAll={jest.fn()} onSafety={jest.fn()} onDone={onDone} />)
     await act(async () => jest.advanceTimersByTime(4900))
     expect(onDone).not.toHaveBeenCalled()
     await act(async () => jest.advanceTimersByTime(100))

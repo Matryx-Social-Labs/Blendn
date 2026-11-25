@@ -12,9 +12,9 @@ import * as Reanimated from 'react-native-reanimated'
 import { LookingForCard } from '../components/ds/LookingForCard'
 import { RadioCard } from '../components/ds/RadioCard'
 import { HueProvider, SELECTION } from '../components/ds/shared'
-import { COLOR, MATERIAL, RADIUS } from '../lib/design/tokens'
+import { COLOR, MATERIAL, MAX_FONT_SCALE, RADIUS } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
-import { OPACITY } from '../lib/theme'
+import { OPACITY, tint } from '../lib/theme'
 
 jest.mock('react-native-reanimated', () => ({ ...jest.requireActual('react-native-reanimated'), __esModule: true, useReducedMotion: jest.fn(() => false) }))
 
@@ -148,9 +148,20 @@ describe('<LookingForCard>', () => {
     expect(screen.getByTestId('l-check', { includeHiddenElements: true })).toBeTruthy()
   })
 
-  it('is a button named by its word, selected or not; the photo is decorative', async () => {
+  it('is a checkbox named by its word, checked or not: any of them at once, and a tap clears one (SCRUM-1025)', async () => {
     await render(tile({ selected: true }))
-    expect(screen.getByRole('button', { name: 'Friendship' }).props.accessibilityState).toMatchObject({ selected: true })
+    expect(screen.getByRole('checkbox', { name: 'Friendship' }).props.accessibilityState).toMatchObject({ checked: true })
+  })
+
+  it('tall (Flow 4 `.icd`): 132 pt, radius 20, the ring inside the tile, the word on two lines 12 in and 10 up', async () => {
+    await render(tile({ size: 'tall', selected: true }))
+    expect(flat('l-tile')).toMatchObject({ height: 132, borderRadius: 20 })
+    const ring = screen.getByTestId('l-ring', { includeHiddenElements: true })
+    expect(StyleSheet.flatten(ring.props.style)).toMatchObject({ position: 'absolute', top: 0, left: 0, borderWidth: 2, borderRadius: 20 })
+    const word = screen.getByText('Friendship')
+    expect(word.props.numberOfLines).toBe(2)
+    expect(StyleSheet.flatten(word.props.style)).toMatchObject({ left: 12, right: 12, bottom: 10, fontSize: 15, lineHeight: 20, fontFamily: 'Satoshi_700Bold' })
+    expect(flat('l-check')).toMatchObject({ top: 12, right: 12 })
   })
 
   it('multi-select: H.select on every change, on and off', async () => {
@@ -190,5 +201,83 @@ describe('<RadioCard> in a row of two (the Board composer, A61)', () => {
     expect(style.flexGrow).toBe(1)
     expect(style.flex).toBeUndefined()
     expect(style.flexBasis).toBeUndefined()
+  })
+})
+
+describe('<RadioCard layout="lead"> (Flow 4 `.rc`, SCRUM-1025)', () => {
+  const lead = (props: Partial<React.ComponentProps<typeof RadioCard>> = {}) =>
+    card({ layout: 'lead', icon: undefined, detail: 'Quiet Lynx', hint: 'That’s all people here see, plus what you have in common.', ...props })
+
+  it('left-aligned: the title, the value in its own one-line slot, the sentence; all three are read', async () => {
+    await render(lead())
+    expect(flat('r')).toMatchObject({ alignItems: 'flex-start', gap: 4, padding: 16 })
+    expect(screen.getByTestId('r-detail').props).toMatchObject({ numberOfLines: 1, ellipsizeMode: 'tail', children: 'Quiet Lynx' })
+    // The card's width, so a long value ellipsizes at the card's edge.
+    expect(StyleSheet.flatten(screen.getByTestId('r-detail').props.style)).toMatchObject({ alignSelf: 'stretch' })
+    expect(StyleSheet.flatten(screen.getByText('Anonymous').props.style)).toMatchObject({ fontSize: 17, lineHeight: 22, marginTop: 8 })
+    expect(screen.getByRole('radio', { name: 'Anonymous, Quiet Lynx, That’s all people here see, plus what you have in common.' })).toBeTruthy()
+  })
+
+  it('selected: the sentence goes white at 80% on the fill, and the check sits 12 in', async () => {
+    // Increase Contrast off (the shared answer is cached from the test above it).
+    jest.spyOn(AccessibilityInfo, 'isDarkerSystemColorsEnabled').mockResolvedValue(false)
+    await render(lead({ selected: true }))
+    await act(async () => {})
+    expect(StyleSheet.flatten(screen.getByText(/^That’s all/).props.style).color).toBe(tint(COLOR.textPrimary, 0.8))
+    expect(flat('r-check')).toMatchObject({ top: 12, right: 12 })
+  })
+
+  it('no value: no slot', async () => {
+    await render(lead({ detail: undefined }))
+    expect(screen.queryByTestId('r-detail')).toBeNull()
+  })
+
+  /*
+   * Flow 4 audit D-1 (SCRUM-1045): a blocked card said what was missing ("Add a photo to your profile first") with
+   * nothing to tap. Its way out is a link inside it, the card's one live part: a link a screen reader reaches on its
+   * own, while the card is still read as the blocked radio it is.
+   */
+  it('a blocked card with an action: a link in the card under the sentence, its own element, the card still blocked', async () => {
+    const onPress = jest.fn()
+    const go = jest.fn()
+    await render(lead({ disabled: true, hint: 'Add a photo to your profile first.', onPress, action: { label: 'Add a photo', onPress: go } }))
+    const radio = screen.getByRole('radio', { name: 'Anonymous, Quiet Lynx, Add a photo to your profile first.' })
+    expect(radio.props.accessibilityState).toMatchObject({ disabled: true })
+    await fireEvent.press(screen.getByRole('link', { name: 'Add a photo' }))
+    expect(go).toHaveBeenCalledTimes(1)
+    expect(onPress).not.toHaveBeenCalled()
+    // The board's `.addp`: 15/20, in the hue's glyph colour, 8 under the sentence (the card's 4 and 4 more).
+    expect(StyleSheet.flatten(screen.getByText('Add a photo').props.style)).toMatchObject({ fontSize: 15, lineHeight: 20, color: SELECTION.ember.glyph })
+    expect(flat('r-action')).toMatchObject({ marginTop: 4 })
+    // An action grows with the text as far as a button does (driven at AX5: capped like the value slot, it stayed small).
+    expect(screen.getByText('Add a photo').props.maxFontSizeMultiplier).toBe(MAX_FONT_SCALE.button)
+  })
+
+  it('no action: no link, and the card is the one element it was (control)', async () => {
+    await render(lead({ disabled: true, hint: 'Add a photo to your profile first.' }))
+    expect(screen.queryByRole('link')).toBeNull()
+    expect(screen.getByTestId('r').props.accessibilityRole).toBe('radio')
+  })
+})
+
+describe('<RadioCard layout="row"> (Flow 4 `.jr`, SCRUM-1025)', () => {
+  it('a short row, radius 20, 12 by 16 in, its text clear of the check disc', async () => {
+    await render(card({ layout: 'row', icon: undefined, title: 'Just here for the event', hint: 'Not looking to meet anyone', deselectable: true }))
+    expect(flat('r')).toMatchObject({ alignItems: 'flex-start', borderRadius: 20, paddingVertical: 12, paddingLeft: 16, paddingRight: 44 })
+    expect(StyleSheet.flatten(screen.getByText('Just here for the event').props.style)).toMatchObject({ fontSize: 17, lineHeight: 22, fontFamily: 'Satoshi_500Medium' })
+    expect(screen.getByRole('checkbox', { name: 'Just here for the event, Not looking to meet anyone' })).toBeTruthy()
+  })
+})
+
+describe('a start (kind="start"): the choice that acts at once, as the Lobby’s two starts (buttons board C leftovers)', () => {
+  it('is a button named by its title and consequence, with no checked state and no check disc, and it acts on every tap', async () => {
+    const onPress = jest.fn()
+    await render(<RadioCard kind="start" title="I’m looking" hint="Going alone? Find someone to go with." icon="search" onPress={onPress} testID="s" />)
+    const start = screen.getByRole('button', { name: 'I’m looking, Going alone? Find someone to go with.' })
+    expect(start.props.accessibilityState?.checked).toBeUndefined()
+    expect(screen.queryByRole('radio')).toBeNull()
+    await fireEvent.press(start)
+    await fireEvent.press(start)
+    expect(onPress).toHaveBeenCalledTimes(2)
   })
 })

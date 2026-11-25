@@ -1,14 +1,18 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Linking, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 import { GestureDetector } from 'react-native-gesture-handler'
 import Animated from 'react-native-reanimated'
 
-import { COLOR, FONT_FAMILY, ICON, MAX_FONT_SCALE, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
-import { distanceText } from '../../lib/placesPane'
+import { passReachLine, type PassReach } from '../../lib/attendanceState'
+import { useFocusWhen } from '../../lib/focusReturn'
+import { SWITCH_LABEL, switchCaption } from '../../lib/switchCopy'
+import { COLOR, FONT_FAMILY, ICON, MAX_FONT_SCALE, RADIUS, SIZE, SPACE, TYPE } from '../../lib/design/tokens'
+import { distanceText, type DistanceReading } from '../../lib/placesPane'
 import { startsLabel } from '../../lib/roomMoments'
 import { calendarDaysBetween, eventClock } from '../../lib/time'
 import type { TonightEvent, TonightLocation } from '../../lib/useTonight'
 import { Banner } from '../ds/Banner'
+import { BannerPresence } from '../motion/BannerPresence'
 import type { PourFrame as PassFrame } from '../ds/MomentPour'
 import { font, minTarget, useBoldText } from '../ds/shared'
 import { StateScreen } from '../ds/StateScreen'
@@ -38,13 +42,13 @@ function startsToday(iso: string, now: number, timeZone?: string | null) {
   return calendarDaysBetween(new Date(now), new Date(iso), timeZone ?? undefined) === 0
 }
 
-/** A Tonight event as the deck's hero card: "In 25 min", "9 going", "at {venue} · 1.2 km", the saved ribbon. */
-export function deckEvent(e: TonightEvent, now: number): DeckEvent {
+/** A Tonight event as the deck's hero card: "In 25 min", "9 going", "at {venue} · 1.2 km" ("about 1 km" from an approximate fix), the saved ribbon. */
+export function deckEvent(e: TonightEvent, now: number, reading: DistanceReading): DeckEvent {
   return {
     title: e.title,
     time: startsLabel(e, now).text,
     venue: e.venue,
-    distance: distanceText(e.distanceKm) ?? undefined,
+    distance: distanceText(e.distanceKm, reading) ?? undefined,
     going: e.goingCount ?? undefined,
     cover: e.photo,
     category: e.category,
@@ -54,22 +58,32 @@ export function deckEvent(e: TonightEvent, now: number): DeckEvent {
 }
 
 /** The deck, sized to the room it has (`maxHeight`, 0 while unmeasured). Flicks are the TonightCard's. */
-function EventDeck({ events, now, onOpen, maxHeight }: { events: TonightEvent[]; now: number; onOpen: (id: string) => void; maxHeight: number }) {
+function EventDeck({
+  events,
+  now,
+  reading,
+  onOpen,
+  onFront,
+  maxHeight,
+}: {
+  events: TonightEvent[]
+  now: number
+  reading: DistanceReading
+  onOpen: (id: string) => void
+  onFront?: (index: number) => void
+  maxHeight: number
+}) {
   const { width: screen } = useWindowDimensions()
   const deck = events.slice(0, DECK_MAX)
-  const [index, setIndex] = useState(0)
   const width = screen - DECK_INSET * 2
   const fit = maxHeight > 0 ? maxHeight - FAN_DROP - (deck.length > 1 ? PIPS : 0) : Infinity
   const height = Math.max(MIN_CARD, Math.min(Math.round(width * DECK_ASPECT), fit))
-  // The list can shrink under the deck (an event ends); never point past it.
-  const shown = Math.min(index, deck.length - 1)
   return (
     <View style={styles.deck}>
       <TonightCard
-        events={deck.map((e) => deckEvent(e, now))}
-        index={shown}
-        onIndexChange={setIndex}
+        events={deck.map((e) => deckEvent(e, now, reading))}
         onOpen={(i) => deck[i] && onOpen(deck[i].id)}
+        onIndexChange={onFront}
         width={width}
         height={height}
         testID="tonight-deck"
@@ -88,7 +102,19 @@ export type TonightViewProps = {
   offline?: boolean
   location?: TonightLocation
   onRetry: () => void
+  /** The pass's event: the deck's front card (SCRUM-965), or null when there is no pass. */
   insideEvent: TonightEvent | null
+  /** The front card changed (a swipe), with its index into `events`: the screen derives the pass from it. */
+  onFront?: (index: number) => void
+  /** Another key starts the deck again at its first card. */
+  deckKey?: string | null
+  /** Tonight is the face of the overlay now: its heading takes a screen reader's focus as it arrives. */
+  active?: boolean
+  /**
+   * Whether the docked pass's hold is offered (`lib/attendanceState.ts` `passReach`): away from the door or with location off
+   * the same pass shows, its hold disabled, with one short line (owner ruling 2026-10-28).
+   */
+  reach?: PassReach
   /** In another event's room already: the pass's hold is a switch out of it (ROUND4 8.3 #06). */
   switchFrom?: string
   checkingIn: boolean
@@ -102,8 +128,10 @@ export type TonightViewProps = {
   onCheckIn: () => void
   /** The Room failed to load for someone checked in: Tonight stays, with a quiet line (Flow 4 Room #15). */
   onRoomRetry?: () => void
-  /** After the server's yes: "Tell your crew" in the pass, which grows upward to hold it (Flow 4 delta R2-D1 "success"). */
+  /** After the server's yes: your crews' strip in the pass, which grows upward to hold it (Flow 4 delta R2-D1 "success"). */
   crewStrip?: ReactNode
+  /** "With {crew}" under the hold (crews 4-A2): drawn while the hold is live, and after it (read-only, same height). */
+  crewChip?: ReactNode
   topInset: number
   bottomInset: number
 }
@@ -127,6 +155,10 @@ export function TonightView({
   location = 'on',
   onRetry,
   insideEvent,
+  onFront,
+  deckKey,
+  active = false,
+  reach = 'open',
   switchFrom,
   checkingIn,
   youreIn = false,
@@ -137,10 +169,13 @@ export function TonightView({
   onCheckIn,
   onRoomRetry,
   crewStrip,
+  crewChip,
   topInset,
   bottomInset,
 }: TonightViewProps) {
   const bold = useBoldText()
+  const headingRef = useRef<Text>(null)
+  useFocusWhen(headingRef, active ? 'tonight' : null)
   const now = useNow(60_000)
   const { onScroll, native, scrollEventThrottle } = useStageScroll()
   // The pass's frame is the dock's place plus the pass's place in it.
@@ -155,12 +190,12 @@ export function TonightView({
   const [headHeight, setHeadHeight] = useState(0)
   // R3-D4 4.7: with approximate location no door can be confirmed, so no pass is offered.
   const door = location === 'approximate' ? null : insideEvent
-  const list = door ? events.filter((e) => e.id !== door.id) : events
+  const list = events
   const deckRoom = viewport ? viewport - topInset - headHeight - SPACE.xl : 0
   const sub =
     location === 'approximate'
       ? 'Approximate location. Check-in needs your exact spot: turn on Precise Location for Blend’n.'
-      : door
+      : door && reach === 'open'
         ? 'You’re at an event. Hold the pass below to check in.'
         : 'Check in at an event to open its room.'
 
@@ -179,13 +214,13 @@ export function TonightView({
         >
           <View style={styles.head} onLayout={(e) => setHeadHeight(Math.ceil(e.nativeEvent.layout.height))}>
             <View style={styles.titleRow}>
-              <Text accessibilityRole="header" maxFontSizeMultiplier={MAX_FONT_SCALE.display} style={[font('display', bold), styles.ink]}>
+              <Text ref={headingRef} accessibilityRole="header" maxFontSizeMultiplier={MAX_FONT_SCALE.display} style={[font('display', bold), styles.ink]}>
                 Tonight
               </Text>
               {list.length > 0 ? (
                 <Pressable
                   onPress={onSeeAll}
-                  hitSlop={(minTarget() - SPACE.xl) / 2}
+                  hitSlop={(minTarget() - TYPE.button.lineHeight) / 2}
                   accessibilityRole="button"
                   accessibilityLabel="See all"
                   testID="tonight-see-all"
@@ -198,16 +233,16 @@ export function TonightView({
             </View>
             <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>{sub}</Text>
             {onRoomRetry ? (
-              <Banner kind="info" text="Couldn’t check your room. You can still browse tonight." action={{ label: 'Try again', onPress: onRoomRetry }} testID="tonight-room-error" />
+              <BannerPresence><Banner kind="info" text="Couldn’t check your room. You can still browse tonight." action={{ label: 'Try again', onPress: onRoomRetry }} testID="tonight-room-error" /></BannerPresence>
             ) : null}
-            {offline ? <Banner kind="offline" text="Offline. Showing what loaded earlier." testID="tonight-offline" /> : null}
+            {offline ? <BannerPresence><Banner kind="offline" text="Offline. Showing what loaded earlier." testID="tonight-offline" /></BannerPresence> : null}
             {location === 'off' ? (
-              <Banner
+              <BannerPresence><Banner
                 kind="info"
                 text="Location is off. Events are listed by city, without distances."
                 action={{ label: 'Turn on', onPress: () => void Linking.openSettings().catch(() => {}) }}
                 testID="tonight-location-off"
-              />
+              /></BannerPresence>
             ) : null}
           </View>
 
@@ -237,7 +272,7 @@ export function TonightView({
               />
             </View>
           ) : list.length > 0 ? (
-            <EventDeck events={list} now={now} onOpen={onOpenEvent} maxHeight={deckRoom} />
+            <EventDeck key={deckKey ?? undefined} events={list} now={now} reading={location === 'approximate' ? 'approximate' : 'exact'} onOpen={onOpenEvent} onFront={onFront} maxHeight={deckRoom} />
           ) : null}
         </Animated.ScrollView>
       </GestureDetector>
@@ -255,12 +290,14 @@ export function TonightView({
               hereCount={door.hereCount}
               tasteCount={door.tasteMatchCount}
               onConfirm={onCheckIn}
-              holdLabel={switchFrom ? 'Hold to switch' : undefined}
-              note={switchFrom ? `You’ll leave ${switchFrom}` : undefined}
+              holdLabel={switchFrom ? SWITCH_LABEL : undefined}
+              note={passReachLine(reach) ?? (switchFrom ? switchCaption(switchFrom) : undefined)}
+              disabled={reach !== 'open'}
               busy={checkingIn && !youreIn}
               confirmed={youreIn}
               testID="tonight-pass"
             >
+              {reach === 'open' || youreIn ? crewChip : null}
               {youreIn ? crewStrip : null}
             </VenuePass>
           </View>
@@ -273,7 +310,7 @@ export function TonightView({
             <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.ink, styles.grow]}>No pass without precise location</Text>
             <Pressable
               onPress={() => void Linking.openSettings().catch(() => {})}
-              hitSlop={(minTarget() - SPACE.xl) / 2}
+              hitSlop={(minTarget() - TYPE.meta.lineHeight) / 2}
               accessibilityRole="button"
               accessibilityLabel="Turn on Precise Location"
               testID="tonight-approximate-turn-on"
@@ -292,7 +329,7 @@ function Skeleton({ room }: { room: number }) {
   const { width: screen } = useWindowDimensions()
   const width = screen - DECK_INSET * 2
   const height = Math.max(MIN_CARD, Math.min(Math.round(width * SKELETON_ASPECT), room ? room - SPACE.xl : Infinity))
-  return <View testID="tonight-skeleton" accessibilityLabel="Loading tonight" style={[styles.skeleton, { width, height }]} />
+  return <View accessible testID="tonight-skeleton" accessibilityLabel="Loading tonight" style={[styles.skeleton, { width, height }]} />
 }
 
 const styles = StyleSheet.create({

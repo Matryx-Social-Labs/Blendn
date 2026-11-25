@@ -1,7 +1,8 @@
 import { usePathname } from 'expo-router'
 import { Tabs } from 'expo-router/js-tabs'
-import React, { memo, useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import React, { memo, useCallback, useEffect, useRef, useState } from 'react'
 import { AppState, Easing, Platform, StyleSheet, View } from 'react-native'
+import { useDerivedValue } from 'react-native-reanimated'
 
 import { BlendnScreen } from '../../components/blendn/BlendnScreen'
 import { InAppBanner } from '../../components/ds/InAppBanner'
@@ -11,15 +12,23 @@ import { useCoachMarkSpot } from '../../components/ds/CoachMarkHost'
 import { ForegroundBanners } from '../../components/notifications/ForegroundBanners'
 import { markCoachUsed, useCoachMark } from '../../lib/coachMarks'
 import { apiClient } from '../../lib/apiClient'
-import { blendnClosed, openBlendn, setLiveHint, useBlendnOpen } from '../../lib/blendnOverlay'
+import { banterUnread, useInboxBadge, useInboxBadgeSync } from '../../lib/inboxBadge'
+import { blendnClosed, openBlendn, setCurrentTab, setLiveHint, useBlendnOpen, useLiveTitle } from '../../lib/blendnOverlay'
+import { activeRoomName } from '../../lib/leftRooms'
 import { onClosingForLink } from '../../lib/linkClosers'
 import { subscribeCheckInChanged } from '../../lib/checkIn'
+import { refreshAuthUserOnForeground, useAuth } from '../../lib/useAuth'
 import { COLOR, DURATION, EASING, SIZE, SPACE } from '../../lib/design/tokens'
 import { Logger } from '../../lib/logger'
+import { myMainPhoto } from '../../lib/myPhoto'
 import { roomButtonTarget, type RoomButtonTarget } from '../../lib/roomButton'
 import { getRoomSignal, subscribeRoomSignal } from '../../lib/roomSignal'
+import { useRoomSignalSource } from '../../lib/useRoomSignalSource'
 import { watchRoomUnread } from '../../lib/roomUnread'
-import { listenForWaves, useRoomWaves, waveShown } from '../../lib/roomWaves'
+import { toastTitle } from '../../lib/receivedWaves'
+import { listenForWaves, useRoomWaves, waveKey, waveShown } from '../../lib/roomWaves'
+import { useKeyboardShown } from '../../lib/keyboard'
+import { expandTabBar, TAB_BAR_PROGRESS, TAB_BAR_SETTLE } from '../../lib/tabBarSettle'
 
 /**
  * The bar. `Pulse · Going · [Blend'n] · Banter · Me`.
@@ -52,13 +61,25 @@ const TAB_OF: Record<string, Tab> = { events: 'pulse', going: 'going', chat: 'ba
  * opens the Blend'n overlay.
  */
 const BlendnTabBar = memo(({ state, navigation }: BottomTabBarProps) => {
+  // A route that steps back to the tabs (`chat/[id]` handing its room to the overlay) lands on this tab, not the Pulse.
+  const frontTab = state.routes[state.index]?.name
+  useEffect(() => {
+    if (frontTab) setCurrentTab(frontTab)
+  }, [frontTab])
   const [target, setTarget] = useState<RoomButtonTarget>({
     state: 'idle',
     eventId: null,
     badge: 0,
   })
   const [venue, setVenue] = useState<string | null>(null)
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
+  const [insideCount, setInsideCount] = useState(0)
+  // Your face on Me: the session's `profile.photos`, re-read after every photo save and on foreground (`refreshAuthUser`).
+  const authUser = useAuth().user
+  const mePhoto = myMainPhoto(authUser)
+  // The Banter dot: the same counts as the Pulse's bell, one read for both (`lib/inboxBadge`).
+  useInboxBadgeSync(authUser?.id)
+  useRoomSignalSource(authUser?.id)
+  const banter = banterUnread(useInboxBadge())
 
   /*
    * The centre button's coach mark (round4/r4.js): the first time it says you
@@ -75,6 +96,8 @@ const BlendnTabBar = memo(({ state, navigation }: BottomTabBarProps) => {
   const rereadUnread = useRef<(force?: boolean) => void>(() => {})
   useEffect(() => {
     if (!blendnOpen) rereadUnread.current(true)
+    // Blend'n closing brings the full bar back.
+    if (!blendnOpen) expandTabBar()
   }, [blendnOpen])
   const pathname = usePathname()
   const lastPath = useRef(pathname)
@@ -87,53 +110,18 @@ const BlendnTabBar = memo(({ state, navigation }: BottomTabBarProps) => {
   useEffect(() => {
     if (target.state === 'live' || (blendnOpen && target.state === 'checkin')) markCoachUsed('centre_button_checkin')
   }, [target.state, blendnOpen])
-  // Drawn by the root's CoachMarkHost: the disc is the hole, the tip above (c)'s "Check in · {venue}" pill, a `SIZE.tag` tall.
+  // Drawn by the root's CoachMarkHost: the disc is the hole, the tip above (c)'s pin-and-venue pill, a `SIZE.tag` tall.
   const discRef = useRef<View>(null)
   useCoachMarkSpot(centreCoach.visible && checkInVenue !== null, {
     target: discRef,
     text: `You’re at ${checkInVenue}. Tap the button, then hold to check in.`,
     place: 'above',
     radius: SIZE.disc / 2,
-    gap: SIZE.tag + SPACE.sm,
+    gap: SIZE.tag + SPACE.md,
     onDismiss: centreCoach.dismiss,
     onLost: centreCoach.lose,
     testID: 'centre-coach-mark',
   })
-
-  /*
-   * Your photo for the Me tab.
-   *
-   * Read once through `getProfile`, which is cache-first — every screen that
-   * shows your profile has already warmed it, so on the common path this costs
-   * nothing and the bar draws with a face on first paint.
-   *
-   * `photos[0]`, not `user.image`: the OAuth avatar is deliberately not used
-   * anywhere in this app because it often 404s.
-   */
-  useEffect(() => {
-    let cancelled = false
-    const load = async () => {
-      try {
-        const me = await apiClient.getCurrentUser()
-        if (cancelled || !me?.id) return
-        const r = await apiClient.getProfile(me.id)
-        if (cancelled || !r.success) return
-        const data = r.data as { profile_photos?: string[]; photos?: string[] } | undefined
-        // Same precedence the rest of the app uses.
-        const primary =
-          (Array.isArray(data?.profile_photos) && data.profile_photos[0]) ||
-          (Array.isArray(data?.photos) && data.photos[0]) ||
-          null
-        if (primary) setAvatarUrl(primary)
-      } catch (e) {
-        Logger.debug('navigation', 'avatar lookup failed', { error: e })
-      }
-    }
-    void load()
-    return () => {
-      cancelled = true
-    }
-  }, [])
 
   /*
    * Two sources, combined here.
@@ -151,6 +139,7 @@ const BlendnTabBar = memo(({ state, navigation }: BottomTabBarProps) => {
   useEffect(() => {
     let cancelled = false
     let activeEventId: string | null = null
+    let activeTitle: string | null = null
     // The live room's unread, for the disc's badge (T3); one watcher per room you are in.
     let unread = 0
     let watcher: ReturnType<typeof watchRoomUnread> | null = null
@@ -159,9 +148,10 @@ const BlendnTabBar = memo(({ state, navigation }: BottomTabBarProps) => {
     const recompute = () => {
       const signal = getRoomSignal()
       setVenue(signal.insideVenue)
+      setInsideCount(signal.insideCount)
       // SCRUM-630: waves are heard while you are checked in, overlay open or not.
       listenForWaves(activeEventId)
-      setLiveHint(activeEventId !== null)
+      setLiveHint(activeEventId, activeTitle)
       setTarget(
         roomButtonTarget({
           activeEventId,
@@ -179,7 +169,7 @@ const BlendnTabBar = memo(({ state, navigation }: BottomTabBarProps) => {
         if (cancelled || !r.success) return
         const active = r.data?.checkIns?.[0] ?? null
         activeEventId = active?.eventId ?? null
-        setActiveRoomTitle(active?.event?.title ?? null)
+        activeTitle = activeRoomName(active)
         if (activeEventId !== watchedEvent) {
           watcher?.stop()
           unread = 0
@@ -216,8 +206,11 @@ const BlendnTabBar = memo(({ state, navigation }: BottomTabBarProps) => {
     const unsubscribeCheckIn = subscribeCheckInChanged(() => void read())
     const appState = AppState.addEventListener('change', (state) => {
       if (state === 'active') {
+        void refreshAuthUserOnForeground()
         void read()
         rereadUnread.current(true)
+        // The app returning brings the full bar back.
+        expandTabBar()
       }
     })
     return () => {
@@ -248,13 +241,35 @@ const BlendnTabBar = memo(({ state, navigation }: BottomTabBarProps) => {
     [navigation, state.index, state.routes]
   )
 
+  /*
+   * The compact pill (SCRUM-1023): the Pulse's bar answers its drawer's snap, every other tab's its list's scroll
+   * (`lib/tabBarSettle`). A tab switch brings the full bar back; arriving on the Pulse, the drawer's answer stands.
+   */
+  const selected = TAB_OF[state.routes[state.index]?.name] ?? 'pulse'
+  const onPulse = selected === 'pulse'
+  const settle = useDerivedValue(() => (onPulse ? TAB_BAR_SETTLE.drawer.get() : TAB_BAR_SETTLE.scroll.get()))
+  useEffect(() => TAB_BAR_SETTLE.scroll.set(0), [selected])
+  // It steps away while the keyboard is up, and comes back full when it goes.
+  const keyboardUp = useKeyboardShown()
+  useEffect(() => {
+    if (!keyboardUp) expandTabBar()
+  }, [keyboardUp])
+
   return (
       <TabBar
-        selected={TAB_OF[state.routes[state.index]?.name] ?? 'pulse'}
+        selected={selected}
         onSelect={select}
-        disc={{ target, onPress: () => openBlendn(), venue: venue ?? undefined }}
-        mePhoto={avatarUrl ?? undefined}
+        disc={{ target, onPress: () => openBlendn(), venue: venue ?? undefined, here: insideCount }}
+        mePhoto={mePhoto ?? undefined}
+        meName={authUser?.name ?? undefined}
+        banterUnread={banter}
         discRef={discRef}
+        settle={settle}
+        progress={TAB_BAR_PROGRESS}
+        // While the disc's coach mark points at it, the bar stays full: the hole is cut for the full disc.
+        holdFull={centreCoach.visible}
+        hidden={keyboardUp}
+        onTouch={expandTabBar}
       />
   )
 })
@@ -270,43 +285,28 @@ BlendnTabBar.displayName = 'BlendnTabBar'
  */
 function WaveFromTheTabs({ room }: { room: string | null }) {
   const blendnOpen = useBlendnOpen()
-  const { latest } = useRoomWaves()
-  if (blendnOpen || !latest) return null
+  const { toast } = useRoomWaves()
+  if (blendnOpen || !toast) return null
+  const first = toast.waves[0]
+  const crew = toast.waves.length === 1 && 'fromCrewId' in first ? first : null
+  // A crew's wave opens the room, where the strip answers it; only a person has a card.
+  const person = toast.waves.length === 1 && !('fromCrewId' in first) ? first.fromUserId : undefined
   return (
     <InAppBanner
-      key={`${latest.fromUserId}:${latest.at}`}
+      key={`${waveKey(first)}:${first.at}`}
       kind="wave"
-      visual={{ type: 'creature', pseudonym: latest.fromName }}
-      title={`${latest.fromName} waved at you`}
-      context={room ? `${room} · now` : 'now'}
+      visual={'fromCrewId' in first ? { type: 'glyph', icon: 'users' } : { type: 'creature', pseudonym: first.fromName }}
+      // One line each: a crew's 32-character name would push "waved at you" off its own.
+      title={crew ? crew.fromName : toastTitle(toast)}
+      context={[...(crew ? ['Waved at you'] : []), ...(room ? [room] : []), 'now'].join(' · ')}
       onPress={() => {
-        // Shown here: the Room must not toast it again as the overlay opens on their card.
-        waveShown(latest)
-        openBlendn(latest.fromUserId)
+        // Shown here: the Room must not toast it again as the overlay opens (on their card for one wave; L-B, the room).
+        waveShown(toast)
+        openBlendn(person)
       }}
-      onDismiss={() => waveShown(latest)}
+      onDismiss={() => waveShown(toast)}
       testID="wave-banner"
     />
-  )
-}
-
-/** The room you're checked into, by title, for the wave banner's context line. Written by the bar's poll. */
-let activeRoomTitle: string | null = null
-const roomTitleListeners = new Set<() => void>()
-function setActiveRoomTitle(title: string | null) {
-  if (title === activeRoomTitle) return
-  activeRoomTitle = title
-  for (const fn of roomTitleListeners) fn()
-}
-function useActiveRoomTitle() {
-  return useSyncExternalStore(
-    (fn) => {
-      roomTitleListeners.add(fn)
-      return () => {
-        roomTitleListeners.delete(fn)
-      }
-    },
-    () => activeRoomTitle
   )
 }
 
@@ -317,15 +317,22 @@ export default function TabLayout() {
    * switched the tab under it and the Room stayed on top. Told before the link navigates (lib/pendingRoute).
    */
   useEffect(() => (blendnOpen ? onClosingForLink(blendnClosed) : undefined), [blendnOpen])
-  const activeRoom = useActiveRoomTitle()
+  const activeRoom = useLiveTitle()
   return (
     <View style={styles.host}>
     {/*
       While Blend'n is open the tabs and the bar under it are hidden from
       VoiceOver and TalkBack: an overlay that only looks modal let a swipe
       walk straight past the room into "Pulse tab".
+
+      Never flattened (SCRUM-991): Fabric flattens a plain view away and keeps
+      one that hides its descendants, so each toggle re-parented every tab. The
+      home map's SurfaceView came off the window and MapLibre reset its renderer
+      on the main thread, waiting for the GL thread: an ANR on Android check-out.
     */}
     <View
+      collapsable={false}
+      testID="tabs-host"
       style={styles.tabs}
       accessibilityElementsHidden={blendnOpen}
       importantForAccessibility={blendnOpen ? 'no-hide-descendants' : 'auto'}

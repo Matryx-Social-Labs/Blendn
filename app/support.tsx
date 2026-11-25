@@ -1,25 +1,34 @@
 import { router } from 'expo-router'
+import { useState } from 'react'
 import { Linking, Platform, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { Button } from '../components/ds/Button'
+import { ChipSet } from '../components/ds/ChipSet'
 import { SettingsGroup, SettingsRow } from '../components/ds/SettingsRow'
 import { font, monoValue, useBoldText, useLargeText } from '../components/ds/shared'
 import { TopBar } from '../components/ds/TopBar'
 import ScalePress from '../components/motion/ScalePress'
 import { useToast } from '../components/Toast'
 import { Icon, type IconName } from '../components/ui/Icon'
-import { COLOR, ICON, MAX_FONT_SCALE, PRESS, RADIUS, SIZE, SPACE } from '../lib/design/tokens'
+import { COLOR, FONT_FAMILY, ICON, MAX_FONT_SCALE, PRESS, RADIUS, SIZE, SPACE } from '../lib/design/tokens'
 import { copyText } from '../lib/copyText'
 import { BLENDN_LINKS, openInApp } from '../lib/links'
 import { appVersionLabel, platformParts, shortAccountId, SUPPORT_EMAIL, supportMailto } from '../lib/support'
+import { usePlusStatus } from '../lib/plus'
 import { useAuth } from '../lib/useAuth'
 import { useTopBarOverlay } from '../lib/useTopBarState'
+
+/** What it is about: the email's subject, so the right person reads it first (remaining-screens 04 A). Client only. */
+const TOPICS = ['My account', 'A person or a room', 'Blend’n+ or a payment', 'Something broke', 'Something else'].map((label) => ({ key: label, label }))
+/** Blend'n+ is named only where it is sold (owner 2026-11-18, the free app: `gated`, as Me and Settings). */
+const PLUS_TOPIC = 'Blend’n+ or a payment'
+const SUBJECT = 'Blend’n support'
 
 /**
  * Contact support (guidelines/flow-7 `support`): an email to a person, with what they will ask for already in it.
  *
- * The screen says what the draft carries (the app, the phone, your account) as a solid card, then Email support as the
+ * A topic first (none picked: the plain subject), then what the draft carries (the app, the phone, your account) as a solid card, then Email support as the
  * screen's one gradient primary; the address is written once and copies on a tap; the Help centre leaves the app. The
  * foot says nothing is sent until you press Send in your mail app, which is true: it is your mail app.
  */
@@ -31,9 +40,12 @@ export default function SupportScreen() {
   const bold = useBoldText()
   // D-M9: at the accessibility sizes a row's label and value no longer fit side by side; the label went. They stack.
   const largeText = useLargeText()
+  const [topic, setTopic] = useState<string | null>(null)
+  const sold = usePlusStatus().status?.gated === true
+  const topics = sold ? TOPICS : TOPICS.filter((t) => t.key !== PLUS_TOPIC)
 
   const email = () =>
-    Linking.openURL(supportMailto({ subject: "Blend’n support", userId: user?.id })).catch(() =>
+    Linking.openURL(supportMailto({ subject: topic ? `${SUBJECT}: ${topic}` : SUBJECT, userId: user?.id })).catch(() =>
       // No mail app set up. The address is on screen, so say where to write.
       showToast(`No email app opened. Write to ${SUPPORT_EMAIL}.`, 'info')
     )
@@ -56,10 +68,23 @@ export default function SupportScreen() {
         scrollIndicatorInsets={{ top: bar.indicatorTop }}
         showsVerticalScrollIndicator={false}
       >
-        <Text style={[font('body', bold), styles.ink]} maxFontSizeMultiplier={MAX_FONT_SCALE.body}>
-          Tell us what happened and we’ll write back by email. Your draft includes these details so we don’t have to ask:
-        </Text>
+        <View style={styles.topic}>
+          <Text accessibilityRole="header" style={[font('body', bold), styles.ink]} maxFontSizeMultiplier={MAX_FONT_SCALE.body}>
+            What is it about?
+          </Text>
+          <ChipSet
+            items={topics}
+            selection="single"
+            selected={topic ? [topic] : []}
+            onToggle={(key) => setTopic((was) => (was === key ? null : key))}
+            hint="It becomes the subject line, so the right person reads it first. Safety comes first in the queue."
+            testID="support-topic"
+          />
+        </View>
 
+        <Text accessibilityRole="header" style={[font('note', bold, FONT_FAMILY.brand[500]), styles.label]} maxFontSizeMultiplier={MAX_FONT_SCALE.label}>
+          Your email includes these
+        </Text>
         <View style={styles.details}>
           {details.map((row, i) => (
             <View key={row.name}>
@@ -98,12 +123,12 @@ export default function SupportScreen() {
         </ScalePress>
 
         <SettingsGroup>
-          <SettingsRow icon="circle-question-mark" title="Help centre" hint="Answers to the common questions" trail="external" onPress={() => void openHelp()} />
+          <SettingsRow icon="circle-question-mark" title="Help center" hint="Answers to the common questions" trail="external" onPress={() => void openHelp()} />
         </SettingsGroup>
 
         <Text style={[font('meta', bold), styles.foot]} maxFontSizeMultiplier={MAX_FONT_SCALE.meta}>Nothing is sent until you press Send in your mail app.</Text>
       </ScrollView>
-      <View style={bar.barPin} pointerEvents="box-none">
+      <View style={bar.barPin} onLayout={bar.onBarLayout} pointerEvents="box-none">
         <TopBar title="Contact support" state={bar.state} onBack={() => router.back()} testID="support-top" />
       </View>
     </View>
@@ -114,6 +139,9 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: COLOR.ink },
   content: { flexGrow: 1, gap: SPACE.lg, paddingHorizontal: SPACE.gutter },
   ink: { color: COLOR.textPrimary },
+  topic: { gap: SPACE.md },
+  // The sentence-case group label (SettingsGroup `sentence`), over a card that is not a settings group.
+  label: { color: COLOR.textSecondary, paddingLeft: SPACE.lg, marginBottom: -SPACE.sm },
   details: { borderRadius: RADIUS.sheet, backgroundColor: COLOR.surface, overflow: 'hidden' },
   detail: { flexDirection: 'row', alignItems: 'center', gap: SPACE.lg, paddingHorizontal: SPACE.lg, paddingVertical: SPACE.md, minHeight: SIZE.targetIos },
   inline: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: SPACE.lg },

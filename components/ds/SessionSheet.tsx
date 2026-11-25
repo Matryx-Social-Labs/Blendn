@@ -2,15 +2,19 @@ import { useEffect, useRef, useState } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 
 import { Icon } from '../ui/Icon'
+import { spokenMinutes } from '../../lib/roomRecap'
 import { COLOR, FONT_FAMILY, ICON, MAX_FONT_SCALE, SPACE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
+import { STAY_LABEL, STOP_LIVE_CONSEQUENCE, STOP_LIVE_LABEL, STOPPING_LIVE_LABEL, stopLiveCaption, stopLiveQuestion } from '../../lib/switchCopy'
 import { PresenceDot } from './MonoFamily'
+import { HoldToConfirm } from './HoldToConfirm'
 import { Sheet, type SheetAction } from './Sheet'
-import { announceOutcome, font, useBoldText, useIncreaseContrast } from './shared'
+import { announceOutcome, font, useBoldText, useIncreaseContrast, useLargeText } from './shared'
+import { Title } from './Title'
 
 /** Where live time stands: minutes left (updated once a minute), the last 5 minutes in mm:ss, or Stay. */
 export type SessionTime =
-  | { kind: 'minutes'; left: number; /** "21:50". */ until: string }
+  | { kind: 'minutes'; left: number; /** "21:50". */ until: string; /** The new end an Extend gives, while it would move the end. */ extendUntil?: string }
   | { kind: 'ending'; /** "4:59". */ clock: string; /** The new end an Extend gives, "22:10". */ extendUntil: string }
   | { kind: 'stay'; /** 4 hours from the start, cut at 06:00: "00:40". Left out until the server says it. */ endsBy?: string }
 
@@ -37,18 +41,21 @@ const DOT = SPACE.sm + SPACE.xxs
 
 /**
  * While you are live at a venue (guidelines/components/SessionSheet.html,
- * Flow 11 · 11.3), opened from the live pill: the time left, Extend in the
- * last 5 minutes (labelled with the new end; going live again extends, never
- * shortens), and End, which confirms (check-out always confirms). Stay reads
- * "Staying" with its 4-hour cap and how each ping inside carries it.
+ * Flow 11 · 11.3), opened from the venue dock's state line: the time left,
+ * Extend whenever it moves the end (labelled with the new end; going live
+ * again extends, never shortens), and Stop, which confirms (check-out always
+ * confirms). Stay reads "Staying" with its 4-hour cap and how each ping
+ * inside carries it.
  *
- * One sheet: End turns it into the confirm (iOS will not present a second
- * modal while the first is still leaving), and Keep going turns it back.
+ * One sheet: Stop turns it into the confirm (iOS will not present a second
+ * modal while the first is still leaving), and Stay turns it back. The confirm
+ * is Check out's: the question, the neutral hold, Stay (buttons board C, owner
+ * 2026-11-17: stopping being live is leaving, not a loss, so never red).
  *
  * `H.primary` on Extend's press-in and `H.success` when the extension lands
- * (`extended` turning on: the server's OK), announced; none on End or on the
- * sheet; the confirm's End is the destructive button (`H.destructive`). Flow
- * 11's annotations overrule the page's `H.select`. The count is read as one
+ * (`extended` turning on: the server's OK), announced; none on Stop or on the
+ * sheet; the hold plays its ticks and `H.commit`. Flow 11's annotations
+ * overrule the page's `H.select`. The count is read as one
  * line, "32 minutes left, live until 21:50". Nothing ticks: the caller updates
  * the minutes once a minute, the clock each second only in the last 5.
  */
@@ -62,7 +69,6 @@ export function SessionSheet({
   onExtend,
   onEnd,
   ending = false,
-  startConfirming = false,
 }: {
   visible: boolean
   onClose: () => void
@@ -75,44 +81,51 @@ export function SessionSheet({
   extending?: boolean
   onExtend: () => void
   onEnd: () => void
-  /** End is on its way to the server. */
+  /** Stop is on its way to the server. */
   ending?: boolean
-  /**
-   * Opens on the confirm (the dock's Leave, R4 R12: "Stop being live at ‹place›?" · Stay · Stop, then
-   * "Stopping…"); Stay, or a swipe, then closes the sheet. The pill opens on the session, whose End
-   * confirms in the same sheet and goes back to it on Keep going. Read as the sheet opens.
-   */
-  startConfirming?: boolean
 }) {
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
-  const [confirming, setConfirming] = useState(visible && startConfirming)
-  // Each open starts where it was asked to (the session, or the confirm); a close resets (state adjusted in render).
+  const large = useLargeText()
+  const [confirming, setConfirming] = useState(false)
+  // Each open starts on the session; a close resets (state adjusted in render).
   const [wasVisible, setWasVisible] = useState(visible)
   if (visible !== wasVisible) {
     setWasVisible(visible)
-    setConfirming(visible && startConfirming)
+    setConfirming(false)
   }
   const extendedLine = time?.kind === 'minutes' ? `Extended · Live until ${time.until}` : ''
   useExtendedOutcome(extended, visible, extendedLine)
   const detail = contrast ? COLOR.textPrimary : COLOR.textSecondary
 
   if (confirming) {
-    const stop = startConfirming
-    // Leaving from the dock closes the sheet on Stay; ending from the session goes back to it.
-    const cancel = stop ? onClose : () => setConfirming(false)
+    const cancel = () => setConfirming(false)
     return (
       <Sheet
         visible={visible}
         onClose={cancel}
-        icon="log-out"
-        title={stop ? `Stop being live at ${venue}?` : `End your live time at ${venue}?`}
-        body="You leave today’s room at that second. Go live again any time you’re here."
-        actions={[
-          { label: stop ? (ending ? 'Stopping…' : 'Stop') : 'End', kind: 'destructive', onPress: onEnd, loading: ending },
-          { label: stop ? 'Stay' : 'Keep going', kind: 'tertiary', onPress: cancel },
-        ]}
-      />
+        title={stopLiveQuestion(venue)}
+        body={large ? undefined : STOP_LIVE_CONSEQUENCE}
+        // Stay while the stop is on the wire would promise what the server is already undoing.
+        actions={[{ label: STAY_LABEL, kind: 'tertiary', onPress: cancel, disabled: ending }]}
+      >
+        <HoldToConfirm
+          kind="neutral"
+          label={STOP_LIVE_LABEL}
+          busyLabel={STOPPING_LIVE_LABEL}
+          srLabel="Stop being live"
+          consequence={stopLiveCaption(venue)}
+          onConfirm={onEnd}
+          busy={ending}
+          testID="session-stop-hold"
+        />
+        {/* At the accessibility sizes the sentence moves under the hold, so a long place name cannot push it out of reach (Check out's rule). */}
+        {large ? (
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), { color: detail }]}>
+            {STOP_LIVE_CONSEQUENCE}
+          </Text>
+        ) : null}
+      </Sheet>
     )
   }
 
@@ -120,7 +133,7 @@ export function SessionSheet({
     !time
       ? 'Live'
       : time.kind === 'minutes'
-      ? `${time.left} minutes left, live until ${time.until}${extended ? ', extended' : ''}`
+      ? `${spokenMinutes(time.left)} left, live until ${time.until}${extended ? ', extended' : ''}`
       : time.kind === 'ending'
         ? `${time.clock} left, ending soon`
         : `Staying${time.endsBy ? `, ends ${time.endsBy} at the latest` : ''}`
@@ -132,9 +145,9 @@ export function SessionSheet({
       : time.kind === 'ending'
         ? 'Ending soon'
         : `As long as you’re at ${venue} · up to 4 hours${time.endsBy ? ` · ends ${time.endsBy} at the latest` : ''}`
-  const actions: SheetAction[] = [{ label: 'End', kind: 'secondary', onPress: () => setConfirming(true) }]
-  if (time?.kind === 'ending')
-    actions.unshift({ label: `Extend · Live until ${time.extendUntil}`, kind: 'lit', onPress: onExtend, loading: extending, pressHaptic: H.primary })
+  const actions: SheetAction[] = [{ label: 'Stop', kind: 'secondary', onPress: () => setConfirming(true) }]
+  const extendUntil = time?.kind === 'ending' || time?.kind === 'minutes' ? time.extendUntil : undefined
+  if (extendUntil) actions.unshift({ label: `Extend · Live until ${extendUntil}`, kind: 'lit', onPress: onExtend, loading: extending, pressHaptic: H.primary })
 
   return (
     <Sheet visible={visible} onClose={onClose} title={`Live at ${venue}`} actions={actions}>
@@ -150,7 +163,7 @@ export function SessionSheet({
               {time.kind === 'minutes' ? String(time.left) : time.clock}
             </Text>
           )}
-          {time?.kind === 'minutes' ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.title} style={[font('title', bold), { color: COLOR.textSecondary }]}>min</Text> : null}
+          {time?.kind === 'minutes' ? <Title style={{ color: COLOR.textSecondary }}>min</Title> : null}
         </View>
         {sub ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.centre, { color: detail }]}>{sub}</Text> : null}
         {extended && extendedLine ? (

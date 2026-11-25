@@ -3,10 +3,13 @@ import { useSyncExternalStore } from 'react'
 import { Platform } from 'react-native'
 
 import { apiClient, type GoLiveResult } from './apiClient'
+import { useToast } from '../components/Toast'
 import { checkInChanged } from './checkIn'
+import { youLeftLine } from './leftRooms'
 import { reasonOf } from './sessionEnd'
 import { goLiveRefusal, noteOwnGoLive, rememberLiveSession, type GoLiveChoice, type GoLiveRefusal } from './goLive'
 import { H } from './haptics'
+import { validAccuracy } from './geo'
 import { getCurrentLocation, type ShowTray } from './locationFix'
 import { Logger } from './logger'
 import { openInMaps } from './openInMaps'
@@ -166,6 +169,7 @@ export function useGoLive({
   onRefusal?: (refusal: GoLiveRefusal) => void
 }) {
   const { user } = useAuth()
+  const { showToast } = useToast()
   const userId = user?.id ?? null
   const busy = useGoLiveBusy()
 
@@ -181,7 +185,7 @@ export function useGoLive({
         latitude: at.latitude,
         longitude: at.longitude,
         // The key the server reads; unknown is absent, never a number we made up.
-        deviceInfo: { platform: Platform.OS, gpsAccuracy: at.accuracy ?? undefined },
+        deviceInfo: { platform: Platform.OS, gpsAccuracy: validAccuracy(at.accuracy) ?? undefined },
         ...choice,
       })
       if (result.success && result.data) {
@@ -191,7 +195,10 @@ export function useGoLive({
         if (userId) {
           await rememberLiveSession({ userId, venueDayId: result.data.venueDayId, venueId: place.id, venueName: place.name, choice })
         }
-        checkInChanged(result.data.venueDayId)
+        checkInChanged(result.data.venueDayId, Array.isArray(result.data.left) ? result.data.left : [])
+        // Never a silent switch: the room this took you out of, named by the server (ROOM-10). Queued ahead of the caller's own toast.
+        const left = youLeftLine(result.data)
+        if (left) showToast(left, 'info')
         onLive?.(result.data)
         return true
       }

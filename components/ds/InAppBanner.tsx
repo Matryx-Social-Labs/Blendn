@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { AccessibilityInfo, Platform, Pressable, StyleSheet, Text, View } from 'react-native'
+import { AccessibilityInfo, Platform, StyleSheet, Text, View } from 'react-native'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -11,9 +11,9 @@ import { COLOR, EASING, FONT_FAMILY, PRESS, RADIUS, SIZE, SPACE, SPRING } from '
 import { H } from '../../lib/haptics'
 import { registerBannerShowing } from '../../lib/inAppBanners'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
-import { tint } from '../../lib/theme'
+import { IconButton } from './IconButton'
 import { NotificationVisual, type NotificationVisualSpec } from './NotificationRow'
-import { CONTROL_FONT_CAP, font, IC_HAIRLINE, minTarget, useBoldText, useIncreaseContrast, useScreenReader } from './shared'
+import { CONTROL_FONT_CAP, font, IC_HAIRLINE, useBoldText, useIncreaseContrast, useScreenReader } from './shared'
 
 /** It leaves after 4 s (the page), held while touched; never on its own with a screen reader. */
 const DWELL_MS = 4000
@@ -21,9 +21,6 @@ const DWELL_MS = 4000
 const ENTER_DISTANCE = 16
 const SWIPE_DISTANCE = 24
 const SWIPE_VELOCITY = 800
-/** The screen reader's Dismiss: a 32 pt pill of 12% white (the page). */
-const DISMISS_HEIGHT = SIZE.tag
-const DISMISS_FILL = 0.12
 
 export type InAppBannerProps = {
   /** `wave` is the one banner with a haptic: `H.arrive` as it lands (R3 D · 9.1). */
@@ -177,17 +174,7 @@ export function InAppBanner({ kind = 'default', visual, title, context, onPress,
             </View>
           </ScalePress>
           {screenReader ? (
-            <Pressable
-              onPress={leave}
-              hitSlop={(minTarget() - DISMISS_HEIGHT) / 2}
-              accessibilityRole="button"
-              accessibilityLabel="Dismiss"
-              style={styles.dismiss}
-            >
-              <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.ink]}>
-                Dismiss
-              </Text>
-            </Pressable>
+            <IconButton icon="x" accessibilityLabel="Close" onPress={leave} testID={testID && `${testID}-close`} />
           ) : null}
         </Material>
       </Animated.View>
@@ -208,11 +195,4 @@ const styles = StyleSheet.create({
   main: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: SPACE.md, paddingVertical: SPACE.sm, paddingLeft: SPACE.md },
   text: { flex: 1 },
   ink: { color: COLOR.textPrimary },
-  dismiss: {
-    height: DISMISS_HEIGHT,
-    paddingHorizontal: SPACE.md,
-    borderRadius: RADIUS.capsule,
-    backgroundColor: tint(COLOR.textPrimary, DISMISS_FILL),
-    justifyContent: 'center',
-  },
 })

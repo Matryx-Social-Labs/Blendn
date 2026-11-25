@@ -4,19 +4,20 @@ import type { IconName } from '../components/ui/Icon'
 /**
  * What a person can switch off, by kind (Flow 9 · 9.6): the same words here and in the phone's settings.
  *
- * The server has no per-kind preferences yet, so this is the client's side of a contract it has not
- * signed: `GET /api/mobile/me/notification-preferences` answers `{ matches, crew, night }`, three
- * booleans, and `PUT` takes any of them and answers all three. Until a GET answers in exactly that
- * shape, `parsePrefs` is null and the screen shows no per-kind row at all (a switch that cannot be saved
- * would be a lie). Offers are already the server's (`/me/offers`) and always shown.
+ * The server keeps them: `GET /api/mobile/me/notification-preferences` answers `{ matches, crew, night }`, three
+ * booleans (plus `mutedRooms`), and `PUT` takes any of them and answers all three. A build whose GET does not answer
+ * in exactly that shape gets `parsePrefs` null, and the screen shows no per-kind row (a switch that cannot be saved
+ * would be a lie). Offers are the server's too (`/me/offers`) and always shown. A DM, a room reply, an event's change
+ * and a report's outcome have no switch here by design (the server has three kinds).
  *
  * A switch stops the push only: the bell still fills (the row is written regardless).
  */
 export const PREF_ROWS = [
-  { key: 'matches', title: 'Matches and friends', icon: 'heart', channel: 'matches' },
-  { key: 'crew', title: 'Your crew', icon: 'users', channel: 'crew' },
-  { key: 'night', title: 'After the night', icon: 'moon', channel: 'after-the-night' },
-] as const satisfies readonly { key: string; title: string; icon: IconName; channel: string }[]
+  // Wave replaced Like and match (SCRUM-1042): the row says "Waves"; the server's key and the Android channel id stay `matches`.
+  { key: 'matches', title: 'Waves and friends', hint: 'Someone waves back, a friend request, a reveal', icon: 'hand', channel: 'matches' },
+  { key: 'crew', title: 'Your crew', hint: 'Crewmates arriving, a crew invite, a Mix', icon: 'users', channel: 'crew' },
+  { key: 'night', title: 'After the night', hint: 'Rate the night, your recap', icon: 'moon', channel: 'after-the-night' },
+] as const satisfies readonly { key: string; title: string; hint: string; icon: IconName; channel: string }[]
 
 export type PrefKey = (typeof PREF_ROWS)[number]['key']
 export type NotificationPrefs = Readonly<Record<PrefKey, boolean>>

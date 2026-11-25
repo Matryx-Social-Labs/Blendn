@@ -6,12 +6,14 @@ import { apiClient, type RoomPreview } from './apiClient'
 import { subscribeCheckInChanged } from './checkIn'
 import { readStoredCity } from './cityStorage'
 import { liveWindow } from './eventSession'
+import { settleWithin } from './fetchTimeout'
 import { getDistanceKm, roundCoord } from './geo'
 import { Logger } from './logger'
+import { isPreciseLocationOff } from './preciseLocation'
 import { printable } from './pulseSections'
-import { pickTonight } from './roomMoments'
+import { tonightDeck } from './roomMoments'
 import { FIX_MAX_AGE_MS, FIX_REQUIRED_ACCURACY_M, fixOf, type PreciseFix } from './roomButton'
-import { getRoomSignal, publishRoomSignal, subscribeRoomSignal } from './roomSignal'
+import { getRoomSignal, subscribeRoomSignal } from './roomSignal'
 import { useLiveSync } from './useLiveSync'
 
 /**
@@ -43,12 +45,15 @@ export interface TonightEvent {
   capacity: number | null
   /** Saved or RSVP'd — yours, so it sorts first. */
   going: boolean
-  /** How many here share your taste; null when withheld, unknown, or not fetched. */
+  /** How many here share your taste, as the server's floor (3 or 10, shown "3+"); null when withheld, unknown, or not fetched. */
   tasteMatchCount: number | null
   /** RSVPs, for the card's "N going" pill (Flow 4 Tonight #06); null until the detail answers (the list carries none). */
   goingCount: number | null
   /** The event's category slug, for its plate when it has no cover (rc7 ruling 5); absent from an older server. */
   category?: string
+  /** Where it is, when the opener knows (a door from the Going card or the event page): the pass judges "too far" from it. */
+  latitude?: number | null
+  longitude?: number | null
 }
 
 /** What Tonight can say about your location (Flow 4 Tonight #10, R3-D4 4.7). */
@@ -59,7 +64,7 @@ export interface TonightState {
   events: TonightEvent[]
   /**
    * `off`: no permission, so the list is by city with no distances, said in a
-   * banner with Turn on (#10). `approximate`: iOS Precise Location is off, so
+   * banner with Turn on (#10). `approximate`: Precise Location is off (iOS reduced, Android coarse), so
    * no door can be checked (R3-D4 4.7). Never prompts: read, not asked.
    */
   location: TonightLocation
@@ -74,16 +79,27 @@ export interface TonightState {
 const PREVIEW_TOP = 3
 
 /** The Pulse's page size, so the query — and so the cache entry — is the same. */
-const PULSE_PAGE = 20
+export const PULSE_PAGE = 20
 
-type QuietCoords = PreciseFix & { approximate: boolean }
+export type QuietCoords = PreciseFix & { approximate: boolean }
 
-/** A fix only if the person already said yes. Never prompts. */
-async function quietLocation(): Promise<{ coords: QuietCoords | null; location: TonightLocation }> {
+/**
+ * How long the Pulse's first load waits on the phone for a fix it only wants as a sort. The reads share Expo's one native queue, a
+ * blocked one never answers, and the events request waits behind them (SCRUM-903): no fix is better than no Pulse.
+ */
+export const QUIET_LOCATION_MS = 3_000
+
+/** A fix only if the person already said yes. Never prompts. Bounded: past `QUIET_LOCATION_MS` it is no fix. */
+export async function quietLocation(): Promise<{ coords: QuietCoords | null; location: TonightLocation }> {
+  const noFix = { coords: null, location: 'on' as TonightLocation }
+  return settleWithin(readQuietLocation(), QUIET_LOCATION_MS, noFix)
+}
+
+async function readQuietLocation(): Promise<{ coords: QuietCoords | null; location: TonightLocation }> {
   try {
     const permission = await Location.getForegroundPermissionsAsync()
     if (permission.status !== 'granted') return { coords: null, location: 'off' }
-    const location = permission.ios?.accuracy === 'reduced' ? 'approximate' : 'on'
+    const location = isPreciseLocationOff(permission) ? 'approximate' : 'on'
     const last = await Location.getLastKnownPositionAsync({ maxAge: FIX_MAX_AGE_MS, requiredAccuracy: FIX_REQUIRED_ACCURACY_M })
     return {
       coords: last?.coords
@@ -119,6 +135,8 @@ function toTonight(
     endsAt: live.end_time ?? e.end_time,
     timeZone: e.timezone,
     distanceKm,
+    latitude: e.latitude ?? null,
+    longitude: e.longitude ?? null,
     // Inside now (the Room's rule), never everybody who came; 0 from an older server.
     hereCount: e.here_count ?? 0,
     // `eventFromApi` writes 0 for "no cap"; 0 is not a capacity anyone set.
@@ -174,19 +192,14 @@ export function useTonight(): TonightState {
     }
     setOffline(false)
 
-    /*
-     * Hand the centre button what this fetch knows — but only with a fix. A
-     * city feed has no distances, and publishing from it would clear an
-     * "inside" the Pulse had correctly worked out.
-     */
-    if (coords) publishRoomSignal(result.data, Date.now(), coords)
-
     const goingIds = new Set<string>(
       (rsvps?.data?.events ?? []).filter((e) => e.rsvpStatus === 'going').map((e) => e.id)
     )
-    const next = pickTonight(
+    // The centre button's "today" events are in the deck, in front, whatever the horizon (SCRUM-971).
+    const next = tonightDeck(
       result.data.map((e) => toTonight(e, coords, goingIds)),
-      Date.now()
+      Date.now(),
+      getRoomSignal().todayEventIds
     )
     eventsRef.current = next
     setEvents(next)

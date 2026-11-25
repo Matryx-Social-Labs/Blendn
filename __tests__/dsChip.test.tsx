@@ -116,6 +116,25 @@ describe('<InterestChip>', () => {
   })
 })
 
+describe('dashed (something offered, not yet yours: a crew’s hashtag ideas, board crews/tags/01 A)', () => {
+  it('draws the DashedFrame edge on no fill, and no solid edge', async () => {
+    await draw({ variant: 'dashed', onPress: jest.fn() })
+    expect(screen.getByTestId('c-dashed', { includeHiddenElements: true })).toBeTruthy()
+    expect(flat('c').backgroundColor).toBe('transparent')
+    expect(flat('c-edge').borderWidth).toBeUndefined()
+  })
+
+  it('control: the default chip has no dashes', async () => {
+    await draw({ onPress: jest.fn() })
+    expect(screen.queryByTestId('c-dashed', { includeHiddenElements: true })).toBeNull()
+  })
+
+  it('a removable chip may say what it removes', async () => {
+    await draw({ onRemove: jest.fn(), selected: true, accessibilityLabel: '#runclub, remove tag' })
+    expect(screen.getByRole('button', { name: '#runclub, remove tag' })).toBeTruthy()
+  })
+})
+
 describe('Increase Contrast', () => {
   it('the off hairline goes to 1 pt at 50%', async () => {
     jest.spyOn(AccessibilityInfo, 'isDarkerSystemColorsEnabled').mockResolvedValue(true)
@@ -316,10 +335,31 @@ describe('pick-any: the + / ✓ slot (the sweep, chips.html)', () => {
 })
 
 describe('count, the fold chip, the caller’s label', () => {
-  it('a count is Geist Mono and secondary white, off and on', async () => {
+  it('a count is Geist Mono: secondary white off, the hue’s light tone on (Flow 3 board `.qc.on .n`, 2026-11-03)', async () => {
     await draw({ count: 12 })
     expect(StyleSheet.flatten(screen.getByTestId('c-count').props.style)).toMatchObject({ fontFamily: FONT_FAMILY.mono[500], color: COLOR.textSecondary })
     await screen.rerender(<Chip label="Live music" selected count={12} onPress={jest.fn()} testID="c" />)
+    expect(StyleSheet.flatten(screen.getByTestId('c-count').props.style).color).toBe(COLOR.selectionEmberGlyph)
+  })
+
+  // Re-audit 2026-11-17: the hue's light tone on the press (Android's wash) is 3.0–3.6:1; white there is 8:1 on every hue.
+  it('a selected chip’s count is white while it is pressed, and the hue’s tone again at rest', async () => {
+    await render(
+      <HueProvider value="violet">
+        <Chip label="Jazz" selected count={12} previewState="pressed" onPress={jest.fn()} testID="c" />
+      </HueProvider>
+    )
+    expect(StyleSheet.flatten(screen.getByTestId('c-count').props.style).color).toBe(COLOR.textPrimary)
+    await screen.rerender(
+      <HueProvider value="violet">
+        <Chip label="Jazz" selected count={12} onPress={jest.fn()} testID="c" />
+      </HueProvider>
+    )
+    expect(StyleSheet.flatten(screen.getByTestId('c-count').props.style).color).toBe(COLOR.selectionVioletGlyph)
+  })
+
+  it('an unselected chip’s count stays secondary white when pressed: only the lit count changes', async () => {
+    await draw({ count: 3, previewState: 'pressed' })
     expect(StyleSheet.flatten(screen.getByTestId('c-count').props.style).color).toBe(COLOR.textSecondary)
   })
 
@@ -387,3 +427,4 @@ describe('a long label (You hand-off 3: "Sales & Business Development" cut off a
     expect(screen.getByRole('button', { name: LONG })).toBeTruthy()
   })
 })
+

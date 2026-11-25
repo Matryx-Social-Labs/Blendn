@@ -77,14 +77,14 @@ describe('the visibility line (ds VisibilityBanner)', () => {
     const named = await text('named', 'Sam')
     expect(named.getByText(/with your photo/)).toBeTruthy()
     expect(named.getByRole('button', { name: 'Go anonymous' })).toBeTruthy()
-    expect((await text('anon', 'Night Cat')).getByRole('button', { name: 'Show who I am' })).toBeTruthy()
+    expect((await text('anon', 'Night Cat')).getByRole('button', { name: 'Show who you are' })).toBeTruthy()
   })
 
   it('blocked says why on screen, with what is missing, and offers the fix rather than a reveal', async () => {
     const s = await text('blocked', undefined, 'a name and a photo')
     expect(s.getByText(/Add a name and a photo to your profile first/)).toBeTruthy()
     expect(s.getByRole('button', { name: 'Add a name and a photo' })).toBeTruthy()
-    expect(s.queryByRole('button', { name: 'Show who I am' })).toBeNull()
+    expect(s.queryByRole('button', { name: 'Show who you are' })).toBeNull()
   })
 })
 

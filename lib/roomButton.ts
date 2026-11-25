@@ -1,5 +1,6 @@
+import { attendancePhase } from './attendanceState'
 import { liveWindow, type EventSession } from './eventSession'
-import { getDistanceMetres } from './geo'
+import { getDistanceMetres, validAccuracy } from './geo'
 import { dayKeyIn } from './time'
 
 /**
@@ -152,6 +153,8 @@ export interface RoomButtonEvent {
   end_time?: string | null
   /** The day "running" means on a multi-day event — `lib/eventSession.ts`. */
   session?: EventSession | null
+  /** "cancelled" for a night called off: never a fence to check in at. */
+  status?: string | null
   /**
    * Kilometres, from the server, present only when a fix was sent. Measured from the position the phone put in the
    * URL, which it rounds to ~110 m (`lib/coordinates.ts`): good for a label, not for a 100 m fence. `pickInsideEvent`
@@ -162,31 +165,67 @@ export interface RoomButtonEvent {
   longitude?: number | null
   check_in_radius?: number | null
   is_favorited?: boolean
-  /** The venue, for the disc's (c) label "Check in · {venue}" and its coach mark. */
+  /** "going" / "maybe" / …: the RSVP, from a server that sends `rsvpStatus` (SV-2); absent from an older one. Going counts as yours (BAR-05). */
+  rsvp_status?: string | null
+  /** The event's own zone (IANA): its "tonight" is said there, not in the phone's (BAR-09). */
+  timezone?: string | null
+  /** The linked venue's name, else the free-text one: the disc's (c) pill (a pin and the venue) and its coach mark (BAR-08). */
+  venue?: { name?: string | null } | null
   venue_name?: string | null
 }
 
+/** The place the card names: the linked venue, else the free-text one, else nothing. A blank is not a name (`lib/pulse.ts`' rule). */
+export const venueNameOf = (e: Pick<RoomButtonEvent, 'venue' | 'venue_name'>): string | null =>
+  e.venue?.name?.trim() || e.venue_name?.trim() || null
+
+/** Yours: saved, or said "I'm going". Maybe is not (OD-6 is about the Board, not the disc). */
+const isCommitted = (e: Pick<RoomButtonEvent, 'is_favorited' | 'rsvp_status'>): boolean => e.is_favorited === true || e.rsvp_status === 'going'
+
+/** R15's order among the fences you are inside: said "going" first, then saved, then the rest. */
+const commitment = (e: Pick<RoomButtonEvent, 'is_favorited' | 'rsvp_status'>): number => (e.rsvp_status === 'going' ? 2 : e.is_favorited === true ? 1 : 0)
+
 /**
  * The phone's own fix, never rounded: it stays on the phone. `accuracy` is the radius in metres the OS gives it, and
- * `approximate` is iOS's reduced-accuracy grant (a fix good to kilometres): either makes it useless against a fence.
+ * `approximate` is iOS's reduced or Android's coarse grant (a fix good to kilometres): either makes it useless against a fence.
  */
-export type PreciseFix = { latitude: number; longitude: number; accuracy?: number | null; approximate?: boolean; timestamp?: number | null }
+export type PreciseFix = {
+  latitude: number
+  longitude: number
+  accuracy?: number | null
+  approximate?: boolean
+  timestamp?: number | null
+  /** Ground speed (m/s) and course over ground (° from true north), when the OS has them: the heading beam's source when moving. */
+  speed?: number | null
+  course?: number | null
+}
 
 /** The oldest a fix may be and still say where somebody is now (ms), and the coarsest the last-known read may return (m). */
 export const FIX_MAX_AGE_MS = 120_000
 export const FIX_REQUIRED_ACCURACY_M = 100
 
+/**
+ * The fix the app may keep once it has read the permission again: none unless it is granted. A fix from before location
+ * was turned off in Settings kept every distance printing ("7.3 km" on the Featured card with location denied).
+ */
+export const fixAfterPermission = (status: string, current: PreciseFix | null): PreciseFix | null => (status === 'granted' ? current : null)
+
 /** A fix as `expo-location` hands it over, kept with the accuracy and the time that make it usable against a fence. */
-export const fixOf = (position: { coords: { latitude: number; longitude: number; accuracy: number | null }; timestamp: number }): PreciseFix => ({
+export const fixOf = (position: {
+  coords: { latitude: number; longitude: number; accuracy: number | null; speed?: number | null; heading?: number | null }
+  timestamp: number
+}): PreciseFix => ({
   latitude: position.coords.latitude,
   longitude: position.coords.longitude,
-  accuracy: position.coords.accuracy,
+  accuracy: validAccuracy(position.coords.accuracy),
   timestamp: position.timestamp,
+  // The OS says -1 for "not known"; the same rule as accuracy keeps it from reading as a number.
+  ...(validAccuracy(position.coords.speed) !== null && { speed: validAccuracy(position.coords.speed) }),
+  ...(validAccuracy(position.coords.heading) !== null && { course: validAccuracy(position.coords.heading) }),
 })
 
 /**
  * A fix is judged precise against a zone only when it is recent, says it is good to within the zone's own radius, and is
- * not iOS's approximate grant. Without a timestamp its age is unknown, and an unknown age is not trusted.
+ * not an approximate grant (iOS reduced, Android coarse). Without a timestamp its age is unknown, and an unknown age is not trusted.
  */
 const fixIsPrecise = (at: PreciseFix | null | undefined, radiusM: number, now: number): at is PreciseFix =>
   !!at &&
@@ -202,7 +241,7 @@ const fixIsPrecise = (at: PreciseFix | null | undefined, radiusM: number, now: n
  * How far the event's centre is, in metres: from the precise fix when it is good enough for this zone and the event has
  * real coordinates, else the server's `distance` (which was measured from a position rounded to ~110 m, so it can be
  * ~77 m out against a 100 m fence: SCRUM-744). A stale or coarse fix (older than `FIX_MAX_AGE_MS`, accuracy over the
- * radius, none given, or iOS's approximate grant) would be worse than the server's number, so it is not used. Null when neither is known.
+ * radius, none given, or an approximate grant) would be worse than the server's number, so it is not used. Null when neither is known.
  * (0, 0) is what a row with no coordinates was once written as.
  */
 function distanceMetresTo(e: RoomButtonEvent, at: PreciseFix | null | undefined, now: number): number | null {
@@ -230,12 +269,12 @@ function distanceMetresTo(e: RoomButtonEvent, at: PreciseFix | null | undefined,
  * is not — the server re-validates the GPS on the actual check-in and refuses
  * it. So this asks the plain question and lets the real gate be the gate.
  */
-export function pickInsideEvent(
+export function pickInsideEvents(
   events: readonly RoomButtonEvent[],
   now: number = Date.now(),
   at?: PreciseFix | null
-): string | null {
-  let best: { id: string; distanceM: number } | null = null
+): string[] {
+  const inside: { id: string; distanceM: number; rank: number }[] = []
 
   for (const e of events) {
     const distanceM = distanceMetresTo(e, at, now)
@@ -243,24 +282,24 @@ export function pickInsideEvent(
     const radiusM = typeof e.check_in_radius === 'number' ? e.check_in_radius : DEFAULT_RADIUS_M
     if (distanceM > radiusM) continue
 
-    const live = liveWindow(e)
-    const start = new Date(live.start_time).getTime()
-    if (!Number.isFinite(start) || start > now) continue
-    const end = live.end_time ? new Date(live.end_time).getTime() : NaN
-    if (Number.isFinite(end) && end < now) continue
+    // Running now, by the attendance flow's one answer: today's session, and never a cancelled night.
+    if (attendancePhase(e, now) !== 'live') continue
 
-    // Two fences can overlap on one street. The nearer centre is the better
-    // guess at which building somebody is actually in.
-    if (!best || distanceM < best.distanceM) best = { id: e.id, distanceM }
+    inside.push({ id: e.id, distanceM, rank: commitment(e) })
   }
 
-  return best?.id ?? null
+  // R15: the event you said you are going to, then a saved one; then the nearer centre, the better guess at which building you are in.
+  return inside.sort((a, b) => b.rank - a.rank || a.distanceM - b.distanceM).map((m) => m.id)
 }
+
+/** The first of `pickInsideEvents`: the one a tap opens. */
+export const pickInsideEvent = (events: readonly RoomButtonEvent[], now: number = Date.now(), at?: PreciseFix | null): string | null =>
+  pickInsideEvents(events, now, at)[0] ?? null
 
 /**
  * Events today you said you were going to, soonest first.
  *
- * **Saved only.** Every event in the city is not "yours", and a button that
+ * **Yours only** (saved, or "I'm going"). Every event in the city is not "yours", and a button that
  * pointed at whatever happens to be on tonight would be a recommendation
  * wearing the clothes of a reminder.
  *
@@ -274,13 +313,14 @@ export function pickTodayEvents(
   const today = new Date(now)
   return events
     .filter((e) => {
-      if (!e.is_favorited) return false
+      if (!isCommitted(e)) return false
       // Today's day of a multi-day run, so a run that is between days or whose
       // day is cancelled is not "tonight".
       const live = liveWindow(e)
       const start = new Date(live.start_time)
       if (Number.isNaN(start.getTime())) return false
-      if (dayKeyIn(start) !== dayKeyIn(today)) return false
+      // The event's own day, as Tonight says it (BAR-09), not the phone's.
+      if (dayKeyIn(start, e.timezone ?? undefined) !== dayKeyIn(today, e.timezone ?? undefined)) return false
       const end = live.end_time ? new Date(live.end_time).getTime() : NaN
       return Number.isFinite(end) ? end >= now : true
     })

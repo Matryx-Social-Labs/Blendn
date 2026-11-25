@@ -2,6 +2,7 @@ import { router } from 'expo-router'
 import { useEffect, useRef, useState } from 'react'
 import { apiClient } from './apiClient'
 import { afterSheetDismissed } from './sheetDismissed'
+import { myMainPhoto } from './myPhoto'
 import { askIntentRoute, revealOffer, submitCheckIn, untilIntentAnswered, type CheckInOutcome } from './checkIn'
 import { isExpectedRefusal, type CheckInRefusal } from './checkInRefusal'
 import { markCheckIn } from './checkInTiming'
@@ -9,6 +10,7 @@ import { H } from './haptics'
 import { getCurrentLocation as getLocationFix, warmLocationFix, type CheckInLocation, type ShowTray, type TrayButton } from './locationFix'
 import { Logger } from './logger'
 import { useAuth } from './useAuth'
+import { useLatest } from './useLatest'
 
 /**
  * The check-in, as a hook, so every door runs it unchanged: the event
@@ -53,6 +55,8 @@ export type UseCheckInFlowOptions = {
   onEnterRoom?: () => void | Promise<void>
   /** The fix the check-in was sent from, before it is sent. */
   onLocated?: (location: CheckInLocation) => void
+  /** "With {crew}" on at the hold (crews 4-A2): the crew the server tells you're in. Read as the hold lands, not as it starts. */
+  withCrewId?: string | null
 }
 
 export function useCheckInFlow({
@@ -63,8 +67,10 @@ export function useCheckInFlow({
   onOpenMaps,
   onEnterRoom,
   onLocated,
+  withCrewId,
 }: UseCheckInFlowOptions) {
   const { user } = useAuth()
+  const withCrew = useLatest(withCrewId)
   // The pass is up for this door: start the fix now, so the hold finds one waiting.
   useEffect(() => {
     if (eventId) void warmLocationFix()
@@ -81,9 +87,11 @@ export function useCheckInFlow({
    * Counts fresh check-ins, for `<MomentPour key={pours} onDone={pourDone} />`
    * once it is above 0. It bumps when the server says yes, and the pour plays
    * the success haptic itself, so the check-in plays none (§10). "You were
-   * already in" doesn't count: that isn't news.
+   * already in" doesn't count: that isn't news. Returned as 0 once a pour has no
+   * room to step aside onto (SCRUM-977), so its scrim never stays over the page.
    */
   const [pours, setPours] = useState(0)
+  const [pouring, setPouring] = useState(false)
   /** Settles the running check-in's wait for its pour to hand off. */
   const pourHandedOff = useRef<(() => void) | null>(null)
   const pourDone = () => {
@@ -178,6 +186,7 @@ export function useCheckInFlow({
 
   const run = async (): Promise<CheckInFlowResult> => {
     trayHolds.current = false
+    let enteringRoom = false
     setCheckingIn(true)
 
     try {
@@ -202,7 +211,7 @@ export function useCheckInFlow({
       onLocated?.(location)
 
       markCheckIn('request')
-      const outcome = await submitCheckIn(eventId, location)
+      const outcome = await submitCheckIn(eventId, location, withCrew.current ?? undefined)
       markCheckIn('response', { ok: outcome.kind === 'checkedIn' ? 1 : 0 })
 
       if (outcome.kind === 'timeout') {
@@ -261,6 +270,7 @@ export function useCheckInFlow({
         await new Promise<void>((handOff) => {
           pourHandedOff.current = handOff
           setPours((n) => n + 1)
+          setPouring(true)
         })
 
         // What follows a check-in is decided in `lib/checkIn.ts`, the same for
@@ -270,7 +280,7 @@ export function useCheckInFlow({
           const offer = await revealOffer({
             id: user.id,
             firstName: user.name?.trim().split(/\s+/)[0] ?? null,
-            image: user.image,
+            photo: myMainPhoto(user),
           })
           trayShown = true
           const yes = await new Promise<boolean>((answer) => {
@@ -305,6 +315,7 @@ export function useCheckInFlow({
           if ((await answered) === 'abandoned') return 'checkedIn'
         }
         await onEnterRoom?.()
+        enteringRoom = true
         return 'checkedIn'
       }
     } catch (error) {
@@ -321,10 +332,12 @@ export function useCheckInFlow({
       )
       return 'failed'
     } finally {
+      // The Room takes over from the pour; anything else (a link, a failure) leaves the page under it, so it goes.
+      if (!enteringRoom) setPouring(false)
       setArrival(null)
       if (!trayHolds.current) setCheckingIn(false)
     }
   }
 
-  return { checkingIn, youreIn: arrival !== null, asks: arrival?.asks ?? false, pours, pourDone, dismissTray, start, getCurrentLocation }
+  return { checkingIn, youreIn: arrival !== null, asks: arrival?.asks ?? false, pours: pouring ? pours : 0, pourDone, dismissTray, start, getCurrentLocation }
 }

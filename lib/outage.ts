@@ -4,9 +4,9 @@ import { clockTime } from './time'
 /**
  * Why the server could not be reached, as the "Can't reach Blend'n" screen needs it (Flow 15 15.13).
  *
- * A server that is simply down, or one that says it is being worked on and when it will be back. The second needs the
- * server to say so: a 503 with `errorCode: 'MAINTENANCE'` and a `Retry-After` in seconds (see the report). Until it does,
- * every outage is `down`, which is today's screen.
+ * A server that is simply down, or one that says it is being worked on and when it will be back. The server says the
+ * second (`MAINTENANCE_MODE`, `lib/mobile-gate.ts`): a 503 with `errorCode: 'MAINTENANCE'` and a `Retry-After` in
+ * seconds. Without that refusal every outage is `down`.
  */
 export type Outage = { kind: 'down' } | { kind: 'maintenance'; until: number | null }
 

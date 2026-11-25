@@ -9,6 +9,7 @@ import { Button } from './Button'
 import { monoCaption, spokenPrice } from './MonoFamily'
 import { Sheet } from './Sheet'
 import { CONTROL_FONT_CAP, focusRing, font, IC_HAIRLINE, PRESSED_WASH, useBoldText, useIncreaseContrast } from './shared'
+import { Title } from './Title'
 
 /** The server's sentences (admin `lib/go-live.ts`, Flow 11 `SRV`). */
 const SERVER = {
@@ -150,9 +151,9 @@ export function NotLiveNotice({ kind, onPress, testID }: { kind: 'notLive' | 'ro
       <View style={styles.well} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
         <Icon name={notLive ? 'radio' : 'moon'} size={WELL_GLYPH} color={contrast ? COLOR.textPrimary : COLOR.textSecondary} />
       </View>
-      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.title} accessibilityRole="header" style={[font('title', bold), styles.ink, styles.centre]}>
+      <Title accessibilityRole="header" style={[styles.ink, styles.centre]}>
         {notLive ? 'Not live here any more' : 'Today’s room has closed'}
-      </Text>
+      </Title>
       <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.centre, { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>
         {notLive ? SERVER.notLive : SERVER.reset}
       </Text>

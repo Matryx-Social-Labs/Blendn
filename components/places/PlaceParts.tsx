@@ -2,14 +2,15 @@ import { memo } from 'react'
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 
 import { Banner } from '../ds/Banner'
+import { BannerPresence } from '../motion/BannerPresence'
 import { Badge, MonoRun } from '../ds/MonoFamily'
 import { CONTROL_FONT_CAP, font, PRESSED_WASH, useBoldText } from '../ds/shared'
 import { VenuePlate } from '../ds/VenuePlate'
 import { Icon } from '../ui/Icon'
 import type { VenueListItem } from '../../lib/apiClient'
-import { COLOR, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE, MAX_FONT_SCALE, TYPE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
-import { bucketLabel, distanceText, foldNoun, guestTypeLabel, moreLine, placeArea, placeLabel, plateFor, type PlaceTypeFilter } from '../../lib/placesPane'
+import { bucketLabel, distanceText, foldNoun, guestTypeLabel, moreLine, placeArea, placeLabel, plateFor, type DistanceShown, type PlaceTypeFilter } from '../../lib/placesPane'
 import { openPlace } from './openPlace'
 
 /** The quiet row: 56 tall, a 40 thumb. */
@@ -18,25 +19,34 @@ const QUIET_THUMB = 40
 // design-exception: places.js quiet rows draw the thumb at radius 10 (RADIUS.thumb is 8, rowInCard 16)
 const QUIET_THUMB_RADIUS = 10
 
-/** "Brewery · 350 m": the type, and the distance in Geist Mono. */
-function TypeLine({ venue, area = false, small = false }: { venue: VenueListItem; area?: boolean; small?: boolean }) {
+/**
+ * "Café · 80 Feet Road · 350 m": the words give way to a long address, the distance in Geist Mono is its own slot and never
+ * does (owner 2026-11-05: no variable glued in a tight slot; "about 1 km" read "abo…" glued on, SCRUM-1080 drive).
+ */
+export function PlaceMeta({ lead, distance, small = false }: { lead: string; distance: string | null; small?: boolean }) {
   const bold = useBoldText()
-  const distance = distanceText(venue.distance)
-  // A row that carries the area leads with it: five "The Pub" rows are told apart by where they are (audit A40).
-  const lead = (area ? [placeArea(venue), guestTypeLabel(venue)] : [guestTypeLabel(venue)]).filter(Boolean).join(' · ')
   return (
-    <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} numberOfLines={1} style={[font('meta', bold), styles.secondary, small && styles.quietMeta]}>
-      {lead}
+    <View style={styles.meta}>
+      <Text testID="place-meta" maxFontSizeMultiplier={MAX_FONT_SCALE.meta} numberOfLines={1} style={[font('meta', bold), styles.secondary, styles.metaWords]}>
+        {lead}
+      </Text>
       {distance ? (
-        <>
+        <Text testID="place-distance" maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>
           {lead ? ' · ' : ''}
-          <Text style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.tabular, small && styles.quietMono]}>
+          <Text style={[font(small ? 'caption' : 'meta', bold, FONT_FAMILY.mono[500]), styles.tabular]}>
             <MonoRun text={distance} />
           </Text>
-        </>
+        </Text>
       ) : null}
-    </Text>
+    </View>
   )
+}
+
+/** "Brewery · 350 m": the type (the area first on a row), and the distance. */
+function TypeLine({ venue, reading, area = false, small = false }: { venue: VenueListItem; reading: DistanceShown; area?: boolean; small?: boolean }) {
+  // A row that carries the area leads with it: five "The Pub" rows are told apart by where they are (audit A40).
+  const lead = (area ? [placeArea(venue), guestTypeLabel(venue)] : [guestTypeLabel(venue)]).filter(Boolean).join(' · ')
+  return <PlaceMeta lead={lead} distance={distanceText(venue.distance, reading)} small={small} />
 }
 
 /** The quiet places, folded behind one line with a count; it unfolds in place. */
@@ -72,7 +82,7 @@ export function QuietFold({
         accessibilityLabel={`${line}. ${order}`}
         accessibilityHint={open ? 'Hides these places' : 'Shows these places'}
         accessibilityState={{ expanded: open }}
-        style={styles.fold}
+        style={({ pressed }) => [styles.fold, pressed && Platform.OS === 'ios' && styles.pressed]}
       >
         <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('body', bold), styles.ink, styles.foldLine]}>
           <Text style={[font('body', bold, FONT_FAMILY.mono[500]), styles.tabular]}>{figure}</Text>
@@ -90,25 +100,38 @@ export function QuietFold({
 }
 
 /** A quiet place (and, with `n`, one of Near you's five: the design system's Badge numbers it, as it numbers the map's pin): a small type plate (no photo), the name, the type and area, and a live count at the end only when it shows one (never under 5). */
-export const QuietRow = memo(function QuietRow({ venue, n, label, testID }: { venue: VenueListItem; n?: number; label?: string; testID?: string }) {
+export const QuietRow = memo(function QuietRow({
+  venue,
+  reading,
+  n,
+  label,
+  testID,
+}: {
+  venue: VenueListItem
+  /** How its distance is said, from the fix the list was read from; false in a city the phone is not in. */
+  reading: DistanceShown
+  n?: number
+  label?: string
+  testID?: string
+}) {
   const bold = useBoldText()
   const words = bucketLabel(venue.liveNow)
   return (
     <Pressable
       testID={testID ?? `place-quiet-${venue.id}`}
-      onPress={() => openPlace(venue)}
+      onPress={() => openPlace(venue, reading)}
       android_ripple={{ color: PRESSED_WASH.android }}
       accessibilityRole="button"
-      accessibilityLabel={label ?? placeLabel(venue)}
+      accessibilityLabel={label ?? placeLabel(venue, reading)}
       style={({ pressed }) => [styles.quietRow, styles.gutter, pressed && Platform.OS === 'ios' && styles.pressed]}
     >
       {n !== undefined ? <Badge text={n} size={22} /> : null}
       <VenuePlate type={plateFor(venue.venueType)} size={QUIET_THUMB} radius={QUIET_THUMB_RADIUS} />
       <View style={styles.rowText}>
-        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} numberOfLines={1} style={[font('bodyStrong', bold), styles.quietName, styles.ink]}>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} numberOfLines={1} style={[font('meta', bold, TYPE.bodyStrong.fontFamily), styles.ink]}>
           {venue.name}
         </Text>
-        <TypeLine venue={venue} area small />
+        <TypeLine venue={venue} reading={reading} area small />
       </View>
       {words ? (
         <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} numberOfLines={1} style={[font('meta', bold), styles.tertiary]}>
@@ -123,7 +146,9 @@ export const QuietRow = memo(function QuietRow({ venue, n, label, testID }: { ve
 export function RefreshFailed({ onRetry }: { onRetry: () => void }) {
   return (
     <View style={styles.failed} testID="places-refresh-failed">
-      <Banner kind="offline" icon="cloud-off" text="Places didn’t refresh." action={{ label: 'Try again', onPress: onRetry }} />
+      <BannerPresence>
+        <Banner kind="offline" icon="cloud-off" text="Places didn’t refresh." action={{ label: 'Try again', onPress: onRetry }} />
+      </BannerPresence>
     </View>
   )
 }
@@ -133,7 +158,8 @@ const styles = StyleSheet.create({
   foldGap: { paddingVertical: SPACE.sm },
   foldEnd: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
   rowText: { flex: 1, minWidth: 0 },
-  quietRow: { height: QUIET_ROW, flexDirection: 'row', alignItems: 'center', gap: SPACE.md, marginBottom: SPACE.xs },
+  // A minimum: at the largest text the name and its line grow past 56 rather than draw over the next row (SCRUM-1080 drive).
+  quietRow: { minHeight: QUIET_ROW, flexDirection: 'row', alignItems: 'center', gap: SPACE.md, marginBottom: SPACE.xs },
   pressed: { backgroundColor: PRESSED_WASH.ios },
   foldLine: { flexShrink: 1 },
   fold: {
@@ -147,14 +173,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACE.lg,
   },
   failed: { marginHorizontal: SPACE.gutter, marginBottom: SPACE.md },
-  // design-exception: places.js quiet rows are 15/20 with a 13 meta and a 12 mono — between the type roles
-  quietName: { fontSize: 15, lineHeight: 20 },
-  // design-exception: places.js quiet rows meta 13/20
-  quietMeta: { fontSize: 13 },
-  // design-exception: places.js quiet rows distance 12 mono
-  quietMono: { fontSize: 12 },
   ink: { color: COLOR.textPrimary },
   secondary: { color: COLOR.textSecondary },
   tertiary: { color: COLOR.textTertiary },
   tabular: { fontVariant: ['tabular-nums'] },
+  meta: { flexDirection: 'row', alignItems: 'baseline' },
+  metaWords: { flexShrink: 1 },
 })

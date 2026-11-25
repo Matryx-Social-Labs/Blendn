@@ -10,14 +10,12 @@ import {
   BanterSkeleton,
   BlendLiveCard,
   LiveHero,
-  NewAbovePill,
-  RequestCard,
-  RequestFace,
   rowLabel,
   banterHeaderHeight,
   type RowFace,
   type RowLine,
 } from '../../components/banter/BanterParts'
+import { queryCache } from '../../lib/queryCache'
 import { useLatest } from '../../lib/useLatest'
 import { usePullToRefresh } from '../../lib/usePullToRefresh'
 import { useReadOnReturn } from '../../lib/useReadOnReturn'
@@ -25,11 +23,19 @@ import { heldList, inboxTimeLabel, previewWithSender } from '../../components/ba
 import { holdController } from '../../components/banter/hold'
 import { BanterPressGuard, type PressGuard } from '../../components/banter/pressGuard'
 import { BoardRequestsSection } from '../../components/board/BoardRequestsSection'
-import { LeaveRoomSheet, MuteSheet } from '../../components/chat/RoomSheets'
+import { MuteSheet } from '../../components/chat/RoomSheets'
+import { markCoachUsed, useCoachMark } from '../../lib/coachMarks'
+import { useCoachMarkSpot } from '../../components/ds/CoachMarkHost'
+import { NewPill } from '../../components/ds/NewPill'
 import { SearchField } from '../../components/ds/SearchField'
 import { SectionHeader } from '../../components/ds/SectionHeader'
 import { Button } from '../../components/ds/Button'
-import { RequestRow } from '../../components/banter/RequestRow'
+import { BanterRequestsRow } from '../../components/banter/BanterRequestsRow'
+import { BanterWavesRow } from '../../components/banter/BanterWavesRow'
+import { showCrewSafetyActions } from '../../lib/crewSafety'
+import { isCrewWave, useWavesWaiting } from '../../lib/receivedWaves'
+import { ignoreCrewWaves, ignoreWavesFrom, useRoomWaves } from '../../lib/roomWaves'
+import { showUserSafetyActions } from '../../lib/safetyUtils'
 import { PageFooter } from '../../components/chat/PageFooter'
 import { font, HueProvider, useBoldText } from '../../components/ds/shared'
 import { StateScreen } from '../../components/ds/StateScreen'
@@ -42,15 +48,17 @@ import { refreshAppIconBadge } from '../../lib/appBadge'
 import { BOARD_ENABLED } from '../../lib/board'
 import { dmThread, outboxLine, roomThread, useOutbox, type Thread } from '../../lib/chatOutbox'
 import { blendWith, crewRoomTitle, systemPreview, type CrewRoomRow } from '../../lib/crews'
-import { COLOR, DURATION, EASING, SPACE, SPRING, STAGGER, MAX_FONT_SCALE } from '../../lib/design/tokens'
+import { joinedTitle, kindGlyph, lobbyRoomLine, type LobbyRoomRow } from '../../lib/lobby'
+import { COLOR, DURATION, EASING, RADIUS, SPACE, SPRING, STAGGER, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { matchRowPreview } from '../../lib/matchOpener'
 import { ScreenProfiler } from '../../lib/perf'
 import { printable } from '../../lib/pulseSections'
 import { isMuted, useRoomMembership } from '../../lib/roomMembership'
 import { roomStateLine } from '../../lib/roomState'
-import { SPONSORED, useBanterInbox, type GroupChat, type MessageRequest, type PersonalChat } from '../../lib/useBanterInbox'
+import { SPONSORED, useBanterInbox, type GroupChat, type PersonalChat } from '../../lib/useBanterInbox'
 import { useCrewInbox } from '../../lib/useCrewInbox'
 import { TAB_BAR_CLEARANCE } from './_layout'
+import { useTabListScroll } from '../../lib/tabBarSettle'
 import { useReducedMotion } from '../../lib/motion'
 
 /** A conversation as the Banter draws it, and what it takes to open, find and swipe it. */
@@ -66,6 +74,8 @@ type Row = {
   searchText: string
   open: () => void
   swipe: SwipeAction[]
+  /** Its swipe tray has Mute: the first such row is where the Banter's swipe tip points (a flag, not a label to match). */
+  canMute?: true
 }
 
 type Item =
@@ -79,8 +89,6 @@ type Item =
 const COAST_MIN_VELOCITY = 0.1
 const REORDER = LinearTransition.delay(300).springify().stiffness(SPRING.settle.stiffness).damping(SPRING.settle.damping).mass(SPRING.settle.mass)
 const SEARCH_GAP = SPACE.sm
-/** Message requests show this many before "Show all": a Requests section stays a strip however many are waiting. */
-const REQUESTS_PREVIEW = 3
 /** A press held this long is a hold, not a tap (Pressable's own long-press delay). */
 const HELD_PRESS_MS = 500
 
@@ -90,8 +98,8 @@ const HELD_PRESS_MS = 500
  *
  * A glass header (the bell, search, Mark all read); then, top to bottom:
  * **Live now** (the room you're standing in, as the hero; an open Blend),
- * **Requests** (message requests with their notes, crew invites, the Board's
- * asks), **Crews**, **People** (DMs) and **Past rooms**. People are circles,
+ * **Requests** (one row to the page of message requests and crew invites, then
+ * the Board's asks), **Crews**, **People** (DMs) and **Past rooms**. People are circles,
  * rooms and crews rounded squares. Unread is three changes and a dot, never
  * a height change. A room row swipes to Mute or Leave, a DM to Mark read.
  * Rooms you're checked into are lifted out, never repeated; never-used
@@ -99,7 +107,8 @@ const HELD_PRESS_MS = 500
  *
  * Anonymity holds here: the server sends the pseudonym and no photo until a
  * person reveals, so an unrevealed match is their creature, seeded on the
- * pseudonym (docs/BANTER.md).
+ * pseudonym (docs/BANTER.md); a revealed person is their photo or, with none,
+ * their initial (`personFace`, owner F1 B).
  */
 function ChatInner() {
   const insets = useSafeAreaInsets()
@@ -107,22 +116,23 @@ function ChatInner() {
   const reduceMotion = useReducedMotion()
   const { showToast } = useToast()
   const inbox = useBanterInbox()
-  const { groupChats, setGroupChats, crewRooms, setCrewRooms, personalChats, setPersonalChats, incomingRequests, user } = inbox
-  const crews = useCrewInbox(useCallback((text: string) => showToast(text, 'error', { haptic: 'error' }), [showToast]))
+  const { groupChats, setGroupChats, crewRooms, setCrewRooms, lobbyRooms, personalChats, setPersonalChats, incomingRequests, user } = inbox
+  const crews = useCrewInbox()
   const outbox = useOutbox()
   const membership = useRoomMembership()
   const [boardCount, setBoardCount] = useState(0)
   const [searching, setSearching] = useState(false)
   const [query, setQuery] = useState('')
   const [muteFor, setMuteFor] = useState<string | null>(null)
-  const [leaveFor, setLeaveFor] = useState<string | null>(null)
+  /** The realtime banner's height while it shows (0 when it doesn't): the list starts under it, never beneath it. */
+  const [bannerHeight, setBannerHeight] = useState(0)
   const [openSwipe, setOpenSwipe] = useState<string | null>(null)
   const [scrolling, setScrolling] = useState(false)
   // Tapping Banter while already on it goes back to the top (the bar emits `tabPress`).
   const listRef = useRef<FlatList<Item>>(null)
   useScrollToTop(listRef)
 
-  /* Threads whose "Asked to reveal names" you have opened this session (the server keeps the flag until you answer). */
+  /* Threads whose "Wants to swap names" you have opened this session (the server keeps the flag until you answer). */
   const [revealSeen, setRevealSeen] = useState<ReadonlySet<string>>(() => new Set())
   const roomMuted = useCallback((id: string) => isMuted(membership.mutes.get(id)), [membership.mutes])
 
@@ -131,12 +141,15 @@ function ChatInner() {
    * room opened, they left behind the screen that covered them. The room is read the moment it opens (the server
    * marks it so, and no message in it counts here); only the list's drawing of that waits for the return.
    */
+  const userId = user?.id
   const clearRead = useCallback(
     (opened: ReadonlySet<string>) => {
       setGroupChats((prev) => prev.map((c) => (opened.has(c.chat_room_id) ? { ...c, unread_count: 0 } : c)))
       setCrewRooms((prev) => prev.map((r) => (opened.has(r.id) ? { ...r, unreadCount: 0 } : r)))
+      // The server read it as it opened, and the cached list still holds the count: the next quiet sync would paint it back.
+      if (userId) queryCache.invalidate(`group_chats_${userId}`)
     },
-    [setGroupChats, setCrewRooms]
+    [setGroupChats, setCrewRooms, userId]
   )
   const noteOpened = useReadOnReturn(clearRead)
   const openRoom = useCallback(
@@ -145,7 +158,7 @@ function ChatInner() {
       noteOpened(chat.chat_room_id)
       router.push({
         pathname: '/chat/[id]',
-        params: { id: chat.chat_room_id, roomName: chat.event_title, eventTitle: chat.event_title } as never,
+        params: { id: chat.chat_room_id, roomName: chat.event_title, eventTitle: chat.event_title, ...(chat.event_id ? { eventId: chat.event_id } : {}) } as never,
       })
     },
     [inbox, noteOpened]
@@ -175,6 +188,15 @@ function ChatInner() {
     [noteOpened]
   )
 
+  // A Lobby room opens as the room it is (the server's kind); the From the Lobby card opens it the same way.
+  const openLobbyRoom = useCallback(
+    (r: LobbyRoomRow) => {
+      noteOpened(r.id)
+      router.push({ pathname: '/chat/[id]', params: { id: r.id, roomName: joinedTitle(r) } as never })
+    },
+    [noteOpened]
+  )
+
   /* "Mark read" on one DM: the thread's first page is what opens it on the server (no per-thread route exists). */
   const markRead = useCallback(
     async (chat: PersonalChat) => {
@@ -195,6 +217,15 @@ function ChatInner() {
   const liveRooms = useMemo(() => rooms.filter((c) => c.is_checked_in), [rooms])
   const blendRooms = useMemo(() => crewRooms.filter((r) => r.kind === 'blend' && !membership.left.has(r.id)), [crewRooms, membership.left])
 
+  /** The Live now card's line: the same precedence as a row's (SCRUM-633), as plain text. */
+  const liveLine = (c: (typeof liveRooms)[number]): string | null => {
+    const held = outboxLine(outbox, roomThread(c.chat_room_id, user?.id))
+    if (held) return held.kind === 'failed' ? 'Not sent · Tap to retry' : `Draft · ${held.text}`
+    return c.last_message && c.last_message !== SPONSORED
+      ? previewWithSender(c.last_message, { fromMe: c.last_sender_is_me, name: c.last_sender_name })
+      : null
+  }
+
   /** Line 2, by 5.8's precedence: not sent, then a draft, then the last message. */
   const lineFor = useCallback(
     (thread: Thread, fallback: RowLine): RowLine => {
@@ -204,9 +235,33 @@ function ChatInner() {
     [outbox]
   )
 
-  const { crewRows, peopleRows, pastRows } = useMemo(() => {
+  // An accepted ask whose post's room you are seated in is that Rooms row: the Lobby section drops it.
+  const seatedPosts = useMemo(() => new Set(lobbyRooms.flatMap((r) => (r.postId && !membership.left.has(r.id) ? [r.postId] : []))), [lobbyRooms, membership.left])
+  const { lobbyRows, crewRows, peopleRows, pastRows } = useMemo(() => {
     const now = new Date()
     const byRecent = (a: Row, b: Row) => b.sortTime - a.sortTime
+    // B-A Rooms: the Lobby's ride and group rooms. Line 2 is who with and the post's words (owner pick A, 2026-11-20).
+    const lobbyRows: Row[] = lobbyRooms
+      .filter((r) => !membership.left.has(r.id))
+      .map((r): Row => {
+        const title = joinedTitle(r)
+        const text = lobbyRoomLine(r.others, r.name)
+        return {
+          key: `l:${r.id}`,
+          title,
+          face: { kind: 'glyph', icon: kindGlyph(r.kind, r.subKind) },
+          line: lineFor(roomThread(r.id, user?.id), { kind: 'text', text }),
+          time: inboxTimeLabel(r.lastMessageAt ?? undefined, now),
+          unread: r.unreadCount > 0,
+          muted: roomMuted(r.id),
+          sortTime: r.lastMessageAt ? Date.parse(r.lastMessageAt) : 0,
+          searchText: `${title} ${text}`.toLowerCase(),
+          open: () => openLobbyRoom(r),
+          swipe: [{ icon: 'bell-off', label: 'Mute', onPress: () => setMuteFor(r.id) }],
+          canMute: true,
+        }
+      })
+      .sort(byRecent)
     const crewRows: Row[] = crewRooms
       .filter((r) => r.kind === 'crew' && !membership.left.has(r.id))
       .map((r): Row => {
@@ -226,6 +281,7 @@ function ChatInner() {
           searchText: `${r.name} ${text}`.toLowerCase(),
           open: () => openCrewRoom(r),
           swipe: [{ icon: 'bell-off', label: 'Mute', onPress: () => setMuteFor(r.id) }],
+          canMute: true,
         }
       })
       .sort(byRecent)
@@ -235,11 +291,11 @@ function ChatInner() {
         const text = c.last_message?.trim()
           ? previewWithSender(c.last_message, { fromMe: c.last_message_from_me })
           : (matchRowPreview({ fromMatch: c.from_match }) ?? 'Start chatting')
-        const line: RowLine = asked ? { kind: 'chip', icon: 'eye', text: 'Asked to reveal names' } : { kind: 'text', text }
+        const line: RowLine = asked ? { kind: 'chip', icon: 'arrow-left-right', text: 'Wants to swap names' } : { kind: 'text', text }
         return {
           key: `p:${c.conversation_id}`,
           title: c.other_user_name,
-          face: { kind: 'person', photo: c.they_revealed ? c.other_user_avatar : null, pseudonym: c.other_user_name },
+          face: { kind: 'person', named: c.they_revealed, name: c.other_user_name, photo: c.other_user_avatar },
           line: asked ? line : lineFor(dmThread(c.conversation_id, user?.id), line),
           time: inboxTimeLabel(c.last_message_time, now),
           unread: c.unread_count > 0,
@@ -259,9 +315,7 @@ function ChatInner() {
         const text = sponsored ? '' : c.last_message?.trim() ? previewWithSender(c.last_message, { fromMe: c.last_sender_is_me, name: c.last_sender_name }) : 'No messages yet'
         // The room's state is a status, never drawn like speech (Flow 5 #08).
         const stateLine = roomStateLine(c.room_state)
-        const state: RowLine | null = stateLine
-          ? { kind: 'chip', icon: c.room_state === 'locked' ? 'lock' : 'mic-off', text: stateLine, warn: c.room_state === 'locked' }
-          : null
+        const state: RowLine | null = stateLine ? { kind: 'chip', icon: 'mic-off', text: stateLine } : null
         return {
           key: `g:${c.chat_room_id}`,
           title: c.event_title,
@@ -273,15 +327,17 @@ function ChatInner() {
           sortTime: c.last_message_time ? Date.parse(c.last_message_time) : 0,
           searchText: `${c.event_title} ${text} ${c.last_sender_name ?? ''}`.toLowerCase(),
           open: () => openRoom(c),
-          swipe: [
-            { icon: 'bell-off', label: 'Mute', onPress: () => setMuteFor(c.chat_room_id) },
-            { icon: 'log-out', label: 'Leave', destructive: true, onPress: () => setLeaveFor(c.chat_room_id) },
-          ],
+          /*
+           * Mute only (I-A: one exit, Check out, and only where you are checked in). These rows are the rooms you are not
+           * in; the one you are in is Live now's card, whose room has Check out in its ⋯.
+           */
+          swipe: [{ icon: 'bell-off', label: 'Mute', onPress: () => setMuteFor(c.chat_room_id) }],
+          canMute: true,
         }
       })
       .sort(byRecent)
-    return { crewRows, peopleRows, pastRows }
-  }, [crewRooms, personalChats, rooms, membership.left, user?.id, crews, lineFor, roomMuted, revealSeen, openCrewRoom, openDm, openRoom, markRead])
+    return { lobbyRows, crewRows, peopleRows, pastRows }
+  }, [lobbyRooms, openLobbyRoom, crewRooms, personalChats, rooms, membership.left, user?.id, crews, lineFor, roomMuted, revealSeen, openCrewRoom, openDm, openRoom, markRead])
 
   const trimmed = query.trim().toLowerCase()
   const match = useCallback((rows: Row[]) => (trimmed ? rows.filter((r) => r.searchText.includes(trimmed)) : rows), [trimmed])
@@ -299,6 +355,7 @@ function ChatInner() {
   const items = useMemo<Item[]>(() => {
     // Mark all read is the header's control only, as the Flow 5 frame draws it (D29): the People link said it twice.
     const sections: [string, Row[]][] = [
+      ['Rooms', match(lobbyRows)],
       ['Crews', match(crewRows)],
       ['People', match(peopleRows)],
       ['Past rooms', match(pastRows)],
@@ -312,7 +369,7 @@ function ChatInner() {
       if (title === 'People' && morePeople) out.push({ type: 'more', key: 'more:people' })
     }
     return out
-  }, [crewRows, peopleRows, pastRows, match, morePeople])
+  }, [lobbyRows, crewRows, peopleRows, pastRows, match, morePeople])
   const liveOrder = useLatest(() => items.map((i) => i.key))
   // The touch's state and its timers (`holdController`): driven only by the list's event handlers.
   const [hold] = useState(() => holdController((held) => setHeldOrder(held ? liveOrder.current() : null)))
@@ -331,6 +388,23 @@ function ChatInner() {
     if (!held) fn(...args)
   }
   const { shown, moved: newAbove } = heldList(items, heldOrder)
+
+  /*
+   * The fourth tip (round4/r4.js TIPS[3]): the first chat that can be muted is the hole, "Swipe a chat left to mute it."
+   * Once ever; a swipe or the Mute sheet counts as use (`markCoachUsed`).
+   */
+  const firstMutable = items.find((i): i is Extract<Item, { type: 'row' }> => i.type === 'row' && i.row.canMute === true)?.key ?? null
+  const swipeCoach = useCoachMark('banter_swipe_mute', { ready: !inbox.loading && !searching && !trimmed && !muteFor && openSwipe === null && firstMutable !== null })
+  const swipeCoachTarget = useRef<View>(null)
+  useCoachMarkSpot(swipeCoach.visible, {
+    target: swipeCoachTarget,
+    text: 'Swipe a chat left to mute it.',
+    place: 'below',
+    radius: RADIUS.rowInCard,
+    onDismiss: swipeCoach.dismiss,
+    onLost: swipeCoach.lose,
+    testID: 'banter-swipe-coach',
+  })
 
   /* Rows enter once, 18 ms apart, as the list first lands (Flow 5 Banter annotation). */
   const entered = useRef(false)
@@ -379,13 +453,16 @@ function ChatInner() {
       />
     )
     return (
-      <Reanimated.View entering={entering(item.index)}>
+      <Reanimated.View entering={entering(item.index)} ref={row.key === firstMutable ? swipeCoachTarget : undefined}>
         {row.swipe.length ? (
           <SwipeRow
             actions={row.swipe}
             onPress={pressGuard(row.open)}
             open={openSwipe === row.key}
-            onOpenChange={(open) => setOpenSwipe(open ? row.key : null)}
+            onOpenChange={(open) => {
+              if (open) markCoachUsed('banter_swipe_mute')
+              setOpenSwipe(open ? row.key : null)
+            }}
             accessibilityLabel={label}
             testID={`banter-swipe-${row.key}`}
           >
@@ -402,12 +479,17 @@ function ChatInner() {
   const listTop = headerHeight + (searching ? SPACE.sm + SEARCH_FIELD + SEARCH_GAP : 0) + SPACE.lg
   /* #18: the branded pull (monogram, H.threshold), under the header; Android keeps the platform control, offset the same. */
   const pull = usePullToRefresh({ refreshing: inbox.refreshing, onRefresh: () => void inbox.onRefresh(), indicatorTop: listTop })
-  const invites = crews.invites
-  const requestsTotal = Math.max(inbox.requestsTotal ?? 0, incomingRequests.length)
-  const shownRequests = incomingRequests.slice(0, REQUESTS_PREVIEW)
+  // On the UI thread: the tab bar's settle (SCRUM-1023), and the pull its offset while it is the pull's.
+  const onScroll = useTabListScroll(pull)
+  // The server's count, not the page held. Message requests only: crew invites are answered in Notifications and on Crews (requests placement A).
+  const requestsWaiting = Math.max(inbox.requestsTotal ?? 0, incomingRequests.length)
   // The list's own "Couldn’t load your chats" is up (the empty list's failed state): its Try again is the one.
   const failedState = inbox.listFailed && !inbox.loading && !trimmed && shown.length === 0
-  const hasHeaderContent = liveRooms.length + blendRooms.length + incomingRequests.length + invites.length + boardCount > 0
+  // B-A: one row per open room with waves you have not answered, read again on a pull and on every wave heard.
+  const { version: wavesVersion } = useRoomWaves()
+  const waiting = useWavesWaiting(`${inbox.boardRefreshKey}:${wavesVersion}`)
+  const waveRoomTitle = (eventId: string) => rooms.find((c) => c.event_id === eventId)?.event_title ?? null
+  const hasHeaderContent = waiting.rooms.length + liveRooms.length + blendRooms.length + incomingRequests.length + boardCount > 0
 
   const header = (
     <View style={styles.sections}>
@@ -426,13 +508,7 @@ function ChatInner() {
               here={c.is_place}
               unread={c.unread_count}
               muted={roomMuted(c.chat_room_id)}
-              line={
-                c.room_state === 'locked'
-                  ? 'Locked by the organizer · read only'
-                  : c.last_message && c.last_message !== SPONSORED
-                    ? previewWithSender(c.last_message, { fromMe: c.last_sender_is_me, name: c.last_sender_name })
-                    : null
-              }
+              line={liveLine(c)}
               onPress={() => openRoom(c)}
             />
           ))}
@@ -452,38 +528,32 @@ function ChatInner() {
         </View>
       ) : null}
 
-      {!trimmed && (incomingRequests.length || invites.length) ? (
-        <View style={styles.section}>
-          {/* The server's count, not the page held: "Requests, 140" over the three shown and a way to the rest. */}
-          <SectionHeader
-            title="Requests"
-            count={requestsTotal + invites.length}
-            action={requestsTotal > REQUESTS_PREVIEW ? { label: `See all ${requestsTotal}`, onPress: pressGuard(() => router.push('/message-requests')) } : undefined}
-            testID="banter-requests"
-          />
-          {invites.map((invite) => (
-            <Reanimated.View key={`i:${invite.crewId}`} exiting={reduceMotion ? undefined : FadeOut.duration(DURATION.quick)} layout={reduceMotion ? undefined : REQUEST_REFLOW}>
-              <RequestCard
-                testID={`banter-invite-${invite.crewId}`}
-                face={<RequestFace emblemSeed={invite.emblemSeed} />}
-                name={invite.name}
-                note={`${invite.invitedBy} invited you to the crew`}
-                time={inboxTimeLabel(invite.invitedAt)}
-                accept="Join"
-                // Join is the consent screen (Flow 10 · 10.3): it reveals you to the crew, so it asks there.
-                onAccept={() => router.push({ pathname: '/crews/invite/[crewId]', params: { crewId: invite.crewId } })}
-                onDecline={() => crews.decline(invite)}
-              />
-            </Reanimated.View>
-          ))}
-          {shownRequests.map((r: MessageRequest) => (
-            <RequestRow key={r.request_id} request={r} inbox={inbox} />
-          ))}
-        </View>
+      {!trimmed
+        ? waiting.rooms.map((r) => (
+            <BanterWavesRow
+              key={r.eventId}
+              room={r}
+              title={waveRoomTitle(r.eventId)}
+              onSafety={(w) => {
+                if (isCrewWave(w)) return showCrewSafetyActions(w, () => ignoreCrewWaves(w.crewId))
+                const done = () => {
+                  ignoreWavesFrom(w.userId)
+                  waiting.reload()
+                }
+                showUserSafetyActions(w.displayName, w.userId, done, done)
+              }}
+            />
+          ))
+        : null}
+
+      {!trimmed && requestsWaiting > 0 ? (
+        <Reanimated.View exiting={reduceMotion ? undefined : FadeOut.duration(DURATION.quick)}>
+          <BanterRequestsRow requests={incomingRequests} total={requestsWaiting} />
+        </Reanimated.View>
       ) : null}
 
       {/* Beside message requests: somebody asking to start talking. Behind BOARD_ENABLED until the board's safety half ships. */}
-      {BOARD_ENABLED && !trimmed ? <BoardRequestsSection refreshKey={inbox.boardRefreshKey} onCount={setBoardCount} /> : null}
+      {BOARD_ENABLED && !trimmed ? <BoardRequestsSection refreshKey={inbox.boardRefreshKey} onCount={setBoardCount} seatedPosts={seatedPosts} /> : null}
     </View>
   )
 
@@ -528,6 +598,7 @@ function ChatInner() {
           step('dragBegin')
         }}
         {...pull.listProps}
+        onScroll={onScroll}
         onScrollEndDrag={(e) => {
           pull.listProps.onScrollEndDrag(e)
           // A release with speed coasts: the momentum end settles it.
@@ -550,6 +621,7 @@ function ChatInner() {
             <StateScreen
               icon="search"
               title={`No chats match “${query.trim()}”`}
+              announce="No chats match your search"
               actions={[{ label: 'Clear search', kind: 'lit', onPress: () => setQuery('') }]}
               testID="banter-no-match"
             />
@@ -569,7 +641,7 @@ function ChatInner() {
               <StateScreen
                 icon="message-circle"
                 title="No conversations yet"
-                body="Blend in to an event and its room appears here — or message someone you met there."
+                body="Blend’n at an event and its room appears here — or message someone you met there."
                 actions={[{ label: 'Explore events', onPress: () => router.push('/(tabs)/events' as never) }]}
                 testID="banter-empty"
               />
@@ -586,16 +658,22 @@ function ChatInner() {
         ListFooterComponent={
           <PageFooter loading={inbox.loadingMore} failed={!!inbox.moreFailed} onRetry={() => void inbox.loadMore(inbox.moreFailed ?? 'rooms')} what="chats" testID="banter-more-failed" />
         }
-        contentContainerStyle={[styles.content, { paddingTop: listTop, paddingBottom: insets.bottom + TAB_BAR_CLEARANCE + SPACE.xl }]}
+        contentContainerStyle={[styles.content, { paddingTop: listTop + bannerHeight, paddingBottom: insets.bottom + TAB_BAR_CLEARANCE + SPACE.xl }]}
         showsVerticalScrollIndicator={false}
       />
       </BanterPressGuard.Provider>
       {pull.indicator}
 
-      <RealtimeStatusBanner status={inbox.socketStatus} withoutRetry={failedState} style={{ ...styles.banner, top: listTop - SPACE.sm }} />
+      {/* Pinned over the list, so the list makes room for it: the paused banner sat on the Message requests row (t13 drive). */}
+      <View style={[styles.banner, { top: listTop - SPACE.sm }]} onLayout={(e) => setBannerHeight(e.nativeEvent.layout.height)} testID="banter-banner-slot">
+        <RealtimeStatusBanner status={inbox.socketStatus} withoutRetry={failedState} />
+      </View>
       {newAbove ? (
-        <NewAbovePill
+        <NewPill
+          label="New"
           top={listTop}
+          accessibilityLabel="New messages above"
+          testID="banter-new-above-pill"
           onPress={() => {
             step('release')
             listRef.current?.scrollToOffset({ offset: 0, animated: !reduceMotion })
@@ -604,14 +682,12 @@ function ChatInner() {
       ) : null}
 
       <MuteSheet chatGroupId={muteFor} onClose={() => setMuteFor(null)} />
-      <LeaveRoomSheet chatGroupId={leaveFor} onClose={() => setLeaveFor(null)} onLeft={() => setOpenSwipe(null)} />
     </View>
   )
 }
 
 /** The search field's height (SearchField: a 48 pt capsule). */
 const SEARCH_FIELD = 48
-const REQUEST_REFLOW = LinearTransition.duration(DURATION.base).easing(Easing.bezier(...EASING.standard))
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: COLOR.ink },

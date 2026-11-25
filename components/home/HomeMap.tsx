@@ -3,9 +3,9 @@ import {
   GeoJSONSource,
   Layer,
   Map,
-  NativeUserLocation,
   type CameraRef,
   type CameraStop,
+  type GeoJSONSourceRef,
   type LightSpecification,
   type MapRef,
   type PressEventWithFeatures,
@@ -13,7 +13,7 @@ import {
 } from '@maplibre/maplibre-react-native'
 import { router } from 'expo-router'
 import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { AppState, Platform, StyleSheet, useWindowDimensions, type NativeSyntheticEvent } from 'react-native'
+import { AppState, Linking, Platform, StyleSheet, useWindowDimensions, View, type NativeSyntheticEvent } from 'react-native'
 import Animated, { useAnimatedStyle, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated'
 
 import { eventFromApi } from '../../lib/api'
@@ -22,26 +22,32 @@ import {
   backoffMs,
   cameraMove,
   cityPickAction,
-  insideLastCircle,
-  LIGHT_MIN_ZOOM,
+  insideLastBox,
   liveAt,
   loadPins,
+  pinsFor,
   locateTarget,
+  bearingOf,
   mapPadding,
-  roundQuery,
-  shadeOf,
   shouldFollowFix,
   snapRecentre,
   tiltedZoom,
-  viewportQuery,
+  viewportBox,
+  panSource,
   visibleCentreY,
   type Bounds,
   type InFlight,
   type Pin,
   type PinQuery,
+  withFocus,
+  withinReach,
+  reachShapes,
+  reachTarget,
   compassBelow,
 } from '../../lib/homeMap'
+import { getDistanceKm } from '../../lib/geo'
 import { Logger } from '../../lib/logger'
+import { useLocationSharing } from '../../lib/shareLocation'
 import {
   BUILDING_LAYER_ID,
   drawsOwnBuildings,
@@ -52,18 +58,27 @@ import {
   parseOwnBuildingsUrl,
   styleHost,
 } from '../../lib/mapStyleEmber'
+import { edgeGate, FRAME_NEAREST, frameOnYou, mapSummary, MORE_ZOOM_MAX, moreLine, readingOf, staleCalloutBelow, youMark } from '../../lib/mapPresence'
 import { MAP_THEME } from '../../lib/mapTheme'
 import { useReducedMotion } from '../../lib/motion'
-import { SPACE } from '../../lib/theme'
-import { fitBounds, type NearPin } from '../../lib/placesPane'
+import { COLOR, SPACE } from '../../lib/design/tokens'
+import { barCircleBottom } from '../../lib/barGeometry'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { tint } from '../../lib/theme'
+import { distanceText, fitBounds, type NearPin } from '../../lib/placesPane'
 import { LocateButton } from './LocateButton'
 import { MapCredit } from './MapCredit'
+import { MoreLine } from './MoreLine'
+import { useScreenReader } from '../ds/shared'
+import { EventPiles } from './EventPiles'
+import { PileSpeech } from './PileSpeech'
+import { EdgeMarker } from './EdgeMarker'
+import { ApproximateLine, STALE_CALLOUT, StaleCallout } from './YouLines'
+import { YouBeam, YouMark } from './YouMark'
 import { NearPins } from './NearPins'
-import { Chips, CityBuildings, GroundGlow, LitBuildings, OwnBuildings } from './MapLitLayers'
-import { useMapLighting, type Collection, type MapView, type Segment } from './useMapLighting'
+import { Chips, CityBuildings, GroundGlow, LitBuildings, OwnBuildings, ReachLabels } from './MapLitLayers'
+import { useMapLighting, type MapView, type Segment } from './useMapLighting'
 
-/** Where the map opens before the phone has a fix: central Bengaluru. */
-const DEFAULT_CENTRE: [number, number] = [77.5946, 12.9716]
 /** A pan settles before the server is asked; the lists allow 60 reads a minute. */
 const QUERY_DEBOUNCE_MS = 600
 /** How many pins one viewport asks for. */
@@ -71,12 +86,12 @@ const PIN_LIMIT = 50
 /** An event's pin is re-read against its window this often, so it lights up when its doors open. */
 const LIVE_TICK_MS = 60_000
 
-type Point = { type: 'Point'; coordinates: [number, number] }
 /** A camera move: where to, how long an ease within a city takes, and a zoom and tilt to arrive at. */
-type Move = { to: [number, number]; easeMs: number; at?: { zoom: number; pitch: number } }
-type PinFeature = { type: 'Feature'; id: string; geometry: Point; properties: { id: string; kind: string; glow: number; color: string } }
+type Move = { to: [number, number]; easeMs: number; at?: { zoom: number; pitch: number; bearing?: number } }
 
 const NO_PINS: Pin[] = []
+/** A held move this close to the fix is a move to the person (the reach's frame sits about a kilometre off them). */
+const FIX_NEAR_KM = 2
 
 /** Our building tiles (stage 2), when this build has them; else OpenFreeMap's buildings everywhere. */
 const OWN_BUILDINGS_ENV = parseOwnBuildingsUrl(process.env.EXPO_PUBLIC_BUILDINGS_TILES_URL)
@@ -87,13 +102,24 @@ const roughView = ([lng, lat]: [number, number]): Bounds => [lng - 0.006, lat - 
 /** `MAP_THEME.light`, as the spec's (mutable) type. */
 const LIGHT: LightSpecification = { ...MAP_THEME.light, position: [...MAP_THEME.light.position] }
 
-/** The pin source's reads, adapted to `loadPins`. Fresh, never a cached page: a taken-over venue must not linger. */
-const pinApi = {
+/**
+ * The pin source's reads, adapted to `loadPins`. Fresh, never a cached page: a taken-over venue must not linger.
+ * `viewport`: the box is where a camera looks, so it goes even with sharing off. A person's own position is never a
+ * viewport: it goes through the sharing gate (`toQuery`).
+ */
+export const pinApiFor = (viewport: boolean) => ({
   getEvents: async (q: PinQuery & { limit: number }) => {
-    const res = await apiClient.getEvents(q, { force: true })
-    return { ...res, data: res.data ? { events: res.data.events.map(eventFromApi) } : undefined }
+    const res = await apiClient.getEvents(q, { force: true, viewport })
+    return { ...res, data: res.data ? { events: res.data.events.map(eventFromApi), pagination: res.data.pagination } : undefined }
   },
-  getVenues: (q: PinQuery & { limit: number; sortBy: 'distance' }) => apiClient.getVenues(q, { force: true }),
+  getVenues: (q: PinQuery & { limit: number; lat: number; lon: number; sortBy: 'distance' }) => apiClient.getVenues(q, { force: true, viewport }),
+})
+const pinApi = pinApiFor(true)
+
+/** The events nearest the person's own fix (sharing-gated, never a viewport), for the open frame; none on a failed read. */
+async function nearestEvents(fix: { latitude: number; longitude: number }): Promise<Pin[]> {
+  const res = await apiClient.getEvents({ lat: fix.latitude, lon: fix.longitude, sortBy: 'distance', limit: FRAME_NEAREST }, { force: true }).catch(() => null)
+  return res?.success && res.data ? pinsFor('events', { events: res.data.events.map(eventFromApi), venues: [] }) : []
 }
 
 /**
@@ -101,9 +127,9 @@ const pinApi = {
  * MapLibre over OpenFreeMap, dark, tilted, one map-anchored light.
  *
  * - **Pins follow the segment**: events on Events, venues on Places, for the
- *   part of the map on screen (its centre and a radius reaching its corners,
- *   the same `lat`/`lon`/`radius` the lists take). No request while the view
- *   stays inside a circle fully answered; a refusal backs off, a segment switch
+ *   part of the map on screen (its box, `bbox`; venues nearest its middle
+ *   first). No request while the view
+ *   stays inside a box fully answered; a refusal backs off, a segment switch
  *   included; read again when the screen or the app comes back. Which venues
  *   exist is the server's rule; the map draws what it is sent.
  * - **Below the buildings' zoom a pin is a dot**, a venue's glow stepping with
@@ -135,8 +161,9 @@ const pinApi = {
  *   `lib/mapTheme.ts` alone.
  */
 export const HomeMap = memo(function HomeMap({
-  center,
+  center: fix,
   cityCentre,
+  fallbackCentre,
   cityPick,
   requestLocation,
   locateVisible,
@@ -150,10 +177,20 @@ export const HomeMap = memo(function HomeMap({
   glowVisible,
   nearPins,
   fitNear,
+  focus = null,
+  locateLift,
+  reach = null,
+  onTouched,
+  onLocate,
 }: {
   center: { latitude: number; longitude: number } | null
   /** The selected city's centre (`shouldFollowCity` says when the map goes there). */
   cityCentre: { latitude: number; longitude: number } | null
+  /**
+   * Where the map opens and returns with no fix and no city of its own: the browsed city's centre, else the
+   * catalogue's default city's (HomeShell mounts the map only once one is known). Never a city written here.
+   */
+  fallbackCentre: { latitude: number; longitude: number }
   /** Bumped by every city the person chooses; `here` when they chose where they stand. */
   cityPick: { n: number; here: boolean }
   /** Ask for the phone's position (the Pulse's own permission and "Turn on location" flow); settles when the ask does. */
@@ -178,10 +215,36 @@ export const HomeMap = memo(function HomeMap({
   nearPins: NearPin[]
   /** Bumped by "Show on map": fit the camera to the pins and you, in the map the half drawer leaves. */
   fitNear: number
+  /** The Pulse's lead card's venue: lit at the brightest step; each new `n` (a swipe) eases the camera there (Option C). */
+  focus?: { pin: Pin; n: number; km?: number | null } | null
+  /** How far the Pulse's banners on the map lift "my location" (0 with none). */
+  locateLift?: SharedValue<number>
+  /** Near me is on (Flow 3b · N1): where you stand. The map draws your reach and lights only what is inside it. */
+  reach?: { latitude: number; longitude: number } | null
+  /** The person panned, pinched or tapped the map: Featured's lap is over for the visit (pulse-map, "your touch wins"). */
+  onTouched?: () => void
+  /** "My location" (the glyph, or a "Back to you" routed through `cityPick` here): the map is back on you. */
+  onLocate?: () => void
 }) {
   const { width, height } = useWindowDimensions()
+  const insets = useSafeAreaInsets()
+  /*
+   * "Share location for nearby events" off: the map has no fix of its own. It opens on the city and follows only the camera the
+   * person moves, so a viewport query means where they looked, never where they are (SCRUM-908). The same null as before a fix
+   * arrives, so nothing here follows, draws or asks for one.
+   */
+  const sharing = useLocationSharing()
+  const center = sharing ? fix : null
+  // Near me's reach is the person's position too: none with the switch off, whatever the screen passes.
+  const reachHere = sharing ? reach : null
   const map = useRef<MapRef>(null)
   const camera = useRef<CameraRef>(null)
+  const pileSource = useRef<GeoJSONSourceRef>(null)
+  const screenReader = useScreenReader()
+  // Which way you face, for the spoken summary only (YouBeam): changes at most eight times a turn.
+  const [facing, setFacing] = useState<string | null>(null)
+  /** Bumped each time the camera stops or the pins change: the spoken numbers are read again (`PileSpeech`). */
+  const [settled, setSettled] = useState(0)
   // The person has moved the map (a pan, or a city picked): a fix no longer takes it over.
   const touched = useRef(false)
   // The same, for the "my location" button to draw: filled while the map follows the fix.
@@ -200,7 +263,7 @@ export const HomeMap = memo(function HomeMap({
   const fadeStyle = useAnimatedStyle(() => ({ opacity: fade.get() }))
   const followedFix = useRef<{ latitude: number; longitude: number } | null>(null)
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null)
-  // The last circle fully answered, and for which segment: a switch asks again.
+  // The last box fully answered, and for which segment: a switch asks again.
   const lastQuery = useRef<{ segment: Segment; q: PinQuery } | null>(null)
   const failures = useRef(0)
   const blockedUntil = useRef(0)
@@ -212,8 +275,12 @@ export const HomeMap = memo(function HomeMap({
    * reckoning), and the first frame has it too (`initialViewState`).
    */
   const padding = mapPadding({ topChrome, mapHeight, drawerTop: drawerSnapTop })
+  // Any map left between the top bar and the drawer: none with the drawer full, and nothing of ours is drawn on it then.
+  const mapShown = mapHeight - padding.top - padding.bottom > 0
   // The map you can see as the camera last used it: its padding and the map's height, together (review M3).
   const shown = useRef({ padding, mapHeight })
+  // The padding the camera really has (its last stop's, or the first frame's): a settled snap pans in it (`panSource`).
+  const camPad = useRef(padding)
   // The move in flight, and a count of moves: a settled snap must not undo a newer move (review M1).
   const lastMove = useRef<InFlight | null>(null)
   const moves = useRef(0)
@@ -227,6 +294,7 @@ export const HomeMap = memo(function HomeMap({
   const stop = (to: CameraStop) => {
     const cam = camera.current
     if (!cam) return
+    if (to.padding) camPad.current = { top: to.padding.top ?? 0, bottom: to.padding.bottom ?? 0 }
     Promise.resolve()
       .then(() => cam.setStop({ easing: 'ease', ...to }))
       .catch((error) => Logger.warn('events', 'Home map camera stop failed', { error: String(error) }))
@@ -241,14 +309,14 @@ export const HomeMap = memo(function HomeMap({
     moves.current += 1
     const pad = shown.current.padding
     const { duration, fade: fades } = cameraMove(view.current.centre, move.to, { easeMs: move.easeMs, reduceMotion })
-    lastMove.current = { to: move.to, zoom: move.at?.zoom, pitch: move.at?.pitch, until: Date.now() + duration }
+    lastMove.current = { to: move.to, zoom: move.at?.zoom, pitch: move.at?.pitch, bearing: move.at?.bearing, until: Date.now() + duration }
     if (fades) {
       fade.set(1)
       fade.set(withTiming(0, { duration: MAP_THEME.camera.fadeMs }))
     }
     if (duration > 0) {
       // An ease that also tilts asks for the zoom MapLibre iOS will land on (review M2).
-      const at = move.at && { pitch: move.at.pitch, zoom: tiltedZoom(move.at.zoom, view.current.pitch, move.at.pitch, Platform.OS) }
+      const at = move.at && { pitch: move.at.pitch, zoom: tiltedZoom(move.at.zoom, view.current.pitch, move.at.pitch, Platform.OS), ...bearingOf(move.at.bearing) }
       stop({ center: move.to, ...at, padding: pad, duration })
       return
     }
@@ -262,8 +330,10 @@ export const HomeMap = memo(function HomeMap({
      * zoom goes last, once the camera is there and tilted, with the centre again.
      */
     // It lands at the map's own zoom and tilt: the last zoom the map reported can be the one it opened at, before its fix (drive, review round).
+    // North up only when the move asks for it ("my location"): the opening jump keeps the map's own heading.
     const { zoom, pitch } = move.at ?? MAP_THEME.camera
-    stop({ zoom: view.current.zoom, pitch: 0, padding: pad, duration: 0 })
+    const bearing = move.at?.bearing
+    stop({ zoom: view.current.zoom, pitch: 0, ...bearingOf(bearing), padding: pad, duration: 0 })
     stop({ center: move.to, pitch, padding: pad, duration: 0 })
     stop({ center: move.to, zoom, padding: pad, duration: 0 })
   }
@@ -276,6 +346,9 @@ export const HomeMap = memo(function HomeMap({
    * started meanwhile (review M1).
    */
   useEffect(() => {
+    // The drawer full covers the map: nothing to centre in, and the map stays as it was for when it comes back down
+    // (SCRUM-1090: centred into the top bar's foot, the fix and its callout sat behind the Blend'n mark).
+    if (!mapShown) return
     const before = shown.current
     shown.current = { padding, mapHeight }
     if (!ready.current || (before.padding.top === padding.top && before.padding.bottom === padding.bottom)) return
@@ -287,20 +360,25 @@ export const HomeMap = memo(function HomeMap({
       const plan = snapRecentre({ now: Date.now(), inFlight: lastMove.current, following: !touched.current, fix })
       if (plan.kind === 'reissue') {
         const { to, zoom, pitch } = plan.move
-        stop({ center: to, ...(zoom !== undefined && { zoom }), ...(pitch !== undefined && { pitch }), padding: shown.current.padding, duration: plan.durationMs })
+        stop({ center: to, ...(zoom !== undefined && { zoom }), ...(pitch !== undefined && { pitch }), ...bearingOf(plan.move.bearing), padding: shown.current.padding, duration: plan.durationMs })
         return
       }
-      if (plan.kind === 'centre') {
-        stop({ center: plan.to, padding: shown.current.padding, duration: settle })
-        return
-      }
-      map.current
-        ?.unproject([width / 2, visibleCentreY(before.padding, before.mapHeight)])
+      /*
+       * A pan, in the padding the camera already has: what was centred (the fix while following, else the old middle,
+       * read with the padding AND the map height it was drawn with: review M3) moves to the new middle. A stop that
+       * changed the padding eased part of the way and cut the rest in one frame on iOS (SCRUM-1090 drive, dev too).
+       */
+      const ref = map.current
+      if (!ref) return
+      const to: [number, number] = [width / 2, visibleCentreY(padding, mapHeight)]
+      const from = plan.kind === 'centre' ? ref.project(plan.to) : Promise.resolve<[number, number]>([width / 2, visibleCentreY(before.padding, before.mapHeight)])
+      from
+        .then((at) => ref.unproject(panSource([width / 2, visibleCentreY(camPad.current, mapHeight)], at as [number, number], to)))
         .then((centred) => {
           if (moves.current !== startedAt) return
-          stop({ center: centred as [number, number], padding: shown.current.padding, duration: settle })
+          stop({ center: centred as [number, number], padding: camPad.current, duration: settle })
         })
-        .catch((error) => Logger.warn('events', 'Home map could not re-centre on the drawer', { error: String(error) }))
+        .catch((error) => Logger.warn('events', 'Home map could not re-center on the drawer', { error: String(error) }))
     }, 0)
     return () => clearTimeout(timer)
   }, [padding.top, padding.bottom]) // eslint-disable-line react-hooks/exhaustive-deps -- only a settled snap re-centres
@@ -323,12 +401,53 @@ export const HomeMap = memo(function HomeMap({
    * switch shows the other segment's at once, never the old ones, and the
    * query effect below asks again for the same view.
    */
-  const [loaded, setLoaded] = useState<{ segment: Segment; pins: Pin[] }>({ segment, pins: NO_PINS })
+  // `total`: the server's count in the box the pins were read for (`loadPins`), for "+N more" (sheet 16).
+  const [loaded, setLoaded] = useState<{ segment: Segment; pins: Pin[]; total: number | null }>({ segment, pins: NO_PINS, total: null })
   const [now, setNow] = useState(() => Date.now())
-  const pins = useMemo(() => (loaded.segment === segment ? loaded.pins.map((p) => liveAt(p, now)) : NO_PINS), [loaded, segment, now])
+  const focusPin = focus?.pin ?? null
+  const pins = useMemo(() => {
+    const shown = withFocus(loaded.segment === segment ? loaded.pins.map((p) => liveAt(p, now)) : NO_PINS, focusPin)
+    // Near me: only what you can reach lights (the dark beyond is the reach's own layer).
+    return reachHere ? withinReach(shown, reachHere) : shown
+  }, [loaded, segment, now, focusPin, reachHere])
+  const reachData = useMemo(() => (reachHere ? reachShapes(reachHere) : null), [reachHere])
+
+  /*
+   * Near me (owner pick (c), 2026-11-05): true distances, the camera fitted like the board. On, the map lies flat on you
+   * at the zoom that makes the 8 km ring span the phone (`reachZoom`); off, it tilts back to its own street view.
+   */
+  const reachOn = reachData !== null
+  // Through `moveTo`, the map's one way to move: a drawer settling or a fix arriving mid-ease re-issues this move whole
+  // (zoom and tilt), instead of stopping the camera half way out; and iOS gets the zoom it lands on (`tiltedZoom`).
+  const reachAt = useRef<[number, number] | null>(null)
+  // Whether the reach was drawn: an opt-out after Near me still owes the street view back, on the city.
+  const wasReach = useRef(false)
+  useEffect(() => {
+    if (reachOn) wasReach.current = true
+  }, [reachOn])
+  const cityOrFallback = (): [number, number] =>
+    cityCentre ? [cityCentre.longitude, cityCentre.latitude] : [fallbackCentre.longitude, fallbackCentre.latitude]
+  useEffect(() => {
+    // The switch is read here too, not only through `reachHere`: an effect order must never put the camera on the fix.
+    if (reachOn && reachHere && sharing) {
+      const target = reachTarget(reachHere, { width, topChrome, drawerTop: drawer.half })
+      reachAt.current = [reachHere.longitude, reachHere.latitude]
+      moveTo({ to: target.centre, easeMs: MAP_THEME.camera.easeMs, at: { zoom: target.zoom, pitch: 0 } })
+      return
+    }
+    if (!reachOn) {
+      // Back to the street view: on you while sharing; after an opt-out, on the city, never where you were.
+      const back = sharing ? reachAt.current : null
+      const owed = wasReach.current
+      reachAt.current = null
+      wasReach.current = false
+      if (back) moveTo({ to: back, easeMs: MAP_THEME.camera.easeMs, at: { zoom: MAP_THEME.camera.zoom, pitch: MAP_THEME.camera.pitch } })
+      else if (!sharing && owed) moveTo({ to: cityOrFallback(), easeMs: MAP_THEME.camera.easeMs, at: { zoom: MAP_THEME.camera.zoom, pitch: MAP_THEME.camera.pitch } })
+    }
+  }, [reachOn]) // eslint-disable-line react-hooks/exhaustive-deps -- only turning Near me on or off moves the camera
 
   // Which tiles draw the buildings, by the whole view: ours once it is inside a covered city (`drawsOwnBuildings`).
-  const startAt: [number, number] = center ? [center.longitude, center.latitude] : DEFAULT_CENTRE
+  const startAt: [number, number] = center ? [center.longitude, center.latitude] : [fallbackCentre.longitude, fallbackCentre.latitude]
   // Where the first frame opens: the camera is there until something moves it.
   const [opening] = useState(startAt)
   const [ownTiles, setOwnTiles] = useState(() => drawsOwnBuildings(OWN_BUILDINGS_URL, roughView(startAt), false))
@@ -338,6 +457,28 @@ export const HomeMap = memo(function HomeMap({
   useEffect(() => {
     if (OWN_BUILDINGS_ENV.problem) Logger.warn('events', 'EXPO_PUBLIC_BUILDINGS_TILES_URL ignored', { problem: OWN_BUILDINGS_ENV.problem })
   }, [])
+  /*
+   * The lap's venue, for its edge marker: an event focus on Events only (a venue's name when the server sends one), and
+   * only in the city the map shows, near where it looks (`edgeGate`: from Saarbrücken it read "Olive Beach · 7,500 km").
+   * Read again as the camera settles (`settled`).
+   */
+  const mapCentre = view.current.centre
+  const edge = useMemo(() => {
+    if (!focusPin || segment !== 'events') return null
+    const at: [number, number] = [focusPin.longitude, focusPin.latitude]
+    const gate = edgeGate({ at, cityCentre: cityCentre ?? null, mapCentre, fix: center })
+    return gate ? { target: { id: focusPin.id, name: focusPin.place || focusPin.title, at }, distance: gate.distance } : null
+  }, [focusPin, segment, cityCentre, mapCentre?.[0], mapCentre?.[1], center, settled]) // eslint-disable-line react-hooks/exhaustive-deps -- by value; `settled` re-reads the camera
+  const edgeTarget = edge?.target ?? null
+  // Where the edge marker may sit: the map you can see, above "my location" (pulse-map 05 frame 6).
+  const edgeBox = { left: 0, top: padding.top, right: width, bottom: height - padding.bottom - MAP_THEME.locate.sizePx - SPACE.sm }
+  // What the map says about you (pulse-map 06): approximate and stale each get their one line.
+  const you = youMark({ sharing, permission: 'granted', fix: center, now })
+  // Every distance the map says from that fix: "about 1 km" from an approximate one, the card's words (SCRUM-1080).
+  const reading = readingOf(center)
+  // Which side of the grey dot the stale callout hangs (below), from the edge marker as drawn (`onPlaced`).
+  const [staleBelow, setStaleBelow] = useState(false)
+  const [edgeRect, setEdgeRect] = useState<{ left: number; top: number; width: number; height: number } | null>(null)
   const { lit, onFrame, relight } = useMapLighting({
     map,
     view,
@@ -349,7 +490,22 @@ export const HomeMap = memo(function HomeMap({
     // What the person can see: under the capsule and the bell, over the drawer (a name outside it, or on their dot, is not drawn).
     visible: { top: padding.top, bottom: height - padding.bottom },
     userAt: center ? [center.longitude, center.latitude] : null,
+    // No name under the edge marker (drive 2026-11-19: it covered a chip).
+    edge: edgeTarget ? { at: edgeTarget.at, box: edgeBox } : null,
+    // No name under the stale callout either (map-finish drive: a chip sat 3 pt off it).
+    stale: you.kind === 'stale' ? { room: STALE_CALLOUT, below: staleBelow } : null,
+    // The lead's chip says its card's distance (Android drive: 800 m over a card reading 850 m), as the edge marker does.
+    knownDistance: focus?.pin && typeof focus.km === 'number' ? { id: focus.pin.id, km: focus.km } : null,
+    reading,
   })
+  // The dot going grey (or violet again) moves no camera: the names are placed again around the callout.
+  const isStale = you.kind === 'stale'
+  useEffect(() => relight(), [isStale, staleBelow, reading]) // eslint-disable-line react-hooks/exhaustive-deps -- only the stale flip or its side, or the fix turning precise
+
+  // New pins re-cluster the numbers: a screen reader hears them afresh.
+  useEffect(() => {
+    if (screenReader) setSettled((n) => n + 1)
+  }, [pins, screenReader])
 
   // The person's position — a cached one, then the live fix — until they move the map themselves.
   useEffect(() => {
@@ -358,9 +514,26 @@ export const HomeMap = memo(function HomeMap({
     moveTo({ to: [center.longitude, center.latitude], easeMs: 400 })
   }, [center]) // eslint-disable-line react-hooks/exhaustive-deps -- only a new fix moves the camera here
 
+  /*
+   * Option 3 opens framed on you and the six nearest events (pulse-map 05, `frameOnYou`), once per visit, as soon as there
+   * is a fix and the events for this view are in. Never after the person has moved the map: their touch wins.
+   */
+  const framed = useRef(false)
+  useEffect(() => {
+    if (framed.current || touched.current || !center || segment !== 'events' || reachHere) return
+    framed.current = true
+    // The six nearest are their own read, by distance from the fix: the first street-zoom view rarely holds any.
+    void nearestEvents(center).then((near) => {
+      if (touched.current) return
+      const frame = frameOnYou(center, near, { width, height: Math.max(1, mapHeight - padding.top - padding.bottom) })
+      if (frame) moveTo({ to: frame.center, easeMs: MAP_THEME.camera.easeMs, at: { zoom: frame.zoom, pitch: MAP_THEME.camera.pitch } })
+    })
+  }, [center, segment]) // eslint-disable-line react-hooks/exhaustive-deps -- the first fix on Events frames it, once per visit
+
   // "My location": back to the fix and following it again, or ask for one (dimmed until the ask settles).
   const locate = () => {
     setTouched(false)
+    onLocate?.()
     const target = locateTarget(center)
     if (!target) {
       setAsking(true)
@@ -370,8 +543,17 @@ export const HomeMap = memo(function HomeMap({
       return
     }
     followedFix.current = center
-    moveTo({ to: target.center, easeMs: MAP_THEME.camera.easeMs, at: { zoom: target.zoom, pitch: target.pitch } })
+    moveTo({ to: target.center, easeMs: MAP_THEME.camera.easeMs, at: { zoom: target.zoom, pitch: target.pitch, bearing: target.bearing } })
   }
+
+  // The lead card swiped to another venue: the camera eases there within the city (jumps under Reduce Motion, `cameraMove`).
+  // Moving the map for the person counts as their move: a fix arriving must not drag it back.
+  const focusN = focus?.n ?? 0
+  useEffect(() => {
+    if (!focusN || !focusPin) return
+    setTouched(true)
+    moveTo({ to: [focusPin.longitude, focusPin.latitude], easeMs: MAP_THEME.camera.easeMs })
+  }, [focusN]) // eslint-disable-line react-hooks/exhaustive-deps -- only a swipe moves the camera here
 
   // A city change: a pick goes there, a choice of where you stand shows you, one the app decided only when you have no fix (`cityPickAction`).
   const cityLat = cityCentre?.latitude
@@ -380,7 +562,7 @@ export const HomeMap = memo(function HomeMap({
   const hasFix = center !== null
   useEffect(() => {
     const picked = cityPick.n !== seenPick.current
-    const action = cityPickAction({ picked, here: cityPick.here, hasFix, touched: touched.current })
+    const action = cityPickAction({ picked, here: cityPick.here && sharing, hasFix, touched: touched.current })
     if (action === 'locate') {
       seenPick.current = cityPick.n
       locate()
@@ -394,6 +576,25 @@ export const HomeMap = memo(function HomeMap({
     if (picked) setTouched(true)
     moveTo({ to: [cityLon, cityLat], easeMs: MAP_THEME.camera.easeMs })
   }, [cityPick.n, cityLat, cityLon]) // eslint-disable-line react-hooks/exhaustive-deps -- a fix arriving is not a city change
+
+  // The switch goes off while the camera is following the fix: what was asked or held around the person is dropped, and the map goes to the city.
+  useEffect(() => {
+    if (sharing) return
+    // Before the early return for a moved map: nothing held may still point at the person (security review, 2026-11-05).
+    // The reach's return move, a drawer snap's re-issue of the last move, and a move held for the map to load.
+    const near = (to: [number, number] | undefined) => !!fix && !!to && getDistanceKm(to[1], to[0], fix.latitude, fix.longitude) <= FIX_NEAR_KM
+    reachAt.current = null
+    if (near(lastMove.current?.to)) lastMove.current = null
+    if (near(pendingMove.current?.to)) pendingMove.current = null
+    if (touched.current) return
+    // A read pending on a fix-centred view, the box already answered around it, and the fix followed: none survives the switch.
+    if (debounce.current) clearTimeout(debounce.current)
+    debounce.current = null
+    setQuery(null)
+    lastQuery.current = null
+    followedFix.current = null
+    moveTo({ to: cityLat !== undefined && cityLon !== undefined ? [cityLon, cityLat] : [fallbackCentre.longitude, fallbackCentre.latitude], easeMs: MAP_THEME.camera.easeMs })
+  }, [sharing]) // eslint-disable-line react-hooks/exhaustive-deps -- only the switch moves the camera here
 
   useEffect(
     () => () => {
@@ -416,23 +617,30 @@ export const HomeMap = memo(function HomeMap({
     return () => sub.remove()
   }, [])
 
-  /** Ask for this view's pins, unless a fully answered circle holds it or a refusal is still cooling off. */
+  /** Ask for this view's pins, unless a fully answered box holds it or a refusal is still cooling off. */
   const ask = (bounds: Bounds) => {
-    const next = roundQuery(viewportQuery(bounds))
+    const next = viewportBox(bounds)
     const last = lastQuery.current?.segment === segment ? lastQuery.current.q : null
-    if (insideLastCircle(last, next) || Date.now() < blockedUntil.current) return
+    if (insideLastBox(last, next) || Date.now() < blockedUntil.current) return
     setQuery(next)
   }
 
+  // The camera is moving: the edge marker waits for it to stop, so it is never left pointing from the old view.
+  const [moving, setMoving] = useState(false)
   const onRegionDidChange = (e: NativeSyntheticEvent<ViewStateChangeEvent>) => {
-    const { bounds, center: centre, zoom, pitch, userInteraction } = e.nativeEvent
+    setMoving(false)
+    const { bounds, center: centre, zoom, pitch, bearing, userInteraction } = e.nativeEvent
+    // The camera read back (no position: heading, tilt and zoom only), so a drive checks "north up" from the log, not by eye.
+    Logger.info('events', 'map:settled', { bearing: Math.round(bearing), pitch: Math.round(pitch), zoom: Math.round(zoom * 10) / 10, user: userInteraction })
     if (userInteraction) {
       setTouched(true)
       setGestures((n) => n + 1)
+      onTouched?.()
     }
     view.current = { bounds: bounds as Bounds, centre: centre as [number, number], zoom, pitch }
     setOwnTiles((drawing) => drawsOwnBuildings(OWN_BUILDINGS_URL, bounds as Bounds, drawing))
     relight()
+    setSettled((n) => n + 1)
     if (debounce.current) clearTimeout(debounce.current)
     debounce.current = setTimeout(() => ask(bounds as Bounds), QUERY_DEBOUNCE_MS)
   }
@@ -471,9 +679,9 @@ export const HomeMap = memo(function HomeMap({
           if (stale) return
           if (result.kind === 'pins') {
             failures.current = 0
-            // A full page may not be all there is: it does not count as covering the circle (review M2).
+            // More in the box than were sent: it does not count as covering it (review M2).
             lastQuery.current = result.truncated ? null : { segment, q: query }
-            setLoaded({ segment, pins: result.pins })
+            setLoaded({ segment, pins: result.pins, total: result.total })
           } else if (result.kind === 'rate_limited') {
             failures.current += 1
             blockedUntil.current = Date.now() + backoffMs(failures.current, result.retryAfter)
@@ -505,20 +713,81 @@ export const HomeMap = memo(function HomeMap({
     [open]
   )
 
-  const pinData = useMemo<Collection<PinFeature>>(
-    () => ({
-      type: 'FeatureCollection',
-      features: pins.map((p) => ({
-        type: 'Feature',
-        id: p.id,
-        geometry: { type: 'Point', coordinates: [p.longitude, p.latitude] },
-        properties: { id: p.id, kind: p.kind, glow: p.glow, color: shadeOf(p.kind, p.live) },
-      })),
-    }),
-    [pins]
+  // A number tapped: the camera eases to the zoom that opens it, the person's own move (a fix no longer takes the map).
+  const expandPile = useCallback(
+    ({ center: to, zoom }: { center: [number, number]; zoom: number }) => {
+      setTouched(true)
+      onTouched?.()
+      stop({ center: to, zoom, padding: shown.current.padding, duration: reduceMotion ? 0 : MAP_THEME.camera.easeMs })
+    },
+    [onTouched, reduceMotion]
   )
 
   const style = useMemo(() => homeMapStyle(), [])
+  // The stale callout goes under the dot when, over it, it would meet the edge marker as drawn (iOS drive 2026-11-19), and
+  // under it meets it less (Android re-drive). Asked again when the camera stops or the marker moves.
+  const staleAt = you.kind === 'stale' && center ? ([center.longitude, center.latitude] as [number, number]) : null
+  useEffect(() => {
+    const m = map.current
+    if (!m || !staleAt) {
+      setStaleBelow(false)
+      return
+    }
+    let gone = false
+    // Through a promise: `project` throws synchronously while the map remounts (fix 3).
+    Promise.resolve()
+      .then(() => m.project(staleAt))
+      .then((dot) => {
+        if (!gone) setStaleBelow(staleCalloutBelow(dot as [number, number], STALE_CALLOUT, edgeRect, padding.top))
+      })
+      .catch((error) => Logger.warn('events', 'Stale callout could not place itself', { error: String(error) }))
+    return () => {
+      gone = true
+    }
+  }, [staleAt?.[0], staleAt?.[1], settled, padding.top, edgeRect?.left, edgeRect?.top, edgeRect?.width, edgeRect?.height]) // eslint-disable-line react-hooks/exhaustive-deps -- by value: the arrays are new each render
+
+  // The lead card's own distance when it has one (the same number as the card), else measured from the fix; none without one.
+  const edgeKm = focus?.km ?? (edgeTarget && center ? getDistanceKm(center.latitude, center.longitude, edgeTarget.at[1], edgeTarget.at[0]) : null)
+  const edgeDistance = center && edge?.distance ? distanceText(edgeKm, reading) : null
+  // The map as a whole, for a screen reader (pulse-map 10): read when the camera stops (`settled` re-renders this).
+  const bounds = view.current.bounds
+  const edgeOff = edgeTarget && bounds ? !(edgeTarget.at[0] >= bounds[0] && edgeTarget.at[0] <= bounds[2] && edgeTarget.at[1] >= bounds[1] && edgeTarget.at[1] <= bounds[3]) : false
+  const summary = screenReader
+    ? mapSummary({ bounds, pins, you: you.kind, youLine: you.line, facing, edge: edgeTarget && edgeOff ? { name: edgeTarget.name, distance: edgeDistance } : null })
+    : null
+  // TalkBack cannot reach a Marker inside MapLibre's Android view: the lit names get targets over the map too. iOS reads them.
+  const spokenChips = useMemo(
+    () => (Platform.OS === 'android' && screenReader ? lit.chips.map((c) => ({ id: c.id, kind: c.kind, at: c.at, speech: c.speech })) : []),
+    [lit.chips, screenReader]
+  )
+  // The edge marker tapped: the person asked, so the camera goes there (and the lap is over, their touch).
+  const goToFocus = () => {
+    if (!focusPin) return
+    setTouched(true)
+    onTouched?.()
+    moveTo({ to: [focusPin.longitude, focusPin.latitude], easeMs: MAP_THEME.camera.easeMs })
+  }
+  /*
+   * "+N more · Zoom in" (sheet 16, PICKED A): the box's total over the pins drawn, from the last settled read (so it holds
+   * while you pan). Not under Near me: there the map draws only your reach, and the box's total counts past it. Not with
+   * the drawer full (task 01's rule): the map is covered, so nothing of it is read or pressed under the ink; the cover
+   * fades it on the way up, and it is back once the drawer rests at half.
+   */
+  const zoomNow = view.current.zoom
+  const more = mapShown && loaded.segment === segment && !reachHere ? moreLine(loaded.total, loaded.pins.length, zoomNow < MORE_ZOOM_MAX, segment === 'places' ? 'place' : 'event') : null
+  // One step in where you are looking: your ask, so the lap is over (as the edge marker). Where you are looking is the
+  // middle of the map you can see, read off the screen: after a snap the camera's own middle is the old map's (task 02).
+  const zoomIn = () => {
+    const ref = map.current
+    if (!ref) return
+    setTouched(true)
+    onTouched?.()
+    const at = { zoom: Math.min(MORE_ZOOM_MAX, zoomNow + 1), pitch: view.current.pitch }
+    ref
+      .unproject([width / 2, visibleCentreY(padding, mapHeight)])
+      .then((middle) => moveTo({ to: middle as [number, number], easeMs: MAP_THEME.camera.easeMs, at }))
+      .catch((error) => Logger.warn('events', 'Home map could not zoom in', { error: String(error) }))
+  }
 
   return (
     <>
@@ -533,6 +802,7 @@ export const HomeMap = memo(function HomeMap({
         compass={false}
         // Its default corner is the bell's (R6-7): under the top bar instead.
         compassPosition={compassBelow(topChrome)}
+        onRegionWillChange={() => setMoving(true)}
         onRegionDidChange={onRegionDidChange}
         onDidFinishLoadingMap={onLoaded}
         // Each frame drawn with every tile loaded; the hook makes it one pass per new view or new pins.
@@ -553,11 +823,10 @@ export const HomeMap = memo(function HomeMap({
           }}
         />
         {/*
-         * `mode` passed explicitly: MLRN's Android component starts in COMPASS render mode and applies `mode`
-         * only when given, so the puck followed the compass and the map redrew about 7 times a second forever
-         * (measured on the emulator, step 2c drive). A plain puck redraws only when the fix moves.
+         * You (pulse-map 06): violet, the halo the fix's real accuracy; approximate a soft circle, stale grey; nothing with
+         * sharing off. Our own layers, not the native puck (blue, and on Android a compass mode that redrew the map ~7×/s).
          */}
-        {center ? <NativeUserLocation mode="default" /> : null}
+        <YouMark part="halo" fix={center} sharing={sharing} now={now} />
         {/*
          * Remounted together when the building source switches: the glow goes under
          * the buildings and the lit copies over them, so they must be added after
@@ -565,49 +834,97 @@ export const HomeMap = memo(function HomeMap({
          */}
         <Fragment key={ownTiles ? 'own-buildings' : 'openfreemap-buildings'}>
           {ownTiles && OWN_BUILDINGS_URL ? <OwnBuildings url={OWN_BUILDINGS_URL} states={lit.states} onOpen={open} /> : <CityBuildings />}
-          <GroundGlow data={lit.glow} visible={glowVisible} under={buildingLayerId} />
+          <GroundGlow data={lit.glow} visible={glowVisible} under={buildingLayerId} latitude={(cityCentre ?? fallbackCentre).latitude} />
           <LitBuildings data={lit.bands} onPress={openPlace} over={buildingLayerId} />
         </Fragment>
-        <GeoJSONSource id="pins" data={pinData} onPress={openPlace}>
-          <Layer
-            id="pin-glow"
-            type="circle"
-            maxzoom={LIGHT_MIN_ZOOM}
-            paint={{
-              'circle-color': ['get', 'color'],
-              'circle-radius': ['*', ['get', 'glow'], MAP_THEME.pin.glowPxPerStep],
-              'circle-blur': 1,
-              'circle-opacity': MAP_THEME.pin.glowOpacity,
-            }}
-          />
-          <Layer
-            id="pin-dot"
-            type="circle"
-            maxzoom={LIGHT_MIN_ZOOM}
-            paint={{
-              'circle-color': ['get', 'color'],
-              'circle-radius': MAP_THEME.pin.dotRadiusPx,
-              'circle-stroke-color': MAP_THEME.pin.dotStroke,
-              'circle-stroke-width': MAP_THEME.pin.dotStrokePx,
-            }}
-          />
-        </GeoJSONSource>
+        {/* Near me (board `ringAt`): dark beyond a short ride, the ride as a hairline, a 20-minute walk lit in ember. */}
+        {reachData ? (
+          <>
+            <GeoJSONSource id="reach-mask" data={reachData.mask}>
+              <Layer id="reach-mask-fill" type="fill" paint={{ 'fill-color': REACH.dark }} />
+            </GeoJSONSource>
+            <GeoJSONSource id="reach-ride" data={reachData.ride}>
+              <Layer id="reach-ride-line" type="line" paint={{ 'line-color': REACH.ride, 'line-width': 1 }} />
+            </GeoJSONSource>
+            <GeoJSONSource id="reach-walk" data={reachData.walk}>
+              <Layer id="reach-walk-fill" type="fill" paint={{ 'fill-color': REACH.walk }} />
+              <Layer id="reach-walk-edge" type="line" paint={{ 'line-color': REACH.walkEdge, 'line-width': 2 }} />
+            </GeoJSONSource>
+          </>
+        ) : null}
+        {/* Which way you face (pulse-map 14 A): under every pin, so it never covers a tap. */}
+        <YouBeam fix={center} sharing={sharing} now={now} focused={focused} onFacing={screenReader ? setFacing : undefined} />
+        {/* Every unlit event a dot at every zoom, piles and stacked spots as numbers, the focus on top; a lit place is its light (pulse-map 08, 12 A). */}
+        <EventPiles sourceRef={pileSource} pins={pins} litIds={lit.pinIds} focusId={focusPin?.id ?? null} onOpen={open} onExpand={expandPile}>
+          <YouMark part="dot" fix={center} sharing={sharing} now={now} />
+        </EventPiles>
         <Chips chips={lit.chips} onOpen={open} />
+        {you.kind === 'stale' && center && you.line && mapShown ? <StaleCallout at={[center.longitude, center.latitude]} text={you.line} below={staleBelow} /> : null}
+        {reachData ? <ReachLabels walk={reachData.labels.walk} ride={reachData.labels.ride} /> : null}
         <NearPins pins={nearPins} you={center} />
       </Map>
+      <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+          {/* A screen reader hears the numbers (pulse-map 10): one spoken target each, over the map (Android keeps the map's own children from TalkBack). */}
+          <PileSpeech
+            on={screenReader}
+            map={map}
+            source={pileSource}
+            box={{ left: 0, top: padding.top, right: width, bottom: height - padding.bottom }}
+            settled={settled}
+            summary={summary}
+            chips={spokenChips}
+            onExpand={expandPile}
+            onOpen={open}
+          />
+          {/* The lap's venue off the map you can see: a marker at the edge pointing at it (pulse-map 05); a tap goes there. */}
+          <EdgeMarker
+            map={map}
+            target={edgeTarget}
+            distance={edgeDistance}
+            box={edgeBox}
+            settled={settled}
+            moving={moving}
+            onPress={goToFocus}
+            onPlaced={setEdgeRect}
+          />
+      </View>
       {mapUp ? <MapCredit text={mapCreditLine(ownTiles, typeof style !== 'string')} top={topChrome + SPACE.sm} gestures={gestures} /> : null}
+      {/* Sheet 16 A: 14 pt under the bar's circles. topChrome also holds the bar's 10 pt foot, which put it 16 pt low. */}
+      <MoreLine line={more} top={barCircleBottom(insets.top, Platform.OS === 'android') + SPACE.md + SPACE.xxs} onZoomIn={zoomIn} />
       <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.fade, fadeStyle]} />
-      <LocateButton
-        visible={locateVisible}
-        following={hasFix && !moved}
-        pending={asking}
-        drawerTop={drawerTop}
-        drawer={drawer}
-        onPress={locate}
-      />
+      {/* Nothing to show, or ask for, while the switch is off: not drawn at all (it is faded by the drawer, not by `visible`). */}
+      {you.kind === 'approximate' ? (
+        <ApproximateLine
+          visible={locateVisible}
+          drawerTop={drawerTop}
+          drawer={drawer}
+          lift={locateLift}
+          // expo-location cannot ask iOS for temporary full accuracy: Settings is where Precise is turned on (as Tonight's line).
+          onPress={() => void Linking.openSettings().catch(() => {})}
+        />
+      ) : null}
+      {sharing ? (
+        <LocateButton
+          visible={locateVisible}
+          following={hasFix && !moved}
+          pending={asking}
+          drawerTop={drawerTop}
+          drawer={drawer}
+          lift={locateLift}
+          onPress={locate}
+        />
+      ) : null}
     </>
   )
 })
+
+/** Near me's reach (board `ringAt`): the dark beyond at 58% ink, the ride ring at 28% white, the walk in ember at 16% / 75%. */
+const REACH = {
+  dark: tint(COLOR.ink, 0.58),
+  ride: tint(COLOR.textPrimary, 0.28),
+  walk: tint(COLOR.brandOrange, 0.16),
+  walkEdge: tint(COLOR.brandOrange, 0.75),
+} as const
 
 const styles = StyleSheet.create({
   // The map's own ground, so a jump between cities reads as the one surface fading, not a black flash.

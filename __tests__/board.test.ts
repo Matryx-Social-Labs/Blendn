@@ -10,9 +10,11 @@ import {
   acceptConflictLine,
   askConflictLine,
   BOARD_CLOSED_SENTENCE,
+  saysBoardClosed,
   BOARD_ENABLED,
   BOARD_MAX_POST_LENGTH,
   boardClosed,
+  boardOpen,
   boardMarkSeed,
   boardMessage,
   inboxRequests,
@@ -25,6 +27,7 @@ import {
   type BoardPost,
   type BoardRequest,
 } from '../lib/board'
+import { LOBBY_POST_MAX } from '../lib/lobby'
 import { notificationTarget } from '../lib/notifications'
 
 /**
@@ -79,8 +82,8 @@ describe('the order a board reads in', () => {
 
 describe("an offer’s spaces", () => {
   it('counts them, says full at zero, and says nothing for a post that is not an offer', () => {
-    expect(spacesLabel(2)).toBe('2 spaces left')
-    expect(spacesLabel(1)).toBe('1 space left')
+    expect(spacesLabel(2)).toBe('2 spots left')
+    expect(spacesLabel(1)).toBe('1 spot left')
     expect(spacesLabel(0)).toBe('Full')
     expect(spacesLabel(null)).toBeNull()
   })
@@ -96,6 +99,31 @@ describe('the board closes at doors', () => {
   it('leaves an unknown start to the server', () => {
     expect(boardClosed(undefined, now)).toBe(false)
     expect(boardClosed('not a date', now)).toBe(false)
+  })
+})
+
+describe('boardOpen: the one gate the Scene and the Going tab share', () => {
+  const now = Date.parse('2026-10-01T20:00:00Z')
+  const before = '2026-10-01T20:30:00Z'
+  it('is open before the doors on a night that is on', () => {
+    expect(boardOpen({ start_time: before, status: 'published' }, now)).toBe(true)
+    expect(boardOpen({ start_time: before }, now)).toBe(true)
+  })
+  it('is closed from the doors, and on a night called off', () => {
+    expect(boardOpen({ start_time: '2026-10-01T20:00:00Z', status: 'published' }, now)).toBe(false)
+    expect(boardOpen({ start_time: before, status: 'cancelled' }, now)).toBe(false)
+  })
+  it('leaves an unknown start to the server', () => {
+    expect(boardOpen({ start_time: undefined, status: 'published' }, now)).toBe(true)
+  })
+  it('the Going tab’s tray calls it; the Scene’s card (P-A) asks the server, which keeps it to the close; nothing else judges', () => {
+    const read = (f: string) => readFileSync(join(__dirname, '..', f), 'utf8')
+    // From doors to the close the Lobby is read-only, and the card says so (`pA-ro`): the phone's doors clock must not hide it.
+    expect(read('components/screens/EventDetailScreen.tsx')).not.toContain('boardOpen(')
+    expect(read('components/screens/EventDetailScreen.tsx')).toContain('event && BOARD_ENABLED && !cancelled ?')
+    expect(read('app/(tabs)/going.tsx')).toContain('boardOpen(row)')
+    expect(read('lib/savedEvents.ts')).not.toContain('boardClosed')
+    expect(read('components/screens/EventDetailScreen.tsx')).not.toContain('boardClosed')
   })
 })
 
@@ -123,10 +151,10 @@ describe('BD-CU01: a refusal says which gate, in the server’s words', () => {
     ],
     ['FORBIDDEN', 'You have 5 asks waiting for an answer. Give them a moment.'],
     ['FORBIDDEN', 'You have sent a lot of requests this week. Try again in a few days.'],
-    ['FORBIDDEN', 'The board closes when the doors open — the room is open instead'],
+    ['FORBIDDEN', 'The Lobby closes when the doors open — the room is open instead'],
     ['FORBIDDEN', "Finish setting up your profile first. Blend’n is for people 18 and over."],
     ['AGE_RESTRICTED', 'This event is 21+. Add your age to your profile to check in.'],
-    ['NOT_FOUND', 'That post is no longer on the board'],
+    ['NOT_FOUND', 'That post is no longer in the Lobby'],
     ['RATE_LIMITED', 'Too many requests'],
   ]
 
@@ -204,8 +232,17 @@ describe('a 409 has fixed words, never the server’s', () => {
     expect(acceptConflictLine({ errorCode: 'CONFLICT', error })).toBe(line)
   })
 
-  it('knows the doors by the server’s sentence', () => {
-    expect(BOARD_CLOSED_SENTENCE).toBe('The board closes when the doors open — the room is open instead')
+  it('knows the doors by the server’s sentence, in the Lobby wording and the one before it', () => {
+    expect(BOARD_CLOSED_SENTENCE).toBe('The Lobby closes when the doors open — the room is open instead')
+    expect(saysBoardClosed('The Lobby closes when the doors open — the room is open instead')).toBe(true)
+    expect(saysBoardClosed(' The board closes when the doors open — the room is open instead ')).toBe(true)
+    expect(saysBoardClosed('That offer is full')).toBe(false)
+    expect(saysBoardClosed(undefined)).toBe(false)
+  })
+
+  it('shows the closed sentence in the Lobby wording whichever one the server sent', () => {
+    const before = { errorCode: 'FORBIDDEN', error: 'The board closes when the doors open — the room is open instead' }
+    expect(boardMessage(before, 'fallback')).toBe(BOARD_CLOSED_SENTENCE)
   })
 })
 
@@ -237,6 +274,23 @@ describe('what the Banter shows', () => {
     )
     expect(shown.outgoing.map((r) => r.id)).toEqual(['waiting', 'declined-soon'])
   })
+
+  it('drops an accepted ask whose post’s room you are seated in: the Rooms row is that ride (C5 B-A)', () => {
+    const soon = { id: 'e1', title: 'Soon', startTime: '2026-10-03T20:00:00Z' }
+    const shown = inboxRequests(
+      {
+        incoming: [],
+        outgoing: [
+          request({ id: 'seated', live: false, status: 'accepted', event: soon, post: { id: 'p1', kind: 'offer', body: 'Car' } }),
+          request({ id: 'no-room-yet', live: false, status: 'accepted', event: soon, post: { id: 'p2', kind: 'offer', body: 'Car' } }),
+          request({ id: 'waiting', post: { id: 'p1', kind: 'offer', body: 'Car' } }),
+        ],
+      },
+      now,
+      new Set(['p1'])
+    )
+    expect(shown.outgoing.map((r) => r.id)).toEqual(['no-room-yet', 'waiting'])
+  })
 })
 
 describe('BD-CU03: a mark is seeded on the handle, never on a person', () => {
@@ -246,16 +300,41 @@ describe('BD-CU03: a mark is seeded on the handle, never on a person', () => {
     expect(boardMarkSeed('', 'e1', 'p1')).toBe('e1:p1')
   })
 
-  it('draws no photo and reads no user id on any board surface', () => {
+  it('a post’s photo is the post’s alone: read through photoView, never a profile or a person', () => {
+    const src = readFileSync(join(__dirname, '..', 'components/board/PostPhoto.tsx'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '')
+    expect(src).toMatch(/photoView\(post\.photo, post\.mine\)/)
+    expect(src).not.toMatch(/avatarUrl|profile|userId|user_id|authorId|author_id|OptimizedImage/i)
+    expect(src.match(/source=\{/g)).toHaveLength(1)
+    expect(src).toMatch(/source=\{\{ uri: view\.url \}\}/)
+  })
+
+  it('the compose sheet’s photo is the one picked from the library, warned about, and sent only through the stripping upload', () => {
+    const src = readFileSync(join(__dirname, '..', 'components/board/ComposePhoto.tsx'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '')
+    expect(src).not.toMatch(/avatarUrl|profile|userId|user_id|authorId|author_id|OptimizedImage|getPresignedUploadUrl|launchCamera|'camera'/i)
+    expect(src.match(/source=\{/g)).toHaveLength(1)
+    expect(src).toMatch(/source=\{\{ uri: shot\.uri \}\}/)
+    expect(src).toMatch(/pickImage\('library'\)/)
+    // `uploadChatPhoto` re-encodes first, so no location leaves the phone.
+    expect(src).toMatch(/uploadChatPhoto\(/)
+  })
+
+  it('draws no photo of a person and reads no user id on any board surface', () => {
     const strip = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
     let marks = 0
     for (const file of [
       'components/board/BoardSections.tsx',
       'components/board/BoardRequestsSection.tsx',
+      'components/board/LobbyParts.tsx',
+      'components/board/LobbyCompose.tsx',
       'app/board/[eventId].tsx',
     ]) {
-      const src = strip(readFileSync(join(__dirname, '..', file), 'utf8'))
-      expect(src).not.toMatch(/OptimizedImage|expo-image|avatarUrl|photo|userId|user_id|authorId|author_id/)
+      // A post's own photo (C-A) is drawn in one place, `PostPhoto`, from the post alone; that one line is allowed.
+      // The compose sheet's own picture is `ComposePhoto`'s alone (held to its own rule above); that element and import are allowed.
+      const src = strip(readFileSync(join(__dirname, '..', file), 'utf8')).replace(
+        /<PostPhoto post=\{post\} \/>|import \{ PostPhoto \} from '\.\/PostPhoto'|<ComposePhoto [^>]*\/>|import \{ ComposePhoto \} from '\.\/ComposePhoto'/g,
+        ''
+      )
+      expect(src).not.toMatch(/OptimizedImage|expo-image|avatarUrl|photo|userId|user_id|authorId|author_id/i)
       // Every mark goes through the one seed rule.
       for (const m of src.matchAll(/(?:<BoardMark seed|markSeed|<RequestFace pseudonym)=\{([^}]*)\}/g)) {
         expect(m[1]).toMatch(/^boardMarkSeed\(/)
@@ -276,6 +355,11 @@ describe('board pushes carry no text, and open where the thing lives', () => {
     })
     expect(notificationTarget({ type: 'board_request_accepted' })).toBe('/(tabs)/chat')
   })
+
+  it('sends a post taken down to the Board it was on (SYS-06)', () => {
+    expect(notificationTarget({ type: 'board_post_removed', eventId: 'e1', postId: 'p1' })).toEqual({ pathname: '/board/[eventId]', params: { eventId: 'e1' } })
+    expect(notificationTarget({ type: 'board_post_removed' })).toBe('/(tabs)/chat')
+  })
 })
 
 describe('the board is on, now its safety half has shipped', () => {
@@ -289,9 +373,10 @@ describe('the board is on, now its safety half has shipped', () => {
 
   it('reads one constant at every way in', () => {
     const src = (f: string) => readFileSync(join(__dirname, '..', f), 'utf8')
-    expect(src('components/screens/EventDetailScreen.tsx')).toContain(
-      'event && BOARD_ENABLED && !boardClosed(event.start_time) ?'
-    )
+    expect(src('components/screens/EventDetailScreen.tsx')).toContain('event && BOARD_ENABLED && !cancelled ?')
+    // Going's Lobby line is gated by boardOpen, which reads BOARD_ENABLED (L2, SCRUM-1074).
+    expect(src('app/(tabs)/going.tsx')).toContain('{boardOpen(row) ? <NewInLobbyRow')
+    expect(src('lib/board.ts')).toContain('BOARD_ENABLED && event.status !== ')
     expect(src('app/(tabs)/chat.tsx')).toMatch(/\{BOARD_ENABLED && !trimmed \? <BoardRequestsSection/)
     expect(src('app/board/[eventId].tsx')).toContain('if (!BOARD_ENABLED) return <Redirect href="/(tabs)/events" />')
   })
@@ -313,13 +398,14 @@ describe('the event screen offers the board by the run’s doors, not the day’
 })
 
 describe('a post’s length', () => {
-  it('is the server’s, named once', () => {
+  it('is C-A’s 280 inside the server’s 500, named once', () => {
     expect(BOARD_MAX_POST_LENGTH).toBe(500)
-    const composer = readFileSync(join(__dirname, '..', 'components/board/BoardSections.tsx'), 'utf8')
-    // The TextArea counts against it and Post refuses past it (ds: never enforced by truncation).
-    expect(composer).toContain('limit={BOARD_MAX_POST_LENGTH}')
-    expect(composer).toContain('> BOARD_MAX_POST_LENGTH')
-    expect(composer).not.toMatch(/(maxLength|limit)=\{\d/)
+    expect(LOBBY_POST_MAX).toBe(280)
+    const sheet = readFileSync(join(__dirname, '..', 'components/board/LobbyCompose.tsx'), 'utf8')
+    // The counter counts against it and Post (`mayPost`) refuses past it: never enforced by truncation.
+    expect(sheet).toContain('${counted} / ${LOBBY_POST_MAX}')
+    expect(sheet).toContain('mayPost(')
+    expect(sheet).not.toMatch(/maxLength|limit=\{\d/)
   })
 })
 
@@ -350,7 +436,7 @@ describe('the Banter counts board requests as something to show', () => {
   const chat = () => readFileSync(join(__dirname, '..', 'app/(tabs)/chat.tsx'), 'utf8')
 
   it('does not claim an empty inbox under them', () => {
-    expect(chat()).toContain('const hasHeaderContent = liveRooms.length + blendRooms.length + incomingRequests.length + invites.length + boardCount > 0')
+    expect(chat()).toContain('const hasHeaderContent = waiting.rooms.length + liveRooms.length + blendRooms.length + incomingRequests.length + boardCount > 0')
     expect(chat()).toContain('onCount={setBoardCount}')
   })
 

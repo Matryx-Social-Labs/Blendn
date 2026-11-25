@@ -3,6 +3,7 @@ import { AppState, type AppStateStatus } from 'react-native'
 import * as Location from 'expo-location'
 
 import { apiClient, type PresencePing } from './apiClient'
+import { validAccuracy } from './geo'
 import { Logger } from './logger'
 
 /**
@@ -121,7 +122,7 @@ export function usePresence(eventId: string | null | undefined): PresenceStatus 
         const result = await apiClient.sendPresencePing(eventId, {
           latitude: position.coords.latitude,
           longitude: position.coords.longitude,
-          accuracy: position.coords.accuracy ?? null,
+          accuracy: validAccuracy(position.coords.accuracy),
         })
 
         if (cancelled) return

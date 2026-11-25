@@ -1,7 +1,7 @@
 import * as Notifications from 'expo-notifications'
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { FlatList, Platform, StyleSheet, useWindowDimensions, View } from 'react-native'
+import { FlatList, Platform, StyleSheet, useWindowDimensions, View, type NativeScrollEvent } from 'react-native'
 import Animated, { Easing, FadeIn, FadeOut } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
@@ -9,7 +9,9 @@ import { BrokenLink } from '../../components/chat/BrokenLink'
 import { KeyboardFrame } from '../../components/chat/KeyboardFrame'
 import { ChatHeader, chatFeedFrame, chatHeaderBottom } from '../../components/chat/ChatHeader'
 import { FeedSkeleton, HEADER_FACE, LoadOlder, NewestChip } from '../../components/chat/ChatParts'
-import { DmMessageRow, MatchOpenerCard, NudgeLine, PhotoPreviewSheet, quoteText, RevealLine, RevealSheets, SayHi, type DmRowHandlers } from '../../components/chat/DmParts'
+import { useSkeletonCrossfade } from '../../components/motion/useSkeletonCrossfade'
+import { DmMessageRow, MatchOpenerCard, PhotoPreviewSheet, quoteText, RevealLine, SayHi, SwapNotYetSheet, type DmRowHandlers } from '../../components/chat/DmParts'
+import { personFace } from '../../lib/personFace'
 import { Avatar } from '../../components/ds/Avatar'
 import { ChatBubble } from '../../components/ds/ChatBubble'
 import type { Rect } from '../../components/ds/chatShared'
@@ -79,6 +81,7 @@ import { useAuth } from '../../lib/useAuth'
 import { useFriendAsk } from '../../lib/useFriendAsk'
 import { useComposerLock } from '../../lib/useComposerLock'
 import { scrollListToEnd, useFollowEnd } from '../../lib/useFollowEnd'
+import { useReducedMotion } from '../../lib/motion'
 import { useLatest } from '../../lib/useLatest'
 import { useLiveSync } from '../../lib/useLiveSync'
 import { firstNameOf } from '../../lib/friendsHere'
@@ -153,9 +156,12 @@ function PrivateChatInner() {
   /* The identity of this conversation, from the server: only it can say whether they revealed to you. */
   const [reveal, setReveal] = useState<ConversationRevealState | null>(null)
   const [revealBusy, setRevealBusy] = useState(false)
-  /** You asked them this session: the Asked state (the server keeps no "you asked"). */
-  const [asked, setAsked] = useState(false)
-  const [revealSheet, setRevealSheet] = useState<'confirm' | { notYet: string } | null>(null)
+  /** Swap names refused for want of a photo: the server's sentence, with the way to add one. */
+  const [notYet, setNotYet] = useState<string | null>(null)
+  /** Any other refusal of a swap or a cancel, said in the strip. */
+  const [swapError, setSwapError] = useState<string | null>(null)
+  /** Your own room pseudonym in this chat (your side of the strip); null for a message request. */
+  const [yourPseudonym, setYourPseudonym] = useState<string | null>(null)
   /* The conversation's own record did not load: options says so and offers to try again. */
   const [revealFailed, setRevealFailed] = useState(false)
   const [revealAttempt, setRevealAttempt] = useState(0)
@@ -186,6 +192,7 @@ function PrivateChatInner() {
       setOtherId(r.data.otherUser?.id || null)
       setOtherImage(r.data.otherUser?.image || null)
       setFriend(parseFriendOffer(r.data.friend))
+      setYourPseudonym(r.data.yourPseudonym ?? null)
       setReveal({
         displayName: r.data.otherUser?.name || 'Someone',
         youRevealed: r.data.youRevealed ?? false,
@@ -206,7 +213,7 @@ function PrivateChatInner() {
   useEffect(() => {
     const sub = Notifications.addNotificationReceivedListener((n) => {
       const data = n.request.content.data
-      if (data?.type === 'reveal' && data.conversationId === conversation) setRevealAttempt((x) => x + 1)
+      if ((data?.type === 'reveal' || data?.type === 'reveal_request') && data.conversationId === conversation) setRevealAttempt((x) => x + 1)
     })
     return () => sub.remove()
   }, [conversation])
@@ -225,11 +232,10 @@ function PrivateChatInner() {
   const otherTypingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const setMessage = (id: string, change: (m: PrivateMessage) => PrivateMessage) => setMessages((prev) => prev.map((m) => (m.id === id ? change(m) : m)))
 
-  // Their profile, only once they are a name to you: an accepted request, or a match who revealed.
+  // Their profile, only on an accepted message request: a swap shows a first name and a photo in this chat, never the profile.
   const profileId = otherId || idParam(otherUserId) || undefined
-  const theirRealName = !!reveal && (reveal.pseudonymous === false || reveal.theyRevealed)
   const openProfile =
-    theirRealName && profileId
+    reveal?.pseudonymous === false && profileId
       ? () => router.push({ pathname: '/user/[id]', params: { id: String(profileId) } } as never)
       : undefined
   // Nobody is called "Chat" (r7 M10: a failed thread titled itself "Chat" and offered "Message Chat"): with no name yet, the
@@ -243,7 +249,7 @@ function PrivateChatInner() {
   const friendAsk = useFriendAsk(name)
   const friendNow = friendAction(friend)
   const friendOffered = friendNow?.lit === true
-  const view = reveal ? revealView(reveal, asked, friendOffered) : null
+  const view = reveal ? revealView(reveal, friendOffered) : null
   /** `inline`: from the options sheet, which shows a refusal under its row instead of a toast. */
   const addFriend = async (inline: boolean): Promise<{ ok: true } | { ok: false; error: string }> => {
     const result = await friendAsk.ask(otherId, { inline })
@@ -259,44 +265,57 @@ function PrivateChatInner() {
     if (panelOpen) setFoldedPanel(panelKey)
   }
 
-  /* Ask them: the Asked state on the server's yes. No haptic (Flow 5 DM annotation). */
-  const askThem = () => {
+  /*
+   * Swap names (identity model; board `swap-names/`, advisor pick A): one tap, no confirm, because nothing shows until you
+   * have both tapped and you can cancel until then. Your tap is also the ask. H.success only when the server says you have
+   * both swapped; the names and photos then resolve in (#23). Refused for want of a photo: the Not yet sheet, with the way
+   * to add one. Any other refusal is said in the strip.
+   */
+  const swapNames = () => {
     if (!reveal || revealBusy) return
     setRevealBusy(true)
-    void apiClient
-      .requestReveal(conversation)
-      .then((r) => {
-        if (r.success) setAsked(true)
-        else showToast(userMessage(r, "Couldn’t ask them. Try again."), 'error', { haptic: 'error' })
-      })
-      .finally(() => setRevealBusy(false))
-  }
-
-  /*
-   * Show them who you are. The confirmation is not ceremony: the server has no
-   * path back, so the sheet says so before the tap. On the server's yes the
-   * names resolve in (#23) with H.success; the photo gate's refusal is the
-   * server's sentence, verbatim, in the Not yet sheet.
-   */
-  const showThem = () => {
-    setRevealBusy(true)
+    setSwapError(null)
     void apiClient
       .revealInConversation(conversation)
       .then((r) => {
         if (r.success) {
-          H.success()
-          setRevealSheet(null)
+          if (r.data?.mutual) H.success()
           setReveal((prev) => (prev ? { ...prev, youRevealed: true } : prev))
-          // Their reveal may already be in: your reveal is what can turn Add friend on, and only the server says so.
+          // The names (and Add friend) are the server's to give: read the conversation again.
           setRevealAttempt((n) => n + 1)
+        } else if (r.errorCode === 'reveal_incomplete') {
+          setNotYet(userMessage(r, 'Add a photo to your profile first'))
         } else {
-          setRevealSheet({ notYet: userMessage(r, "Couldn’t reveal. Try again.") })
+          setSwapError(userMessage(r, 'Couldn’t swap names. Try again.'))
         }
       })
       .finally(() => setRevealBusy(false))
   }
 
-  const scrollToBottom = (animated = true) => scrollListToEnd(flatListRef.current, animated)
+  /* Cancel while they haven't tapped. A 409 means they just did: the read again shows you both swapped. */
+  const cancelSwap = () => {
+    if (!reveal || revealBusy) return
+    setRevealBusy(true)
+    setSwapError(null)
+    void apiClient
+      .cancelReveal(conversation)
+      .then((r) => {
+        if (r.success) setReveal((prev) => (prev ? { ...prev, youRevealed: false } : prev))
+        else if (r.errorCode !== 'CONFLICT') setSwapError(userMessage(r, 'Couldn’t cancel. Try again.'))
+        setRevealAttempt((n) => n + 1)
+      })
+      .finally(() => setRevealBusy(false))
+  }
+
+  // The unread rule is kept in place, layout pass by layout pass, until the reader's hand or a scroll to the end takes over.
+  const ruleHeldRef = useRef(false)
+  // Reduce Motion: the jump to the newest still lands, without the smooth scroll (audit M9). Through a ref, because the
+  // socket handlers keep the `scrollToBottom` of the render that subscribed them, and the setting can change mid-chat.
+  const reduceMotion = useLatest(useReducedMotion())
+  const scrollToBottom = (animated = true) => {
+    ruleHeldRef.current = false
+    scrollListToEnd(flatListRef.current, animated && !reduceMotion.current)
+  }
   const follow = useFollowEnd(() => scrollToBottom(false))
 
   const loadMessages = (cursor?: string, limit = DM_PAGE) =>
@@ -354,6 +373,15 @@ function PrivateChatInner() {
         if (!cursor) setLoadError(true)
       })
       .finally(() => setLoading(false))
+
+  /* Where the list is, from onScroll and from where a drag or the pill's jump came to rest. */
+  const noteOffset = ({ contentSize, contentOffset, layoutMeasurement }: NativeScrollEvent) => {
+    const atBottom = contentSize.height - contentOffset.y - layoutMeasurement.height < AT_END
+    isAtBottomRef.current = atBottom
+    follow.noteScroll(atBottom)
+    setAwayFromEnd(!atBottom)
+    if (atBottom) setNewWhileAway(0)
+  }
 
   /** Older pages until the first unread is on screen — at most three more. */
   const loadBackTo = async (messageId: string, cursor: string) => {
@@ -572,6 +600,8 @@ function PrivateChatInner() {
     () => withUnreadDivider(withDaySeparators(messages, (m) => m.createdAt), unread?.firstId, unread?.count ?? 0),
     [messages, unread]
   )
+  /* The skeleton is the list's empty slot, so the first messages fade in as cells; later ones arrive as they do (the hook's window). */
+  const arrive = useSkeletonCrossfade(loading && !chatItems.length)
   /*
    * Your last message carries the receipt, under it (Flow 5 DM #12–#13); never in a room. One moderation withheld was
    * never sent, so it is skipped: "Sent" under the placeholder was untrue, and it kept the thread polling (rc8 #2).
@@ -603,13 +633,22 @@ function PrivateChatInner() {
     }, [awaitingReceipt, reloadRef])
   )
 
-  /* Scroll to the unread rule once it is in the list (SCRUM-406). */
+  /*
+   * Scroll to the unread rule once it is in the list (SCRUM-406), and keep it there while rows lay out. A jump into rows
+   * not yet measured lands by an estimate, and the rows above the rule then measure taller or shorter, so one scroll opened
+   * ~110 messages short of it on Android (SCRUM-958). Older pages also keep arriving above it, so its index moves: every
+   * scroll, and the retry after one that failed, reads where it is now.
+   */
   const anchoredRef = useRef(false)
   const dividerIndex = chatItems.findIndex((i) => i.kind === 'unread')
+  const ruleAt = useLatest(dividerIndex)
+  const scrollToRule = () => ruleAt.current >= 0 && flatListRef.current?.scrollToIndex({ index: ruleAt.current, viewPosition: 0.1, animated: false })
   useEffect(() => {
     if (anchoredRef.current || dividerIndex < 0) return
     anchoredRef.current = true
-    requestAnimationFrame(() => flatListRef.current?.scrollToIndex({ index: dividerIndex, viewPosition: 0.1, animated: false }))
+    ruleHeldRef.current = true
+    requestAnimationFrame(scrollToRule)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dividerIndex])
 
   /* The long-press for a DM (R3-D5 5.2): no reactions; Reply · Copy (· Report… on theirs); Not sent opens its sheet. */
@@ -659,17 +698,18 @@ function PrivateChatInner() {
   )
 
   const renderChatItem = ({ item, index }: { item: ChatListItem; index: number }) => {
-    if (item.kind === 'separator') return <DayPill text={item.label} />
+    if (item.kind === 'separator') return <Animated.View entering={arrive}><DayPill text={item.label} /></Animated.View>
     // The frames' feed gap around the rule, so it never touches the day pill above it (drive 2, Android).
     if (item.kind === 'unread')
       return (
-        <View style={styles.unreadRule}>
+        <Animated.View entering={arrive} style={styles.unreadRule}>
           <UnreadRule count={unread?.count} word="unread" testID="dm-unread" />
-        </View>
+        </Animated.View>
       )
     const place = runPlace(chatItems, index, (i) => (i.kind === 'message' ? i.senderId : null), (i) => (i.kind === 'message' ? Date.parse(i.createdAt) || 0 : 0))
     const mine = item.senderId === myId
     return (
+      <Animated.View entering={arrive}>
       <DmMessageRow
         item={item}
         mine={mine}
@@ -680,6 +720,7 @@ function PrivateChatInner() {
         animate={arrivingRef.current.has(item.id)}
         handlers={handlers}
       />
+      </Animated.View>
     )
   }
 
@@ -710,7 +751,8 @@ function PrivateChatInner() {
   /* The options: the conversation's own sheet (lib/safetyUtils), or why it can't open yet. */
   const openOptions = () => {
     if (reveal) {
-      return showConversationOptions(conversation, name, reveal.youRevealed || reveal.pseudonymous === false, {
+      // They know you once you have both swapped (a one-sided tap shows nothing), or on a request that was never anonymous.
+      return showConversationOptions(conversation, name, reveal.theyRevealed || reveal.pseudonymous === false, {
         onLeft: () => router.back(),
         fromMatch: reveal.fromMatch ?? true,
         onViewProfile: openProfile,
@@ -748,12 +790,14 @@ function PrivateChatInner() {
   }
 
   const opener = matchOpener({ fromMatch: reveal?.fromMatch, otherName: reveal?.displayName })
-  /* Faces only where they have been earned: theirs a photo once they revealed, yours once you did. */
-  // Their mark until they reveal; then the server's photo — never one from the route.
-  const head = ended ? null : directHeaderAvatar(reveal, otherImage)
-  const themFace: Face =
-    head?.kind === 'photo' ? { kind: 'photo', uri: head.url } : { kind: 'creature', pseudonym: head?.kind === 'mark' ? head.seed : ended ? 'Conversation' : name }
-  const youFace: Face = reveal?.youRevealed && authUser?.image ? { kind: 'photo', uri: authUser.image } : { kind: 'creature', pseudonym: 'You' }
+  /*
+   * Faces by `personFace` (owner F1 B), only where they have been earned: theirs a creature until they reveal, then the
+   * server's photo or their initial (never a photo from the route); yours the same once you revealed.
+   */
+  const themFace: Face = ended ? { kind: 'creature', pseudonym: 'Conversation' } : directHeaderAvatar(reveal, otherImage, name)
+  // Yours as they see it: your pseudonym's creature until you have both swapped (a one-sided tap shows nothing), then your photo.
+  const swapped = !!reveal && reveal.pseudonymous && reveal.theyRevealed
+  const youFace: Face = swapped ? personFace({ named: true, name: authUser?.name || YOU, photo: authUser?.image }) : { kind: 'creature', pseudonym: yourPseudonym || 'You' }
   // Photos once you can both see each other, or the conversation never hid anyone (R9, admin #697).
   const photosAllowed = !!reveal && (!reveal.pseudonymous || (reveal.youRevealed && reveal.theyRevealed))
   const { fontScale } = useWindowDimensions()
@@ -768,7 +812,12 @@ function PrivateChatInner() {
    * Say hi outgrow the frame, so pinning the end hid the opener's faces and "You both said" under the reveal bar on open
    * (RC drive 3 D-A). It opens at its start; the first message (Say hi included) follows the end as before.
    */
-  const followFeed = feed.length ? follow.onContentSizeChange : undefined
+  const followFeed = feed.length
+    ? () => {
+        follow.onContentSizeChange()
+        if (ruleHeldRef.current) scrollToRule()
+      }
+    : undefined
 
   return (
     <View style={styles.screen}>
@@ -799,10 +848,14 @@ function PrivateChatInner() {
               keyboardDismissMode={KEYBOARD_DISMISS}
               onTouchEnd={foldPanel}
               onScrollEndDrag={foldPanel}
+              // Android clips off-screen rows by default; the jump to the newest under Reduce Motion lands before they are re-attached, a blank frame (SCRUM-1040).
+              removeClippedSubviews={false}
               maxToRenderPerBatch={12}
               windowSize={10}
               initialNumToRender={25}
               onStartReached={() => void loadOlderMessages()}
+              // Older pages go in above the reader: the row in view stays in view, so the unread rule stays under the thumb (SCRUM-958).
+              maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
               ListHeaderComponent={
                 <View>
                   {/* Permanent, not an empty state: seen by both, whoever types first. */}
@@ -847,17 +900,17 @@ function PrivateChatInner() {
               onContentSizeChange={followFeed}
               onScrollToIndexFailed={(info) => {
                 // Not measured yet: get close by the average row, then land on it.
-                flatListRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: false })
-                setTimeout(() => flatListRef.current?.scrollToIndex({ index: info.index, viewPosition: 0.1, animated: false }), 120)
+                flatListRef.current?.scrollToOffset({ offset: info.averageItemLength * Math.max(ruleAt.current, 0), animated: false })
+                setTimeout(scrollToRule, 120)
               }}
-              onScrollBeginDrag={follow.onScrollBeginDrag}
-              onScroll={(e) => {
-                const { contentSize, contentOffset, layoutMeasurement } = e.nativeEvent
-                const atBottom = contentSize.height - contentOffset.y - layoutMeasurement.height < AT_END
-                isAtBottomRef.current = atBottom
-                follow.noteAtEnd(atBottom)
-                setAwayFromEnd(!atBottom)
-                if (atBottom) setNewWhileAway(0)
+              onScrollBeginDrag={() => {
+                ruleHeldRef.current = false
+                follow.onScrollBeginDrag()
+              }}
+              onScroll={(e) => noteOffset(e.nativeEvent)}
+              // Where a drag or the pill's jump came to rest: onScroll's last reading can be throttled away (driven 2026-11-11).
+              onMomentumScrollEnd={(e) => {
+                noteOffset(e.nativeEvent)
               }}
               scrollEventThrottle={80}
             />
@@ -887,7 +940,7 @@ function PrivateChatInner() {
                   reply={replyingTo ? { name: replyingTo.senderId === myId ? 'yourself' : name, text: quoteText(quoteFrom(replyingTo)) } : null}
                   onCancelReply={() => setReplyingTo(null)}
                   // A real name by its first name, so the placeholder holds one line (C30); a pseudonym is whole ("Arctic Falcon").
-                  placeholder={`Message ${theirRealName ? firstNameOf(name) : name}`}
+                  placeholder={`Message ${reveal && (!reveal.pseudonymous || reveal.theyRevealed) ? firstNameOf(name) : name}`}
                   onAttach={photosAllowed ? () => void attach() : undefined}
                   onFocus={() => setTimeout(() => scrollToBottom(false), 120)}
                 />
@@ -901,7 +954,7 @@ function PrivateChatInner() {
         testID="dm-header"
         title={ended ? 'Conversation' : name}
         leading={
-          <Animated.View key={themFace.kind === 'photo' ? themFace.uri : 'mark'} entering={revealIn}>
+          <Animated.View key={themFace.kind === 'photo' ? themFace.uri : themFace.kind} entering={revealIn}>
             <Avatar size={HEADER_FACE} {...themFace} />
           </Animated.View>
         }
@@ -911,7 +964,7 @@ function PrivateChatInner() {
         onMore={openOptions}
         // Their name once they are one; until then the face and the reveal line reopen a panel that was folded away.
         onIdentity={ended ? undefined : (openProfile ?? (panelKey !== null && !panelOpen ? () => setFoldedPanel(null) : undefined))}
-        identityHint={openProfile ? 'Opens their profile' : 'Shows the reveal options'}
+        identityHint={openProfile ? 'Opens their profile' : 'Shows Swap names'}
       />
       {/* The reveal stays in view under the header while either of you is a pseudonym; the feed starts below it. */}
       {panelOpen && view?.bar ? (
@@ -925,10 +978,12 @@ function PrivateChatInner() {
         >
           <RevealBar
             state={view.bar}
-            you={{ face: youFace, name: reveal?.youRevealed ? authUser?.name?.split(' ')[0] || YOU : YOU }}
+            you={{ face: youFace, name: swapped ? authUser?.name?.split(' ')[0] || YOU : yourPseudonym || YOU }}
             them={{ face: themFace, name }}
-            onShow={() => setRevealSheet('confirm')}
-            onAsk={askThem}
+            onSwap={swapNames}
+            onCancel={cancelSwap}
+            busy={revealBusy}
+            error={swapError}
             friend={
               view.bar === 'both' && friendNow
                 ? { label: friendNow.label, accept: friendNow.kind === 'accept', busy: friendAsk.busy, onPress: () => void addFriend(false) }
@@ -936,7 +991,6 @@ function PrivateChatInner() {
             }
             testID="dm-reveal"
           />
-          {view.nudge ? <NudgeLine text={view.nudge} /> : null}
         </Animated.View>
       ) : null}
       {ended ? null : <RealtimeStatusBanner status={socketStatus} style={{ ...styles.banner, top: top + barSpace }} />}
@@ -993,14 +1047,11 @@ function PrivateChatInner() {
         }}
       />
 
-      <RevealSheets
-        name={name}
-        sheet={revealSheet}
-        busy={revealBusy}
-        onShow={showThem}
-        onClose={() => setRevealSheet(null)}
+      <SwapNotYetSheet
+        message={notYet}
+        onClose={() => setNotYet(null)}
         onAddPhoto={() => {
-          setRevealSheet(null)
+          setNotYet(null)
           router.push('/edit-profile')
         }}
       />

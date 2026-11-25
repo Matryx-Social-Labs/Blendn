@@ -16,7 +16,7 @@ const clamp = (n: number) => Math.min(1, Math.max(0, n))
 /**
  * The onboarding progress (guidelines/components/ProgressBar.html): a 4 pt
  * surfaceSunken track with a fill in the screen's hue, determinate only. It sits under the
- * header, whose "Step n of 8" is what a screen reader hears; the bar itself is
+ * header, whose "Step n of 5" is what a screen reader hears; the bar itself is
  * hidden. Waiting on a server is the loader, never this.
  *
  * The fill grows on `M.settle` after a 200 ms hold; Reduce Motion jumps it.

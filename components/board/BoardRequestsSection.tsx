@@ -1,6 +1,7 @@
 import { router, useFocusEffect } from 'expo-router'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Pressable, StyleSheet, View } from 'react-native'
+import Reanimated from 'react-native-reanimated'
 
 import { RequestCard, RequestFace } from '../banter/BanterParts'
 import { SectionHeader } from '../ds/SectionHeader'
@@ -9,22 +10,32 @@ import { useToast } from '../Toast'
 import { Text } from '../ui/Text'
 import { apiClient } from '../../lib/apiClient'
 import {
+  NAMES_ON_ACCEPT,
   acceptConflictLine,
   boardMarkSeed,
   boardMessage,
   inboxRequests,
   isSettled,
+  notSeated,
   outgoingLine,
   type BoardRequest,
   type BoardRequests,
 } from '../../lib/board'
+import { refreshInboxBadge } from '../../lib/inboxBadge'
 import { Logger } from '../../lib/logger'
 import { boardSafetySheet } from '../../lib/safetyUtils'
 import { showSheet } from '../../lib/sheet'
-import { COLOR } from '../../lib/design/tokens'
-import { CONTROL, OPACITY, SPACE } from '../../lib/theme'
+import { COLOR, SIZE, SPACE } from '../../lib/design/tokens'
+import { OPACITY } from '../../lib/theme'
 import { BoardMark } from './BoardSections'
 import { useBanterPress } from '../banter/pressGuard'
+import { rowBack, rowOut, rowReflow } from '../motion/presence'
+import { useAnnounced } from '../ds/shared'
+import { H } from '../../lib/haptics'
+import { useReducedMotion } from '../../lib/motion'
+
+/** A withdrawal that did not go out, on its row: nothing from the server's answer, which could carry a decline. */
+export const WITHDRAW_FAILED = 'Couldn’t withdraw. Try again.'
 
 type Answer = 'accept' | 'decline' | 'withdraw'
 
@@ -49,9 +60,12 @@ type Answer = 'accept' | 'decline' | 'withdraw'
 export function BoardRequestsSection({
   refreshKey,
   onCount,
+  seatedPosts,
 }: {
   refreshKey: number
   onCount: (count: number) => void
+  /** The posts whose Lobby rooms you are seated in: their Rooms rows stand for your accepted asks on them. */
+  seatedPosts: ReadonlySet<string>
 }) {
   const { showToast } = useToast()
   const [requests, setRequests] = useState<BoardRequests>({ incoming: [], outgoing: [] })
@@ -60,6 +74,9 @@ export function BoardRequestsSection({
   const busyRef = useRef(new Set<string>())
   // What became of an accept that did not go through, said quietly on the ask.
   const [notes, setNotes] = useState<Record<string, string>>({})
+  // The one row a failed answer just put back: it fades in where it was (Going's Undo); no other row enters.
+  const [restoredId, setRestoredId] = useState<string | null>(null)
+  const reduceMotion = useReducedMotion()
 
   const apply = useCallback((result: Awaited<ReturnType<typeof apiClient.getBoardRequests>>) => {
     // A failure keeps what was drawn: these are secondary to the conversations.
@@ -88,7 +105,8 @@ export function BoardRequestsSection({
     if (refreshKey > 0) void load()
   }, [refreshKey, load])
 
-  const shown = requests.incoming.length + requests.outgoing.length
+  const outgoing = useMemo(() => requests.outgoing.filter((r) => notSeated(r, seatedPosts)), [requests, seatedPosts])
+  const shown = requests.incoming.length + outgoing.length
   useEffect(() => onCount(shown), [shown, onCount])
 
   const setBusyFor = (id: string, on: boolean) => {
@@ -103,13 +121,15 @@ export function BoardRequestsSection({
   })
 
   /** Put one row back where it was, leaving anything loaded since alone. */
-  const restore = (request: BoardRequest, side: keyof BoardRequests, at: number) =>
+  const restore = (request: BoardRequest, side: keyof BoardRequests, at: number) => {
+    setRestoredId(request.id)
     setRequests((prev) => {
       if (prev[side].some((r) => r.id === request.id)) return prev
       const rows = [...prev[side]]
       rows.splice(Math.min(at, rows.length), 0, request)
       return { ...prev, [side]: rows }
     })
+  }
 
   /*
    * Accept holds the row until the conversation exists, then opens it. That
@@ -125,13 +145,15 @@ export function BoardRequestsSection({
   const answer = async (request: BoardRequest, action: Answer) => {
     if (busyRef.current.has(request.id)) return
     setBusyFor(request.id, true)
+    if (action === 'withdraw') setNotes(({ [request.id]: _, ...rest }) => rest)
     const side: keyof BoardRequests = action === 'withdraw' ? 'outgoing' : 'incoming'
     const at = requests[side].findIndex((r) => r.id === request.id)
     if (action !== 'accept') setRequests((prev) => without(prev, request.id))
 
     let result: Awaited<ReturnType<typeof apiClient.answerBoardRequest>>
     try {
-      result = await apiClient.answerBoardRequest(request.id, action)
+      // The row says NAMES_ON_ACCEPT.accept above Accept, so the accept carries the flag (the chat opens swapped if the ask did too).
+      result = action === 'accept' ? await apiClient.answerBoardRequest(request.id, action, true) : await apiClient.answerBoardRequest(request.id, action)
     } catch (error) {
       result = { success: false, error: String(error) }
     } finally {
@@ -139,6 +161,8 @@ export function BoardRequestsSection({
     }
 
     if (result.success) {
+      // The Banter tab's dot holds the Lobby asks waiting on you (requests placement A): the server's count, read again now.
+      if (action !== 'withdraw') void refreshInboxBadge()
       if (action === 'accept') {
         setRequests((prev) => without(prev, request.id))
         if (result.data?.conversationId) {
@@ -157,8 +181,13 @@ export function BoardRequestsSection({
       return
     }
     if (action !== 'accept') restore(request, side, at)
-    // Withdrawing is yours alone and nothing hangs on it: the row coming back is the answer.
-    if (action !== 'withdraw') showToast(boardMessage(result, `Couldn’t ${action} that. Try again.`), 'error', { haptic: 'error' })
+    if (action !== 'withdraw') {
+      showToast(boardMessage(result, `Couldn’t ${action} that. Try again.`), 'error', { haptic: 'error' })
+      return
+    }
+    // Withdrawing is yours alone: no toast, a line on the row that came back (heard too, M20), and never the server's words.
+    H.error()
+    setNotes((prev) => ({ ...prev, [request.id]: WITHDRAW_FAILED }))
   }
 
   /** Report or block the asker, by the ask: the board never names anybody to the client. */
@@ -172,41 +201,52 @@ export function BoardRequestsSection({
 
   if (shown === 0) return null
 
+  // The last row takes its heading with it (iOS drive): the section and YOU ASKED fade out with it, not a frame before,
+  // and the section fades back in with a row a failed answer put back (and as it first arrives, a beat after the Banter).
   return (
-    <View style={styles.section}>
-      <SectionHeader title="The Board" count={requests.incoming.length > 0 ? requests.incoming.length : undefined} />
+    <Reanimated.View style={styles.section} entering={reduceMotion ? undefined : rowBack} exiting={reduceMotion ? undefined : rowOut}>
+      <SectionHeader title="The Lobby" count={requests.incoming.length > 0 ? requests.incoming.length : undefined} />
       {requests.incoming.map((r) => (
-        <RequestCard
+        <Reanimated.View
           key={r.id}
-          testID={`board-request-${r.id}`}
-          // The asker is a handle: their generated mark, never a photo (`boardMarkSeed`).
-          face={<RequestFace pseudonym={boardMarkSeed(r.counterpart, r.event.id, r.id)} />}
-          name={r.counterpart}
-          note={incomingMessage(r)}
-          foot={notes[r.id]}
-          time={inboxTimeLabel(r.createdAt)}
-          pending={busy.has(r.id)}
-          onAccept={() => void answer(r, 'accept')}
-          onDecline={() => void answer(r, 'decline')}
-          onMore={() => more(r)}
-        />
+          exiting={reduceMotion ? undefined : rowOut}
+          layout={reduceMotion ? undefined : rowReflow}
+          entering={!reduceMotion && restoredId === r.id ? rowBack : undefined}
+        >
+          <RequestCard
+            testID={`board-request-${r.id}`}
+            // The asker is a handle: their generated mark, never a photo (`boardMarkSeed`).
+            face={<RequestFace pseudonym={boardMarkSeed(r.counterpart, r.event.id, r.id)} />}
+            name={r.counterpart}
+            note={incomingMessage(r)}
+            foot={notes[r.id]}
+            time={inboxTimeLabel(r.createdAt)}
+            pending={busy.has(r.id)}
+            consent={NAMES_ON_ACCEPT.accept}
+            onAccept={() => void answer(r, 'accept')}
+            onDecline={() => void answer(r, 'decline')}
+            onMore={() => more(r)}
+          />
+        </Reanimated.View>
       ))}
-      {requests.outgoing.length > 0 ? (
-        <View style={styles.outgoing}>
+      {outgoing.length > 0 ? (
+        <Reanimated.View style={styles.outgoing} exiting={reduceMotion ? undefined : rowOut} layout={reduceMotion ? undefined : rowReflow}>
           <Text variant="label" accessibilityRole="header">
             YOU ASKED
           </Text>
-          {requests.outgoing.map((r) => (
-            <OutgoingRow
+          {outgoing.map((r) => (
+            <Reanimated.View
               key={r.id}
-              request={r}
-              busy={busy.has(r.id)}
-              onWithdraw={() => void answer(r, 'withdraw')}
-            />
+              exiting={reduceMotion ? undefined : rowOut}
+              layout={reduceMotion ? undefined : rowReflow}
+              entering={!reduceMotion && restoredId === r.id ? rowBack : undefined}
+            >
+              <OutgoingRow request={r} busy={busy.has(r.id)} note={notes[r.id]} onWithdraw={() => void answer(r, 'withdraw')} />
+            </Reanimated.View>
           ))}
-        </View>
+        </Reanimated.View>
       ) : null}
-    </View>
+    </Reanimated.View>
   )
 }
 
@@ -224,12 +264,16 @@ function incomingMessage(r: BoardRequest): string {
 function OutgoingRow({
   request,
   busy,
+  note,
   onWithdraw,
 }: {
   request: BoardRequest
   busy: boolean
+  /** A withdrawal that did not go out (`WITHDRAW_FAILED`). */
+  note?: string
   onWithdraw: () => void
 }) {
+  useAnnounced(note)
   // Inside the Banter's list: a lift after a hold withdraws nothing (components/banter/pressGuard.ts).
   onWithdraw = useBanterPress(onWithdraw)
   const line = outgoingLine(request)
@@ -241,6 +285,11 @@ function OutgoingRow({
           You asked {request.counterpart} · {request.event.title}
         </Text>
         <Text variant="meta">{line}</Text>
+        {note ? (
+          <Text variant="meta" accessibilityLiveRegion="polite">
+            {note}
+          </Text>
+        ) : null}
       </View>
       {request.live ? (
         <Pressable
@@ -266,5 +315,5 @@ const styles = StyleSheet.create({
   outgoing: { gap: SPACE.md },
   outRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md },
   outText: { flex: 1 },
-  withdraw: { minHeight: CONTROL.md, justifyContent: 'center', paddingHorizontal: SPACE.sm },
+  withdraw: { minHeight: SIZE.control, justifyContent: 'center', paddingHorizontal: SPACE.sm },
 })

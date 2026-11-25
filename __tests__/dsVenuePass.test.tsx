@@ -49,7 +49,7 @@ afterEach(() => jest.useRealTimers())
 
 describe('<VenuePass>', () => {
   const pass = (props: Partial<React.ComponentProps<typeof VenuePass>> = {}) =>
-    render(<VenuePass title="Vinyl Night" hereCount={14} tasteCount={4} onConfirm={jest.fn()} testID="v" {...props} />)
+    render(<VenuePass title="Vinyl Night" hereCount={14} tasteCount={3} onConfirm={jest.fn()} testID="v" {...props} />)
 
   it('is the sheet tier at radius 24, with the thumb, the label, the title and N inside now', async () => {
     await pass({ cover: 'https://example.com/cover.jpg' })
@@ -64,13 +64,30 @@ describe('<VenuePass>', () => {
   it('reads as one head, then the tease (never who), then the hold with the consequence as its hint', async () => {
     await pass()
     expect(screen.getByLabelText('You’re here. Vinyl Night. 14 inside now.')).toBeTruthy()
-    expect(screen.getByLabelText('4 people here share your taste')).toBeTruthy()
+    expect(screen.getByLabelText('3 or more people here share your taste')).toBeTruthy()
     expect(screen.getAllByText('?', { includeHiddenElements: true })).toHaveLength(3)
-    const hold = screen.getByRole('button', { name: 'Hold to blend in' })
+    const hold = screen.getByRole('button', { name: 'Hold to Blend’n' })
     expect(hold.props.accessibilityHint).toBe('Checks you in. Other people at this event will see you.')
   })
 
-  it('no taste matches: no tease; nobody in yet: “Be the first one in”', async () => {
+  it('the count is a floor, so it reads as one: 3+ and 10+, never “3 people” when 7 share', async () => {
+    await pass({ tasteCount: 10 })
+    expect(screen.getByText('10+ here share your taste', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.queryByText(/people here/, { includeHiddenElements: true })).toBeNull()
+  })
+
+  it('under three is never shown, even from a stale payload: no “1+” pointing at one person', async () => {
+    await pass({ tasteCount: 2 })
+    expect(screen.queryByText(/share your taste/, { includeHiddenElements: true })).toBeNull()
+  })
+
+  it('no taste matches (null, or 0): no tease; nobody in yet: “Be the first one in”', async () => {
+    await pass({ tasteCount: null })
+    expect(screen.queryByText('?', { includeHiddenElements: true })).toBeNull()
+    expect(screen.queryByText(/share your taste/, { includeHiddenElements: true })).toBeNull()
+  })
+
+  it('nobody in yet: no tease, and “Be the first one in”', async () => {
     await pass({ tasteCount: 0, hereCount: 0 })
     expect(screen.queryByText('?', { includeHiddenElements: true })).toBeNull()
     expect(screen.getByLabelText('You’re here. Vinyl Night. Be the first one in.')).toBeTruthy()
@@ -84,6 +101,13 @@ describe('<VenuePass>', () => {
   it('outside the fence the hold is dimmed under its own label', async () => {
     await pass({ disabled: true, holdLabel: 'Go live when you’re here · 350 m', note: 'Walk in and the pass arms itself.' })
     expect(screen.getByRole('button').props.accessibilityState).toMatchObject({ disabled: true })
+  })
+
+  it('disabled (away from the door): it never claims you are here (SCRUM-882)', async () => {
+    await pass({ disabled: true, note: 'You’re too far away' })
+    expect(screen.getByLabelText('Live now. Vinyl Night. 14 inside now.')).toBeTruthy()
+    expect(screen.queryByText('YOU’RE HERE', { includeHiddenElements: true })).toBeNull()
+    expect(screen.getByText('LIVE NOW', { includeHiddenElements: true })).toBeTruthy()
   })
 
   it('on the server’s yes (#9, the Flow 4 prototype): the hold reads “You’re in”, and the pour floods up inside the panel', async () => {
@@ -105,25 +129,31 @@ describe('<VenuePass>', () => {
 describe('<DoorCode>', () => {
   const NOW = new Date('2026-10-15T21:40:10Z').getTime()
 
-  it('live: the code large in Geist Mono 700, in two groups, with the 30-second ring counting down', async () => {
+  it('live, the board\'s code row (flow-4 .cd): SHOW THIS CODE, the code 40/48 in Geist Mono 700, then the small ring and "New code in 0:20"', async () => {
     jest.useFakeTimers({ now: NOW })
     await render(<DoorCode state="live" code="K7QM2X" rotatesAt={NOW + 20_000} testID="d" />)
-    expect(style('K7Q M2X')).toMatchObject({ fontFamily: FONT_FAMILY.mono[700], fontSize: TYPE.display.fontSize, color: COLOR.textPrimary })
-    expect(screen.getByText('20 s', { includeHiddenElements: true })).toBeTruthy()
-    expect(screen.getByText('Changes every 30 s · Today only', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.getByText('SHOW THIS CODE', { includeHiddenElements: true })).toBeTruthy()
+    expect(style('K7Q M2X')).toMatchObject({ fontFamily: FONT_FAMILY.mono[700], fontSize: TYPE.numericDisplay.fontSize, lineHeight: 48, color: COLOR.textPrimary })
+    expect(screen.getByText('New code in 0:20', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.queryByText(/Changes every/, { includeHiddenElements: true })).toBeNull()
+    // Centred, one column: the ring sits in the line under the code, not beside it.
+    expect(flat('d')).toMatchObject({ alignItems: 'center' })
+    expect(flat('d')).not.toMatchObject({ flexDirection: 'row' })
     await act(async () => jest.advanceTimersByTime(5_000))
-    expect(screen.getByText('15 s', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.getByText('New code in 0:15', { includeHiddenElements: true })).toBeTruthy()
   })
 
   it('is read as six characters in two groups, and again when it changes; the ring is not read', async () => {
     const announce = jest.spyOn(AccessibilityInfo, 'announceForAccessibility').mockImplementation(() => {})
     jest.useFakeTimers({ now: NOW })
     await render(<DoorCode state="live" code="K7QM2X" rotatesAt={NOW + 20_000} testID="d" />)
-    expect(screen.getByLabelText('Door code K 7 Q, M 2 X')).toBeTruthy()
+    expect(screen.getByLabelText('Offer code K 7 Q, M 2 X')).toBeTruthy()
+    // The card's title says "Offer code"; the row says what to do with it (the board), never OFFER CODE twice.
+    expect(screen.queryByText('OFFER CODE', { includeHiddenElements: true })).toBeNull()
     expect(screen.getByTestId('d-ring', { includeHiddenElements: true }).props.accessibilityElementsHidden).toBe(true)
     await screen.rerender(<DoorCode state="live" code="P4WN8R" rotatesAt={NOW + 50_000} testID="d" />)
     expect(announce).toHaveBeenCalledTimes(1)
-    expect(announce).toHaveBeenCalledWith('Door code P 4 W, N 8 R')
+    expect(announce).toHaveBeenCalledWith('Offer code P 4 W, N 8 R')
   })
 
   it('covered by another screen (`active` false): it neither ticks nor announces', async () => {
@@ -131,7 +161,7 @@ describe('<DoorCode>', () => {
     jest.useFakeTimers({ now: NOW })
     await render(<DoorCode state="live" code="K7QM2X" rotatesAt={NOW + 20_000} active={false} />)
     await act(async () => jest.advanceTimersByTime(5_000))
-    expect(screen.getByText('20 s', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.getByText('New code in 0:20', { includeHiddenElements: true })).toBeTruthy()
     await screen.rerender(<DoorCode state="live" code="P4WN8R" rotatesAt={NOW + 50_000} active={false} />)
     expect(announce).not.toHaveBeenCalled()
   })
@@ -180,16 +210,25 @@ describe('<DoorCode>', () => {
     await render(<DoorCode state="offline" testID="d" />)
     expect(style('··· ···').color).toBe(COLOR.textTertiary)
     expect(screen.getByTestId('d-offline', { includeHiddenElements: true })).toBeTruthy()
-    expect(screen.getByLabelText('Door code unavailable. This pass needs a connection to show its code.')).toBeTruthy()
+    expect(screen.getByLabelText('Offer code unavailable. It needs a connection to show.')).toBeTruthy()
   })
 
-  it('redeemed, used tonight and ended are still and neutral', async () => {
+  it('redeemed and used tonight are the board\'s still row: USED TONIGHT over dim dashes (the time is the disc\'s stamp)', async () => {
     await render(<DoorCode state="redeemed" redeemedAt="21:43" />)
-    expect(screen.getByText('Redeemed 21:43', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.getByText('USED TONIGHT', { includeHiddenElements: true })).toBeTruthy()
+    expect(style('— — —').color).toBe(COLOR.textTertiary)
+    expect(screen.queryByText('Redeemed 21:43', { includeHiddenElements: true })).toBeNull()
+    expect(screen.getByLabelText('Offer code redeemed 21:43')).toBeTruthy()
     await render(<DoorCode state="used" />)
-    expect(screen.getByText('Used tonight', { includeHiddenElements: true })).toBeTruthy()
-    await render(<DoorCode state="ended" endedLabel="ENDED SUNDAY" />)
-    expect(screen.getByText('ENDED SUNDAY', { includeHiddenElements: true })).toBeTruthy()
-    expect(screen.getByText('This offer ended', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.getByText('USED TONIGHT', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.getByLabelText('Offer code used tonight')).toBeTruthy()
+  })
+
+  it('ended says ENDED over the dashes, and nothing more: the day is the validity line’s, the sentence the screen’s (audit B-1)', async () => {
+    await render(<DoorCode state="ended" />)
+    expect(screen.getByText('ENDED', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.getByText('— — —', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.queryByText('This offer ended', { includeHiddenElements: true })).toBeNull()
+    expect(screen.getByLabelText('Offer code ended')).toBeTruthy()
   })
 })

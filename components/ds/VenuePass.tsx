@@ -1,4 +1,3 @@
-import { Image } from 'expo-image'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { AccessibilityInfo, StyleSheet, Text, View } from 'react-native'
 import Animated, { cancelAnimation, Easing, ReduceMotion, useAnimatedProps, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated'
@@ -6,22 +5,26 @@ import Svg, { Circle } from 'react-native-svg'
 
 import { Icon } from '../ui/Icon'
 import { Material } from '../ui/Material'
-import { COLOR, FONT_FAMILY, ICON, MATERIAL, RADIUS, SIZE, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, ICON, MATERIAL, RADIUS, SIZE, SPACE, MAX_FONT_SCALE, TYPE } from '../../lib/design/tokens'
 import { tint } from '../../lib/theme'
 import { HoldToConfirm } from './HoldToConfirm'
 import { CONTROL_FONT_CAP, font, IC_HAIRLINE, useBoldText, useIncreaseContrast } from './shared'
+import { Title } from './Title'
+import { ContainedCover } from './LinkPreviewCard'
 
 const THUMB = SIZE.primary
 /** The tease's "?" discs: three at 32, overlapping by 8, ringed in 80% ink. */
 const TEASE_DISC = SIZE.tag
 const TEASE_SHOWN = 3
 const TEASE_RING = tint(COLOR.ink, 0.8)
+/** The least the server will count (3), so the least the tease will show. */
+const TASTE_FLOOR = 3
 
 export type VenuePassProps = {
   title: string
   cover?: string | null
   hereCount: number
-  /** "N people here share your taste": a count from the server (never under three), never who. */
+  /** "N+ here share your taste": the server's bucket floor (3 or 10, never under three; null when withheld), read as a floor, never who. */
   tasteCount?: number | null
   /** "Hold to switch" when checking in here takes you out of another room (ROUND3 4.8). */
   holdLabel?: string
@@ -49,7 +52,7 @@ export type VenuePassProps = {
  * (guidelines/components/VenuePass.html): a sheet-tier panel (glass on iOS,
  * solid on Android and under Reduce Transparency) pinned above the tab bar.
  * The thumb, the Geist Mono "You're here", the title, how many are inside,
- * three "?" discs with "N people here share your taste" (never who), then the
+ * three "?" discs with "N+ here share your taste" (never who), then the
  * HoldToConfirm and the consequence in one line.
  *
  * Its haptics are the hold's: `H.tick` ×3, `H.commit`, `H.error` on a refusal
@@ -66,7 +69,7 @@ export function VenuePass({
   cover,
   hereCount,
   tasteCount,
-  holdLabel = 'Hold to blend in',
+  holdLabel = 'Hold to Blend’n',
   note = 'Checks you in. Other people at this event will see you.',
   onConfirm,
   busy,
@@ -82,20 +85,24 @@ export function VenuePass({
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const inside = hereCount > 0 ? `${hereCount} inside now` : 'Be the first one in'
-  const tease = tasteCount && tasteCount > 0 ? `${tasteCount} ${tasteCount === 1 ? 'person' : 'people'} here share your taste` : null
+  // Disabled is away from the door (SCRUM-882): the pass says the night is on, never that you are there.
+  const where = disabled ? 'Live now' : 'You’re here'
+  // A floor, not a count (the server buckets it: 3 or 10), so "3+", never "3 people" when seven share.
+  // Never under three (the server's own floor): a stale or older payload cannot show "1+" and point at one person.
+  const tease = tasteCount && tasteCount >= TASTE_FLOOR ? `${tasteCount}+ here share your taste` : null
 
   return (
     <View testID={testID} style={styles.pass}>
       <Material role="sheet" style={[StyleSheet.absoluteFill, styles.radius]} />
-      <View accessible accessibilityLabel={`You’re here. ${title}. ${inside}.`} style={styles.head}>
+      <View accessible accessibilityLabel={`${where}. ${title}. ${inside}.`} style={styles.head}>
         <View testID={testID && `${testID}-thumb`} style={styles.thumb}>
-          {cover ? <Image source={{ uri: cover }} style={StyleSheet.absoluteFill} contentFit="cover" accessible={false} /> : null}
+          {cover ? <ContainedCover uri={cover} auto /> : null}
         </View>
         <View style={styles.headText}>
-          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.label} style={[font('label', bold), styles.secondary]}>YOU’RE HERE</Text>
-          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.title} numberOfLines={1} style={[font('title', bold), styles.primary]}>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.label} style={[font('label', bold), styles.secondary]}>{where.toUpperCase()}</Text>
+          <Title numberOfLines={1} style={styles.primary}>
             {title}
-          </Text>
+          </Title>
           <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>
             {hereCount > 0 ? (
               <>
@@ -108,7 +115,7 @@ export function VenuePass({
         </View>
       </View>
       {tease ? (
-        <View accessible accessibilityLabel={tease} style={styles.tease}>
+        <View accessible accessibilityLabel={`${tasteCount} or more people here share your taste`} style={styles.tease}>
           <View style={styles.discs}>
             {Array.from({ length: TEASE_SHOWN }, (_, i) => (
               <View key={i} style={[styles.disc, i > 0 && styles.overlap]}>
@@ -147,21 +154,29 @@ export function VenuePass({
 
 /** The code turns every 30 s on the server (`lib/offers/pass-code.ts`). */
 const CODE_PERIOD_S = 30
-const RING = 36
+/** The board's .ring beside "New code in". */
+const RING = 16
 const RING_STROKE = SPACE.xxs
+/** The board's code line (40/48): the numeric display's 40 with 8 of leading. */
+const CODE_LINE = TYPE.numericDisplay.fontSize + SPACE.sm
 /** The seconds beside the ring change once a second; the ring itself drains on the UI thread, and the code comes from the server. */
 const TICK_MS = 1000
 const AnimatedCircle = Animated.createAnimatedComponent(Circle)
 
 /** "K7QM2X" → "K7Q M2X"; read "K 7 Q, M 2 X". */
 const grouped = (code: string) => `${code.slice(0, 3)} ${code.slice(3)}`
-const spoken = (code: string) => `Door code ${[...code.slice(0, 3)].join(' ')}, ${[...code.slice(3)].join(' ')}`
+const spoken = (code: string) => `Offer code ${[...code.slice(0, 3)].join(' ')}, ${[...code.slice(3)].join(' ')}`
 
+/** The still rows: the board's "Used tonight" over dim dashes (the time of a redeem is the disc's stamp). */
 const STILL = {
-  redeemed: { code: '· · ·', line: (at?: string) => (at ? `Redeemed ${at}` : 'Redeemed') },
-  used: { code: '· · ·', line: () => 'Used tonight' },
-  ended: { code: '— — —', line: () => 'This offer ended' },
+  redeemed: { label: 'USED TONIGHT', line: null, spoken: (at?: string) => (at ? `Offer code redeemed ${at}` : 'Offer code redeemed') },
+  used: { label: 'USED TONIGHT', line: null, spoken: () => 'Offer code used tonight' },
+  // The day it ended is the ticket's validity line, the sentence the screen's (Flow 4 audit B-1): ENDED alone here.
+  ended: { label: 'ENDED', line: null, spoken: () => 'Offer code ended' },
 } as const
+const DASHES = '— — —'
+/** "0:20": the seconds to the code's turn, the board's "New code in 0:42". */
+const clock = (s: number) => `0:${String(s).padStart(2, '0')}`
 
 export type DoorCodeProps = {
   /** `GET /offers/:id`'s pass states, plus `offline` (no connection, so no code). */
@@ -170,10 +185,8 @@ export type DoorCodeProps = {
   code?: string
   /** When this code turns (ms since the epoch). */
   rotatesAt?: number
-  /** "21:43". */
+  /** "9:43 PM", on the phone's clock (`clockTime`). */
   redeemedAt?: string
-  /** The label of an ended pass ("ENDED SUNDAY"). */
-  endedLabel?: string
   /** False while another screen covers it: no ticking, no announcing to someone elsewhere. */
   active?: boolean
   testID?: string
@@ -182,9 +195,10 @@ export type DoorCodeProps = {
 /**
  * The door pass's code (ROUND3 G3, guidelines/round3/r3g.js): staff type the
  * six characters on the venue dashboard and tap Redeemed, so nothing is held
- * on the phone. The code is large, in Geist Mono, beside a 30-second ring
- * that drains to its next turn; offline there is no code ("This pass needs a
- * connection to show its code."). Redeemed, used tonight and ended are still.
+ * on the phone. The board's code row (flow-4 .cd): SHOW THIS CODE, the code
+ * large in Geist Mono, then a small ring draining to its turn beside "New code
+ * in 0:42"; offline there is no code ("Needs a connection"). Redeemed and used
+ * tonight say USED TONIGHT over dim dashes; ended says ENDED.
  *
  * The ring and the code change stay under Reduce Motion (they are the pass's
  * security function, WCAG 2.2.2's essential motion); the code swaps with no
@@ -192,7 +206,7 @@ export type DoorCodeProps = {
  * the ring is not read. No haptic (`H.success` on the server's redeem is the
  * screen's).
  */
-export function DoorCode({ state, code = '', rotatesAt = 0, redeemedAt, endedLabel, active = true, testID }: DoorCodeProps) {
+export function DoorCode({ state, code = '', rotatesAt = 0, redeemedAt, active = true, testID }: DoorCodeProps) {
   const bold = useBoldText()
   const live = state === 'live' && code.length > 0
   const [now, setNow] = useState(() => Date.now())
@@ -228,47 +242,41 @@ export function DoorCode({ state, code = '', rotatesAt = 0, redeemedAt, endedLab
 
   const left = Math.min(CODE_PERIOD_S, Math.max(0, Math.ceil((rotatesAt - now) / 1000)))
   const still = state === 'redeemed' || state === 'used' || state === 'ended' ? STILL[state] : null
-  const codeFont = [font('display', bold, FONT_FAMILY.mono[700]), styles.code]
-  const label = state === 'ended' && endedLabel ? endedLabel : 'DOOR CODE'
+  const label = still?.label ?? 'SHOW THIS CODE'
+  const line = font('meta', bold)
 
   return (
-    <View testID={testID} style={styles.door}>
-      <View
-        accessible
-        accessibilityLabel={
-          live
-            ? spoken(code)
-            : state === 'offline'
-              ? 'Door code unavailable. This pass needs a connection to show its code.'
-              : `${label}. ${still?.line(redeemedAt) ?? ''}`
-        }
-        style={styles.doorText}
-      >
-        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.label} style={[font('label', bold), styles.secondary]}>{label}</Text>
-        {live ? (
-          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.display} style={[...codeFont, styles.primary]}>{grouped(code)}</Text>
-        ) : (
-          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.display} style={[...codeFont, styles.tertiary]}>{still?.code ?? '··· ···'}</Text>
-        )}
-        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>
-          {live ? `Changes every ${CODE_PERIOD_S} s · Today only` : still ? still.line(redeemedAt) : 'Today only'}
-        </Text>
-      </View>
+    <View
+      testID={testID}
+      accessible
+      accessibilityLabel={live ? spoken(code) : still ? still.spoken(redeemedAt) : 'Offer code unavailable. It needs a connection to show.'}
+      style={styles.door}
+    >
+      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.label} style={[font('label', bold), styles.secondary]}>{label}</Text>
+      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.numericDisplay} style={[font('numericDisplay', bold), styles.code, live ? styles.primary : styles.tertiary]}>
+        {live ? grouped(code) : still ? DASHES : '··· ···'}
+      </Text>
       {live ? (
-        <View testID={testID && `${testID}-ring`} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.ringCol}>
+        <View testID={testID && `${testID}-ring`} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.turn}>
           <CountdownRing fraction={fraction} />
-          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} style={[font('caption', bold, FONT_FAMILY.mono[500]), styles.secondary, styles.tabular]}>{`${left} s`}</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[line, styles.secondary]}>
+            {'New code in '}
+            <Text style={[styles.mono, styles.tabular]}>{clock(left)}</Text>
+          </Text>
         </View>
-      ) : state === 'offline' ? (
-        <View testID={testID && `${testID}-offline`} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.well}>
-          <Icon name="wifi-off" size={ICON.control} color={COLOR.textSecondary} />
+      ) : !still ? (
+        <View testID={testID && `${testID}-offline`} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.turn}>
+          <Icon name="wifi-off" size={ICON.inline} color={COLOR.textSecondary} />
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[line, styles.secondary]}>Needs a connection</Text>
         </View>
+      ) : still.line ? (
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[line, styles.secondary]}>{still.line}</Text>
       ) : null}
     </View>
   )
 }
 
-/** A 36 pt ring that drains clockwise from the top: 16% white track, white arc. */
+/** A 16 pt ring (the board's .ring) that drains clockwise from the top: 16% white track, white arc. */
 function CountdownRing({ fraction }: { fraction: SharedValue<number> }) {
   const r = RING / 2 - RING_STROKE
   const c = 2 * Math.PI * r
@@ -316,17 +324,11 @@ const styles = StyleSheet.create({
   overlap: { marginLeft: -SPACE.sm },
   shrink: { flexShrink: 1 },
   note: { textAlign: 'center' },
-  door: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md },
-  doorText: { flex: 1, minWidth: 0, gap: SPACE.xxs },
-  code: { letterSpacing: SPACE.xxs, fontVariant: ['tabular-nums'] },
-  ringCol: { alignItems: 'center', gap: SPACE.xs },
+  /** The board's .cd: one centred column, 6 apart. */
+  door: { alignItems: 'center', gap: SPACE.xs + SPACE.xxs },
+  /** The board's .code: 40/48, 4 apart, so a code reads letter by letter across a counter. */
+  code: { lineHeight: CODE_LINE, letterSpacing: SPACE.xs, fontVariant: ['tabular-nums'] },
+  turn: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
+  mono: { fontFamily: FONT_FAMILY.mono[500] },
   ring: { transform: [{ rotate: '-90deg' }] },
-  well: {
-    width: RING,
-    height: RING,
-    borderRadius: RADIUS.capsule,
-    backgroundColor: COLOR.surfaceSunken,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
 })

@@ -1,9 +1,12 @@
+import { validAccuracy } from './geo'
 import type { Href } from 'expo-router'
 import { Platform } from 'react-native'
-import { apiClient } from './apiClient'
+import { apiClient, type LeftRoom } from './apiClient'
+import { getLiveEventId, setLiveHint } from './blendnOverlay'
 import { CHECK_IN_CODES, checkInRefusal, type CheckInRefusal } from './checkInRefusal'
 import { forgetEventDetailCache } from './eventDetailCache'
 import { reasonOf } from './sessionEnd'
+import { leftNames } from './leftRooms'
 import { revealPromptText, revealReadiness } from './reveal'
 import { forgetRoster } from './rosterMemory'
 import { PUBLIC_CHECKIN_WARNING, shouldWarnBeforePublicCheckIn } from './roomVisibility'
@@ -45,14 +48,16 @@ const listeners = new Set<() => void>()
  * SWR-cached detail on focus or on the socket's check-in, was handed the
  * pre-check-in `isCheckedIn: false` and went back to "Blend in".
  */
-export function checkInChanged(eventId?: string): void {
+export function checkInChanged(eventId?: string, left: readonly Pick<LeftRoom, 'eventId'>[] = []): void {
   apiClient.forgetActiveCheckins()
   // A place's page carries your window there (Go Live, step 5).
   apiClient.forgetVenues()
   // Without an id — a Go Live whose answer never came — every reader re-reads anyway.
-  if (eventId) {
-    apiClient.forgetEvent(eventId)
-    forgetEventDetailCache(eventId)
+  // The rooms a switch took you out of changed too: their pages still say you are in (SCRUM-970).
+  for (const id of [eventId, ...left.map((l) => l.eventId)]) {
+    if (!id) continue
+    apiClient.forgetEvent(id)
+    forgetEventDetailCache(id)
   }
   for (const fn of listeners) fn()
 }
@@ -74,10 +79,14 @@ export type CheckInOutcome =
   | {
       kind: 'checkedIn'
       checkInId?: string
+      /** The rooms this took you out of, by name, for "You left {A}." (SCRUM-635). Empty when you were in none. */
+      left: string[]
       /** No `intent_default` yet: ask "Why do you go out?" after the tray. */
       askIntent: boolean
       /** `reveal_by_default` is set: offer to show their name, never apply it. */
       revealSuggestion: boolean
+      /** Only when "With {crew}" was on: whether the crew was told (crews 4-A2). */
+      crewTold?: boolean
     }
   | {
       kind: 'refused'
@@ -91,7 +100,9 @@ export type CheckInOutcome =
 
 export async function submitCheckIn(
   eventId: string,
-  at: { latitude: number; longitude: number; accuracy?: number | null }
+  at: { latitude: number; longitude: number; accuracy?: number | null },
+  /** "With {crew}" on at the hold: that crew is told you're in, by the server, with no second call (crews 4-A2). */
+  withCrewId?: string
 ): Promise<CheckInOutcome> {
   let timer: ReturnType<typeof setTimeout> | undefined
   const timeout = new Promise<'timeout'>((resolve) => {
@@ -104,7 +115,8 @@ export async function submitCheckIn(
       // `gpsAccuracy` is the key the route reads — `deviceInfo?.gpsAccuracy` —
       // not a top-level field. Unknown is sent as absent, which the server
       // reads as "assume the usual", never as a number we made up.
-      deviceInfo: { platform: Platform.OS, gpsAccuracy: at.accuracy ?? undefined },
+      deviceInfo: { platform: Platform.OS, gpsAccuracy: validAccuracy(at.accuracy) ?? undefined },
+      ...(withCrewId ? { withCrewId } : {}),
     }),
     timeout,
   ]).finally(() => clearTimeout(timer))
@@ -123,12 +135,15 @@ export async function submitCheckIn(
     }
   }
 
-  checkInChanged(eventId)
+  checkInChanged(eventId, Array.isArray(result.data?.left) ? result.data.left : [])
   return {
     kind: 'checkedIn',
-    checkInId: result.data?.checkInId,
+    // The route's shape is `checkIn: { id }`; `checkInId` was never on it (ROOM-11).
+    checkInId: result.data?.checkIn?.id,
+    left: leftNames(result.data),
     askIntent: result.data?.intentNeeded === true,
     revealSuggestion: result.data?.revealSuggestion === true,
+    ...(withCrewId ? { crewTold: result.data?.crewTold === true } : {}),
   }
 }
 
@@ -191,14 +206,14 @@ export function askIntentRoute(eventId: string): Href {
 export async function revealOffer(user: {
   id: string
   firstName: string | null
-  image?: string | null
+  /** The main photo a reveal would show (`myMainPhoto`). */
+  photo?: string | null
 }): Promise<{ title: string; message: string; confirm: string; cancel: string }> {
   const firstTime = shouldWarnBeforePublicCheckIn({
     revealByDefault: true,
     hasSeenWarning: await hasSeenPublicCheckInWarning(user.id),
-    // Nothing to reveal means nothing to warn about. `User.image` mirrors
-    // `photos[0]`, so it is the same photo a reveal would show.
-    canReveal: revealReadiness({ name: user.firstName, photos: user.image ? [user.image] : [] }).ok,
+    // Nothing to reveal means nothing to warn about: the main photo is the one a reveal would show.
+    canReveal: revealReadiness({ name: user.firstName, photos: user.photo ? [user.photo] : [] }).ok,
   })
   if (firstTime) await markPublicCheckInWarningSeen(user.id)
   return firstTime
@@ -230,6 +245,9 @@ export async function checkOutOf(eventId: string) {
   const result = await apiClient.checkOut(eventId)
   if (result.success) {
     forgetRoster(eventId)
+    // The live hint is the tab bar's poll, and a page opened from a link has no tab bar under it to re-poll: left as it was,
+    // the next event page offered "Hold to switch · Leaves {this room}" until a restart (SCRUM-1035 drive).
+    if (getLiveEventId() === eventId) setLiveHint(null)
     checkInChanged(eventId)
   }
   return result

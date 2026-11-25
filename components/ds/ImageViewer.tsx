@@ -3,13 +3,14 @@ import { Image } from 'expo-image'
 import { useCallback, useEffect, useState } from 'react'
 import { Modal, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler'
-import Animated, { Easing, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated'
+import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { scheduleOnRN } from 'react-native-worklets'
 
-import { COLOR, EASING, FONT_FAMILY, MATERIAL, RADIUS, SPACE, SPRING, MAX_FONT_SCALE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, MATERIAL, RADIUS, SPACE, SPRING, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { useQueuedModal } from '../../lib/modalTurn'
-import { motionTokens, useReducedMotion } from '../../lib/motion'
+import { useReducedMotion } from '../../lib/motion'
+import { useCloseReverses, useKeptWhileOpen } from '../motion/useCloseReverses'
 import { Avatar } from './Avatar'
 import { avatarOf, BUBBLE, timeFont, type ChatPerson, type Rect } from './chatShared'
 import { IconButton } from './IconButton'
@@ -89,6 +90,13 @@ function useViewerGestures({
     panY.set(0)
     drop.set(0)
   }
+  /** The same rest, sprung there. */
+  const settle = (spring: typeof SPRING.travel) => {
+    zoom.set(withSpring(1, spring))
+    panX.set(withSpring(0, spring))
+    panY.set(withSpring(0, spring))
+    drop.set(withSpring(0, spring))
+  }
 
   const pinch = Gesture.Pinch()
     .onStart(() => zoomFrom.set(zoom.get()))
@@ -122,7 +130,7 @@ function useViewerGestures({
   }
   /** The photo's natural size, once it has loaded. */
   const loaded = (natural: Size) => fitted.set(fittedSize(natural, window))
-  return { gesture: Gesture.Race(Gesture.Simultaneous(pinch, drag), tap), zoom, panX, panY, drop, reset, zoomTo, loaded }
+  return { gesture: Gesture.Race(Gesture.Simultaneous(pinch, drag), tap), zoom, panX, panY, drop, reset, settle, zoomTo, loaded }
 }
 
 /**
@@ -135,15 +143,18 @@ function useViewerGestures({
  * × does the same for anyone who doesn't drag. Nothing animates while you look.
  *
  * Motion #33: it travels from the bubble's frame on `M.travel` while the ink
- * fades in. Reduce Motion: it fades over 200 ms. No haptic. Read: Close, the
+ * fades in, and the close travels back to the bubble (`useCloseReverses`), the
+ * chrome fading with the ink. Reduce Motion: it fades in and out over 200 ms. No haptic. Read: Close, the
  * photo ("Photo from Cosmic Panda, 9:52 PM", with Zoom in and Zoom out as its
  * actions), More, the sender's line.
  *
- * ponytail: the close doesn't travel back to the bubble (it unmounts); the
- * page's gradient scrims are a scrim pill under the foot line (a gradient
+ * ponytail: the page's gradient scrims are a scrim pill under the foot line (a gradient
  * belongs to <GradientFill> alone, and the circles are media glass).
  */
-export function ImageViewer({ visible, uri, sender, time, onClose, onMore, from, testID }: ImageViewerProps) {
+export function ImageViewer(props: ImageViewerProps) {
+  const { visible, onClose, onMore, testID } = props
+  // The photo, its sender and the bubble it travels back to stay drawn while it leaves (its owner clears them on close).
+  const { uri, sender, time, from } = useKeptWhileOpen(visible, props)
   const window = useWindowDimensions()
   const insets = useSafeAreaInsets()
   const bold = useBoldText()
@@ -160,18 +171,14 @@ export function ImageViewer({ visible, uri, sender, time, onClose, onMore, from,
   const open = useSharedValue(0)
   const travel = !!from && !reduceMotion
   const toggle = useCallback(() => setChrome((on) => !on), [])
-  const { gesture, zoom, panX, panY, drop, reset, zoomTo, loaded } = useViewerGestures({ window, onClose, onTap: toggle, testID })
+  const { gesture, zoom, panX, panY, drop, reset, settle, zoomTo, loaded } = useViewerGestures({ window, onClose, onTap: toggle, testID })
 
+  // The close reverses the open (#33). Back to where an open starts once it has gone, so the next one's first frame is right.
+  const { up, leaving } = useCloseReverses(visible, open, { travel, reduceMotion, onGone: reset })
   useEffect(() => {
-    if (!visible) {
-      // Back to where an open starts, so the next one's first frame is right.
-      reset()
-      open.set(0)
-      return
-    }
-    const fade = withTiming(1, { duration: motionTokens(reduceMotion).duration.base, easing: Easing.bezier(...EASING.gentle) })
-    open.set(travel ? withSpring(1, SPRING.travel) : fade)
-    // On opening and closing only; the rest is read as it stood then.
+    // Travelling home, a zoomed or dragged photo comes back to rest on the way.
+    if (!visible && travel) settle(SPRING.travel)
+    // On closing only.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible])
 
@@ -192,10 +199,12 @@ export function ImageViewer({ visible, uri, sender, time, onClose, onMore, from,
   const inkStyle = useAnimatedStyle(() => ({
     opacity: open.get() * (1 - Math.min(1, Math.abs(drop.get()) / (DISMISS.distance * 2))),
   }))
+  // The chrome comes and goes with the ink.
+  const chromeStyle = useAnimatedStyle(() => ({ opacity: open.get() }))
   const shown = chrome || screenReader
 
   // One Modal on screen at a time on iOS (lib/modalTurn).
-  const turn = useQueuedModal(visible, { closeForLink: onClose })
+  const turn = useQueuedModal(up, { closeForLink: onClose })
   return (
     <Modal
       testID={testID && `${testID}-modal`}
@@ -209,12 +218,19 @@ export function ImageViewer({ visible, uri, sender, time, onClose, onMore, from,
       onDismiss={turn.onDismiss}
     >
       <GestureHandlerRootView style={styles.fill}>
-        <View style={styles.fill} accessibilityViewIsModal onAccessibilityEscape={onClose}>
+        <View
+          testID={testID && `${testID}-page`}
+          style={styles.fill}
+          // Leaving, it takes no touches.
+          pointerEvents={leaving ? 'none' : 'auto'}
+          accessibilityViewIsModal
+          onAccessibilityEscape={onClose}
+        >
           <Animated.View style={[StyleSheet.absoluteFill, styles.ink, inkStyle]} />
           {shown ? (
-            <View style={[styles.chrome, { top: barTop(insets.top), left: SPACE.lg }]}>
+            <Animated.View style={[styles.chrome, { top: barTop(insets.top), left: SPACE.lg }, chromeStyle]}>
               <IconButton icon="x" tier="media" accessibilityLabel="Close" onPress={onClose} />
-            </View>
+            </Animated.View>
           ) : null}
           <GestureDetector gesture={gesture}>
             <Animated.View
@@ -240,21 +256,21 @@ export function ImageViewer({ visible, uri, sender, time, onClose, onMore, from,
           {shown ? (
             <>
               {onMore ? (
-                <View style={[styles.chrome, { top: barTop(insets.top), right: SPACE.lg }]}>
+                <Animated.View style={[styles.chrome, { top: barTop(insets.top), right: SPACE.lg }, chromeStyle]}>
                   <IconButton icon="ellipsis" tier="media" accessibilityLabel="More" onPress={onMore} />
-                </View>
+                </Animated.View>
               ) : null}
-              <View
+              <Animated.View
                 accessible
                 accessibilityLabel={`${sender.name}, ${time}`}
-                style={[styles.chrome, styles.foot, { bottom: insets.bottom + SPACE.xl }]}
+                style={[styles.chrome, styles.foot, { bottom: insets.bottom + SPACE.xl }, chromeStyle]}
               >
                 <Avatar {...avatarOf(sender, BUBBLE.avatar)} />
                 <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} numberOfLines={1} style={[font('meta', bold, FONT_FAMILY.brand[500]), styles.name]}>
                   {sender.name}
                 </Text>
                 <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={timeFont(bold)}>{time}</Text>
-              </View>
+              </Animated.View>
             </>
           ) : null}
         </View>

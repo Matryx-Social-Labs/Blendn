@@ -1,14 +1,16 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useFocusEffect } from 'expo-router'
+import { useCallback, useState } from 'react'
 
 import { useToast } from '../components/Toast'
 import { apiClient } from './apiClient'
 import { checkOutOf } from './checkIn'
 import { Logger } from './logger'
+import { myMainPhoto } from './myPhoto'
 import { revealReadiness } from './reveal'
 import { useAuth } from './useAuth'
 
 const REVEAL_FAILED = "Couldn’t change who can see you. Nothing has changed."
-const CHECKOUT_FAILED = "Couldn’t check you out. You’re still in this room."
+export const CHECKOUT_FAILED = "Couldn’t check you out. You’re still in this room."
 
 /**
  * Your own controls in a room: who can see you, whether you are listed, and
@@ -19,14 +21,13 @@ export function useRoomControls(eventId: string | null, initiallyRevealed: boole
   /*
    * Is there anything to reveal?
    *
-   * `User.image` mirrors `photos[0]` and is written only by the profile PUT, so
-   * it is the same photo a reveal would show. Without this the banner offered a
-   * switch that changed nothing anybody could see.
+   * The first of `profile.photos`, the photo a reveal shows (`myMainPhoto`). Without
+   * this the banner offered a switch that changed nothing anybody could see.
    */
   const { user } = useAuth()
   const readiness = revealReadiness({
     name: user?.name,
-    photos: user?.image ? [user.image] : user?.profile?.photos ?? [],
+    photos: [myMainPhoto(user) ?? ''].filter(Boolean),
   })
   const { showToast } = useToast()
 
@@ -46,19 +47,23 @@ export function useRoomControls(eventId: string | null, initiallyRevealed: boole
    * wonder why nobody likes them.
    */
   const [listed, setListed] = useState(true)
-  useEffect(() => {
-    if (!user?.id) return
-    let cancelled = false
-    apiClient
-      .getProfile(user.id)
-      .then((r) => {
-        if (!cancelled && r.success) setListed(r.data?.profile?.show_online !== false)
-      })
-      .catch(() => {})
-    return () => {
-      cancelled = true
-    }
-  }, [user?.id])
+  const userId = user?.id ?? null
+  // On every focus, uncached: Settings is a screen above the Room, and "Turn it on" there must clear the banner on return (ROOM-04).
+  useFocusEffect(
+    useCallback(() => {
+      if (!userId) return
+      let cancelled = false
+      apiClient
+        .getProfile(userId, { cache: false })
+        .then((r) => {
+          if (!cancelled && r.success) setListed(r.data?.profile?.show_online !== false)
+        })
+        .catch(() => {})
+      return () => {
+        cancelled = true
+      }
+    }, [userId])
+  )
 
   /*
    * Flipping your visibility, from inside the room it applies to.
@@ -97,12 +102,22 @@ export function useRoomControls(eventId: string | null, initiallyRevealed: boole
     }
   }, [eventId, revealed, revealBusy, readiness.ok, showToast])
 
+  const { checkOut, checkOutBusy } = useCheckOut(eventId)
+
+  return { readiness, revealed, revealBusy, toggleReveal, listed, checkOut, checkOutBusy }
+}
+
+/**
+ * Checking out of `eventId` (the room's ⋯, the Room info page, the Banter's swipe): one path, `checkOutOf`. The failure
+ * is a toast, said wherever you asked.
+ */
+export function useCheckOut(eventId: string | null) {
+  const { showToast } = useToast()
   /*
    * Leaving the room.
    *
-   * No confirmation. Checking out ends your *presence* — off the roster and out
-   * of the headcount — and presence is reversible: walk back in and check in
-   * again. It does not touch attendance, so the room chat stays writable.
+   * The confirm is the caller's (`checkOutQuestion`, the same everywhere). Checking out ends your *presence* — off the
+   * roster and out of the headcount — and presence is reversible: walk back in and check in again.
    *
    * Resolves true only on success. Closing first would be a lie about a
    * request that might still fail, and the failure worth catching is somebody
@@ -128,6 +143,5 @@ export function useRoomControls(eventId: string | null, initiallyRevealed: boole
       setCheckOutBusy(false)
     }
   }, [eventId, checkOutBusy, showToast])
-
-  return { readiness, revealed, revealBusy, toggleReveal, listed, checkOut, checkOutBusy }
+  return { checkOut, checkOutBusy }
 }

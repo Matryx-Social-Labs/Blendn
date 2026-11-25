@@ -1,0 +1,136 @@
+import { useFocusEffect } from 'expo-router'
+import { useCallback, useState } from 'react'
+
+import { crewMessage, type BlendRef } from './crews'
+import { crewsApi } from './crewsApi'
+import type { RoomMessage } from './roomMessages'
+import { showSheet } from './sheet'
+
+/** A `crew_waved` line's metadata (admin lib/crews/like.ts): a crew's wave at yours, or a person's (their room handle). */
+export type CrewWaveFrom = { eventId: string; fromCrewId: string } | { eventId: string; fromUserId: string }
+
+/** How a Wave back from the crew chat went: done (a Mix when it was mutual), gone ("They've left the room"), or an error. */
+export type WaveBackOutcome = { kind: 'done'; blend: BlendRef | null } | { kind: 'gone' } | { kind: 'error'; text: string }
+
+/**
+ * Wave back from the crew chat (advisor L-A), as `crewId` (this chat's crew): at a crew, the crew wave; at a person, the wave
+ * for your crew at their room handle. A 404 is them gone, never an error.
+ */
+export async function waveBackFromChat(from: CrewWaveFrom, crewId: string): Promise<WaveBackOutcome> {
+  const result =
+    'fromCrewId' in from
+      ? await crewsApi.waveCrew(from.eventId, from.fromCrewId, crewId)
+      : await crewsApi.wavePersonAsCrew(from.eventId, from.fromUserId, crewId)
+  if (result.success && result.data) return { kind: 'done', blend: result.data.blend ?? null }
+  if (result.errorCode === 'NOT_FOUND') return { kind: 'gone' }
+  return { kind: 'error', text: crewMessage(result, 'card', 'Couldn’t wave back. Try again.') }
+}
+
+/**
+ * The server's 403 to a wave at a crew from somebody not open to crews tonight. ponytail: matched on its sentence (the route
+ * sends no reasonCode); read the code once it does.
+ */
+const NOT_OPEN = /Open to joining a crew tonight/i
+
+/** Wave back at a crew that waved at you, as yourself (admin #1007). `notOpen`: your own switch is off (`askOpenToCrews`). */
+export async function waveBackAtCrew(eventId: string, crewId: string): Promise<WaveBackOutcome | { kind: 'notOpen' }> {
+  const result = await crewsApi.waveCrew(eventId, crewId)
+  if (result.success && result.data) return { kind: 'done', blend: result.data.blend }
+  if (result.errorCode === 'NOT_FOUND') return { kind: 'gone' }
+  if (result.error && NOT_OPEN.test(result.error)) return { kind: 'notOpen' }
+  return { kind: 'error', text: crewMessage(result, 'card', 'Couldn’t wave back. Try again.') }
+}
+
+const openedListeners = new Set<(eventId: string) => void>()
+/** "Open to joining a crew tonight" was turned on from a Wave back: the Crews view's switch follows. */
+export function onOpenedToCrews(fn: (eventId: string) => void): () => void {
+  openedListeners.add(fn)
+  return () => {
+    openedListeners.delete(fn)
+  }
+}
+
+/**
+ * Advisor Q7 (2026-11-25): the switch is off, so ask. "Turn it on" turns it on and sends the wave; the sheet stays, saying
+ * why, when either is refused. `onOutcome` hears the wave's answer; Not now sends nothing.
+ */
+export function askOpenToCrews(eventId: string, crew: { crewId: string; name: string }, onOutcome: (outcome: WaveBackOutcome) => void): void {
+  showSheet({
+    kind: 'actions',
+    hue: 'rose',
+    icon: 'users',
+    title: `Wave back at ${crew.name}?`,
+    message: 'Turn on “Open to joining a crew tonight” to wave at a crew. It turns off at the end of the night.',
+    actions: [
+      {
+        label: 'Turn it on',
+        variant: 'primary',
+        run: async () => {
+          const opened = await crewsApi.openToCrews(eventId, true)
+          if (!opened.success) return { ok: false, error: crewMessage(opened, 'card', 'Couldn’t save that. Try again.') }
+          openedListeners.forEach((fn) => fn(eventId))
+          const outcome = await waveBackAtCrew(eventId, crew.crewId)
+          if (outcome.kind === 'notOpen' || outcome.kind === 'error') return { ok: false, error: outcome.kind === 'error' ? outcome.text : 'Couldn’t wave back. Try again.' }
+          onOutcome(outcome)
+          return { ok: true }
+        },
+      },
+      { label: 'Not now', cancel: true },
+    ],
+  })
+}
+
+const HIDDEN_PAGE = 50
+/** 1,000 blocked crews. Past it the list stays unknown, so crew lines are withheld rather than guessed. */
+const HIDDEN_PAGES_MAX = 20
+
+/** Every crew you blocked, or null when any page could not be read. */
+async function readHiddenCrewIds(): Promise<ReadonlySet<string> | null> {
+  const ids = new Set<string>()
+  for (let page = 1; page <= HIDDEN_PAGES_MAX; page += 1) {
+    const r = await crewsApi.hiddenCrews(page, HIDDEN_PAGE)
+    if (!r.success || !r.data) return null
+    r.data.crews.forEach((c) => ids.add(c.crewId))
+    if (!r.data.pagination.hasMore) return ids
+  }
+  return null
+}
+
+/** The crews you blocked, for a chat with a crew's wave in it (`enabled`): read each time it takes focus. Null unless the whole list is known. */
+export function useHiddenCrewIds(enabled: boolean): ReadonlySet<string> | null {
+  const [ids, setIds] = useState<ReadonlySet<string> | null>(null)
+  useFocusEffect(
+    useCallback(() => {
+      if (!enabled) return
+      let live = true
+      void readHiddenCrewIds().then((next) => {
+        if (live) setIds(next)
+      })
+      return () => {
+        live = false
+        // Unknown again until the next focus reads it: a block made elsewhere must not miss this list.
+        setIds(null)
+      }
+    }, [enabled])
+  )
+  return ids
+}
+
+/** A `crew_waved` line by its words: the socket sends it with no metadata. `your`: a crew's; `the`: a person's. */
+const CREW_WAVED = /waved at (your|the) crew$/
+const isSystemLine = (m: Pick<RoomMessage, 'message_type' | 'message_text'>, pattern: RegExp) => m.message_type === 'system' && pattern.test(m.message_text.trim())
+export const isCrewWavedLine = (m: Pick<RoomMessage, 'message_type' | 'message_text' | 'crewWave'>): boolean => !!m.crewWave || isSystemLine(m, CREW_WAVED)
+
+/** A crew's wave (not a person's): the line a block hides. */
+export const isCrewsWave = (m: Pick<RoomMessage, 'crewWave'>): boolean => !!m.crewWave && 'fromCrewId' in m.crewWave
+
+/**
+ * Advisor Q2: a blocked crew's `crew_waved` line is not drawn. Fails closed: with the list unknown (`null`), or the line
+ * naming no crew (live, before the history is read again), a crew's line is withheld. A person's wave and every other line stay.
+ */
+export function withoutBlockedCrews(messages: RoomMessage[], blocked: ReadonlySet<string> | null): RoomMessage[] {
+  return messages.filter((m) => {
+    if (!m.crewWave) return !isSystemLine(m, /waved at your crew$/)
+    return !('fromCrewId' in m.crewWave) || (blocked !== null && !blocked.has(m.crewWave.fromCrewId))
+  })
+}

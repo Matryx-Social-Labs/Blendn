@@ -37,6 +37,9 @@ export function VenueMap({ latitude, longitude }: { latitude: number; longitude:
       <MapView
         style={StyleSheet.absoluteFill}
         customMapStyle={DARK_MAP_STYLE}
+        // Apple Maps ignores the Google style: dark, no POIs, so the hero is the board's quiet lit block (Flow 4 V-A).
+        userInterfaceStyle="dark"
+        showsPointsOfInterests={false}
         initialRegion={{ latitude, longitude, latitudeDelta: LOCATION_CARD_DELTA, longitudeDelta: LOCATION_CARD_DELTA }}
         scrollEnabled={false}
         zoomEnabled={false}

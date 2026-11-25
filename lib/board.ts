@@ -1,4 +1,5 @@
-import { markSeed } from './pseudonymAvatar'
+import type { LobbyPhoto, LobbySubKind } from './lobby'
+import { markSeed } from './creatureSeed'
 
 /**
  * The pre-event board: going alone, and looking for somebody to go with.
@@ -25,6 +26,16 @@ export const BOARD_MAX_POST_LENGTH = 500
 
 /** What an ask that has not been accepted reads, whatever happened to it. */
 export const WAITING_LINE = 'Waiting on them'
+
+/**
+ * Said before the ask and before the accept (identity model, owner 2026-11-11; board `swap-names/` L-A, advisor): an
+ * accepted ask opens the chat with first names and photos already swapped, but only when both apps showed this first
+ * (`namesOnAccept` on the ask and on the accept). The flag is sent only from where the line is drawn.
+ */
+export const NAMES_ON_ACCEPT = {
+  ask: 'If they say yes, you’ll both see each other’s first name and photo.',
+  accept: 'If you say yes, you’ll both see each other’s first name and photo.',
+} as const
 /** An offer with no seats left. */
 export const FULL_LINE = 'Full'
 /** An ask that can no longer go anywhere: the post is gone, the night is over. */
@@ -37,8 +48,16 @@ export const CLOSED_LINE = 'Closed'
  */
 const OFFER_FULL = 'That offer is full'
 const ALREADY_ANSWERED = 'That request has already been answered'
-/** The board's read, post and ask after doors — 403, judged on `start_time`. */
-export const BOARD_CLOSED_SENTENCE = 'The board closes when the doors open — the room is open instead'
+/** The Lobby's read, post and ask after doors — 403, judged on `start_time`. */
+export const BOARD_CLOSED_SENTENCE = 'The Lobby closes when the doors open — the room is open instead'
+/** The same sentence from a server before the Lobby rename (2026-11-05): still read, never shown. */
+const BOARD_CLOSED_SENTENCE_BEFORE_RENAME = 'The board closes when the doors open — the room is open instead'
+
+/** Whether the server said the Lobby has closed, in either wording. */
+export function saysBoardClosed(said: string | null | undefined): boolean {
+  const s = said?.trim()
+  return s === BOARD_CLOSED_SENTENCE || s === BOARD_CLOSED_SENTENCE_BEFORE_RENAME
+}
 
 /** `offer` has spaces to give, `seeking` wants one, `chat` asks nothing. */
 export type BoardPostKind = 'offer' | 'seeking' | 'chat'
@@ -57,6 +76,10 @@ export interface BoardPost {
   mine: boolean
   /** How many have asked. A number, never who. */
   requestCount: number
+  /** What it is about (SCRUM-1026); null on a chat post and on an older server. */
+  subKind?: LobbySubKind | null
+  /** Its one photo: pending or rejected only ever reach its author. */
+  photo?: LobbyPhoto
 }
 
 export type BoardRequestStatus = 'pending' | 'accepted' | 'declined' | 'withdrawn'
@@ -107,11 +130,11 @@ export function sortBoardPosts(posts: readonly BoardPost[]): BoardPost[] {
   ]
 }
 
-/** "2 spaces left", "1 space left", "Full" — or null on anything not an offer. */
+/** "2 spots left", "1 spot left", "Full" — or null on anything not an offer. */
 export function spacesLabel(spacesLeft: number | null): string | null {
   if (spacesLeft === null || !Number.isFinite(spacesLeft)) return null
   if (spacesLeft <= 0) return 'Full'
-  return spacesLeft === 1 ? '1 space left' : `${spacesLeft} spaces left`
+  return spacesLeft === 1 ? '1 spot left' : `${spacesLeft} spots left`
 }
 
 /**
@@ -125,6 +148,15 @@ export function boardClosed(startTime: string | null | undefined, now: number = 
   if (!startTime) return false
   const t = new Date(startTime).getTime()
   return Number.isFinite(t) && t <= now
+}
+
+/**
+ * Does a night offer the Board? The one gate: the Scene's row, the Going tab's row and its tray action all ask it. The board is
+ * switched on (`BOARD_ENABLED`), the night is not called off, and the doors of its first run have not opened (`boardClosed`:
+ * the run's start, not today's session; the server closes the board at the first doors).
+ */
+export function boardOpen(event: { start_time: string | null | undefined; status?: string | null }, now: number = Date.now()): boolean {
+  return BOARD_ENABLED && event.status !== 'cancelled' && !boardClosed(event.start_time, now)
 }
 
 type Refusal = { error?: string | null; errorCode?: string | null } | null | undefined
@@ -143,6 +175,7 @@ export function boardMessage(result: Refusal, fallback: string): string {
   const said = result?.error?.trim()
   if (!said) return fallback
   if (result?.errorCode === 'SERVER_ERROR') return fallback
+  if (saysBoardClosed(said)) return BOARD_CLOSED_SENTENCE
   if (/^(HTTP \d|Invalid JSON)/.test(said)) return fallback
   return said
 }
@@ -199,6 +232,9 @@ export function acceptConflictLine(result: Refusal): string {
   return CLOSED_LINE
 }
 
+/** False for an accepted ask on a post whose room you are seated in: its Rooms row is that ride (C5 B-A). */
+export const notSeated = (r: BoardRequest, seatedPosts: ReadonlySet<string>): boolean => !(r.status === 'accepted' && seatedPosts.has(r.post.id))
+
 /** How long a closed ask stays in the Banter after its event's doors. */
 const OUTGOING_KEEP_MS = 24 * 60 * 60 * 1000
 
@@ -208,13 +244,15 @@ const OUTGOING_KEEP_MS = 24 * 60 * 60 * 1000
  * Incoming: only what can still be answered. Outgoing: anything still live,
  * plus closed ones until a day after their doors — long enough to see it
  * resolved, short enough that the Banter does not become an archive. Your own
- * withdrawals are not shown: you know.
+ * withdrawals are not shown: you know. Nor is an accepted ask whose post's room
+ * you are seated in (`seatedPosts`): its Rooms row is that ride (C5 B-A).
  */
-export function inboxRequests(requests: BoardRequests, now: number = Date.now()): BoardRequests {
+export function inboxRequests(requests: BoardRequests, now: number = Date.now(), seatedPosts: ReadonlySet<string> = new Set()): BoardRequests {
   return {
     incoming: requests.incoming.filter((r) => r.live),
     outgoing: requests.outgoing.filter((r) => {
       if (r.status === 'withdrawn') return false
+      if (!notSeated(r, seatedPosts)) return false
       if (r.live) return true
       const start = new Date(r.event.startTime).getTime()
       return Number.isFinite(start) && start > now - OUTGOING_KEEP_MS

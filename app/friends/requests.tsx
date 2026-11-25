@@ -1,6 +1,7 @@
 import { router } from 'expo-router'
 import { useState } from 'react'
-import { FlatList, RefreshControl, StyleSheet, View } from 'react-native'
+import { RefreshControl, StyleSheet, View } from 'react-native'
+import Animated from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { StateScreen } from '../../components/ds/StateScreen'
@@ -13,6 +14,9 @@ import { groupedCount } from '../../lib/friendsHere'
 import { useFriendRequests } from '../../lib/useFriendRequests'
 import { useTopBarState } from '../../lib/useTopBarState'
 import { HueProvider } from '../../components/ds/shared'
+import { emptyAfterRowOut, rowReflow } from '../../components/motion/presence'
+import { useReducedMotion } from '../../lib/motion'
+import { useSkeletonCrossfade } from '../../components/motion/useSkeletonCrossfade'
 
 /**
  * People asking to be your friend — what "Requests" on the Me tab and at the
@@ -29,6 +33,8 @@ function FriendRequestsScreenContent() {
   const [refreshing, setRefreshing] = useState(false)
   const bar = useTopBarState()
   const insets = useSafeAreaInsets()
+  const reduceMotion = useReducedMotion()
+  const arrive = useSkeletonCrossfade(!loaded && !failed)
   const offline = useOffline()
 
   const onRefresh = async () => {
@@ -47,7 +53,7 @@ function FriendRequestsScreenContent() {
   ) : (
     <StateScreen
       icon="user-plus"
-      title="No requests"
+      title="No friend requests"
       body="When somebody opens your link and asks to be your friend, they’ll be here."
     />
   )
@@ -55,7 +61,7 @@ function FriendRequestsScreenContent() {
   return (
     <View style={styles.container}>
       {/* The server's count of everyone waiting, never the rows loaded (D-LM2). */}
-      <TopBar title="Requests" sub={incomingTotal > 0 ? requestsWaiting(incomingTotal) : undefined} state={bar.state} onBack={() => router.back()} />
+      <TopBar title="Friend requests" sub={incomingTotal > 0 ? requestsWaiting(incomingTotal) : undefined} state={bar.state} onBack={() => router.back()} />
       {offline ? (
         <View style={styles.offline}>
           <OfflineStrip offline />
@@ -64,7 +70,8 @@ function FriendRequestsScreenContent() {
       {!loaded && !failed ? (
         <RequestSkeleton />
       ) : (
-        <FlatList
+        <Animated.View entering={arrive} style={styles.fill}>
+        <Animated.FlatList
           data={incoming}
           keyExtractor={(r) => r.id}
           renderItem={({ item }) => (
@@ -75,21 +82,25 @@ function FriendRequestsScreenContent() {
             />
           )}
           testID="requests-list"
+          // An answered request fades (the row's own exit) and the rest close the gap (DS #16).
+          itemLayoutAnimation={reduceMotion ? undefined : rowReflow}
           onEndReachedThreshold={1.5}
           onEndReached={() => void loadMore('incoming')}
           initialNumToRender={6}
           windowSize={7}
-          removeClippedSubviews
+          // No removeClippedSubviews: on iOS it takes a leaving row's view out from under its exit and the reflow, a one-frame cut (SCRUM-1001).
           ListFooterComponent={
             <PagedFooter loading={incomingPage.loadingMore} failed={incomingPage.moreFailed} onRetry={() => void loadMore('incoming')} testID="requests-more" />
           }
           contentContainerStyle={[incoming.length ? styles.list : styles.emptyList, { paddingBottom: insets.bottom + SPACE.xl }]}
-          ListEmptyComponent={empty}
+          // After the last answer it waits for the row's fade (emptyAfterRowOut).
+          ListEmptyComponent={<Animated.View entering={reduceMotion ? undefined : emptyAfterRowOut}>{empty}</Animated.View>}
           // `textSecondary`, the one pull-to-refresh colour (docs/DESIGN_SYSTEM.md).
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLOR.textSecondary} />}
           showsVerticalScrollIndicator={false}
           {...bar.scrollProps}
         />
+        </Animated.View>
       )}
     </View>
   )
@@ -98,7 +109,9 @@ function FriendRequestsScreenContent() {
 const styles = StyleSheet.create({
   offline: { paddingHorizontal: SPACE.gutter, paddingBottom: SPACE.sm },
   container: { flex: 1, backgroundColor: COLOR.ink },
-  list: { paddingHorizontal: SPACE.gutter, paddingVertical: SPACE.sm, gap: SPACE.md },
+  fill: { flex: 1 },
+  // Flow 7 4-A: 68 pt rows edge to edge, no gap between them.
+  list: { paddingHorizontal: SPACE.gutter, paddingVertical: SPACE.sm },
   emptyList: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: SPACE.gutter },
 })
 

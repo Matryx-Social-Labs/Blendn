@@ -83,8 +83,12 @@ export function MomentBlend({ ours, theirs, facets, yourLike, onOpen, onLater, t
   const rise = useSharedValue(reduceMotion ? 0 : RISE.list)
   const actions = useSharedValue(0)
   const [live, setLive] = useState(false)
+  /** The two have landed together: both crews clink, once (SCRUM-1053). */
+  const [clink, setClink] = useState(false)
 
+  const [onStage, setOnStage] = useState(false)
   useEffect(() => {
+    if (!onStage) return
     if (reduceMotion) {
       ;[scrim, orbs, art, text].forEach((v) => v.set(fade(1, duration.base)))
       actions.set(fade(1, duration.base, duration.base))
@@ -99,13 +103,19 @@ export function MomentBlend({ ours, theirs, facets, yourLike, onOpen, onLater, t
     actions.set(fade(1, DURATION.base, ACTIONS_AT))
     // Once, as it appears.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [onStage])
 
   const skipBeats = useBeats([
-    { at: reduceMotion ? 0 : LAND_MS, run: () => yourLike && H.match() },
+    {
+      at: reduceMotion ? 0 : LAND_MS,
+      run: () => {
+        if (yourLike) H.match()
+        setClink(true)
+      },
+    },
     // Live once fully shown, so a skip tap at the foot of the screen never lands on a half-faded button.
     { at: reduceMotion ? 2 * duration.base : ACTIONS_AT + DURATION.base, run: () => setLive(true) },
-  ])
+  ], onStage)
   const skip = () => {
     ;[scrim, orbs, art, text, actions].forEach((v) => v.set(1))
     leftX.set(0)
@@ -124,7 +134,7 @@ export function MomentBlend({ ours, theirs, facets, yourLike, onOpen, onLater, t
   const secondary = contrast ? COLOR.textPrimary : COLOR.textSecondary
 
   return (
-    <MomentStage testID={testID} label={`It’s a Blend. ${spoken}.`} scrimAlpha={SCRIM} scrim={scrim} orbs="moment" orbsOpacity={orbs} onSkip={skip} onBack={() => {
+    <MomentStage testID={testID} onShown={() => setOnStage(true)} label={`It’s a Mix. ${spoken}.`} scrimAlpha={SCRIM} scrim={scrim} orbs="moment" orbsOpacity={orbs} onSkip={skip} onBack={() => {
         skip()
         onLater()
       }}>
@@ -133,15 +143,15 @@ export function MomentBlend({ ours, theirs, facets, yourLike, onOpen, onLater, t
           {/* Nothing here is a button: a tap on the emblems or the words falls through to skip. */}
           <View testID={testID && `${testID}-art`} pointerEvents="none" style={styles.art} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
             <Animated.View style={[styles.left, leftStyle]}>
-              <Piece side={ours} />
+              <Piece side={ours} clink={clink} />
             </Animated.View>
             <Animated.View style={[styles.right, rightStyle]}>
-              <Piece side={theirs} cut={ours.kind === 'crew' && theirs.kind === 'crew'} />
+              <Piece side={theirs} cut={ours.kind === 'crew' && theirs.kind === 'crew'} clink={clink} />
             </Animated.View>
           </View>
           <Animated.View testID={testID && `${testID}-copy`} pointerEvents="none" style={[styles.copy, textStyle]}>
             <Text accessibilityRole="header" maxFontSizeMultiplier={MAX_FONT_SCALE.moment} style={[font('moment', bold), styles.centre]}>
-              It’s a Blend
+              It’s a Mix
             </Text>
             <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.centre, { color: secondary }]}>
               {line}
@@ -162,7 +172,7 @@ export function MomentBlend({ ours, theirs, facets, yourLike, onOpen, onLater, t
           pointerEvents={live || screenReader ? 'box-none' : 'none'}
           style={[styles.actions, { paddingBottom: insets.bottom + SPACE.xl }, actionsStyle]}
         >
-          <Button label="Open the Blend" onPress={onOpen} testID={testID && `${testID}-open`} />
+          <Button label="Open the Mix" onPress={onOpen} testID={testID && `${testID}-open`} />
           <Button label="Later" kind="tertiary" onPress={onLater} testID={testID && `${testID}-later`} />
         </Animated.View>
       </View>
@@ -171,7 +181,7 @@ export function MomentBlend({ ours, theirs, facets, yourLike, onOpen, onLater, t
 }
 
 /** A crew's emblem, or a person's creature (anonymous here: nobody is named until someone reveals). */
-function Piece({ side, cut = false }: { side: BlendCrew | BlendPerson; cut?: boolean }) {
+function Piece({ side, cut = false, clink = false }: { side: BlendCrew | BlendPerson; cut?: boolean; clink?: boolean }) {
   if (side.kind === 'person') return <Creature {...creatureFor(side.pseudonym)} size={EMBLEM} ring={COLOR.ink} />
   return (
     <View>
@@ -180,7 +190,7 @@ function Piece({ side, cut = false }: { side: BlendCrew | BlendPerson; cut?: boo
           <Path d={EMBLEM_SQUIRCLE} fill={COLOR.ink} />
         </Svg>
       ) : null}
-      <CrewEmblem seed={side.emblemSeed} size={EMBLEM} />
+      <CrewEmblem seed={side.emblemSeed} size={EMBLEM} scene={clink ? 'clink' : undefined} />
     </View>
   )
 }

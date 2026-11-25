@@ -1,3 +1,4 @@
+import type { WaveStatus } from '../../lib/waves'
 import { useEffect, useState, type ReactNode } from 'react'
 import { ScrollView, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -10,7 +11,6 @@ import { EventCard } from '../../components/ds/EventCard'
 import { FaceMark, Facepile, type Face } from '../../components/ds/Facepile'
 import { GridFace } from '../../components/ds/GridFace'
 import { HoldToConfirm } from '../../components/ds/HoldToConfirm'
-import { MapCard, MapCluster, MapPin } from '../../components/ds/MapCard'
 import { MeetNextCard } from '../../components/ds/MeetNextCard'
 import { PersonCard, PersonCardContent, type PersonCardContentProps, type PersonCardPerson, type PersonState } from '../../components/ds/PersonCard'
 import { RevealBar } from '../../components/ds/RevealBar'
@@ -53,7 +53,6 @@ export default function DsP2Preview() {
         <Holds />
         <VenuePasses />
         <DoorCodes />
-        <Maps />
         <PersonCards />
         <RollingNumbers />
         <RevealBars />
@@ -89,7 +88,7 @@ const COVER_2 = 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=
 const PHOTO = 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=256'
 const PHOTO_2 = 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=256'
 
-const photo = (uri: string): Face => ({ kind: 'photo', uri })
+const photo = (uri: string, name = 'Asha'): Face => ({ kind: 'photo', uri, name })
 const creature = (pseudonym: string): Face => ({ kind: 'creature', pseudonym })
 const FACES: Face[] = [photo(PHOTO_2), creature('Cosmic Panda'), creature('Quiet Heron'), photo(PHOTO), creature('Night Cat'), creature('Velvet Otter')]
 
@@ -181,9 +180,9 @@ function EventCards() {
 const DECK: DeckEvent[] = [VINYL, OPEN_MIC, QUIZ]
 
 function Tonight() {
-  const [index, setIndex] = useState(0)
+  const [, setIndex] = useState(0)
   const deck = (events: DeckEvent[], extra: { previewState?: 'pressed' } = {}) => (
-    <TonightCard events={events} index={0} onIndexChange={noop} onOpen={noop} width={DECK_WIDTH} height={DECK_HEIGHT} {...extra} />
+    <TonightCard events={events} onIndexChange={noop} onOpen={noop} width={DECK_WIDTH} height={DECK_HEIGHT} {...extra} />
   )
   return (
     <Section title="TonightCard" note="the hero card with a 2 pt ink outline · two fanned back-cards · pips · H.select as a swiped card settles">
@@ -203,7 +202,7 @@ function Tonight() {
         {deck(DECK, { previewState: 'pressed' })}
       </Cell>
       <Cell label="live · swipe it" testID="ds-tonight-live">
-        <TonightCard events={DECK} index={index} onIndexChange={setIndex} onOpen={noop} width={DECK_WIDTH} height={DECK_HEIGHT} testID="ds-tonight-live-deck" />
+        <TonightCard events={DECK} onIndexChange={setIndex} onOpen={noop} width={DECK_WIDTH} height={DECK_HEIGHT} testID="ds-tonight-live-deck" />
       </Cell>
     </Section>
   )
@@ -259,7 +258,7 @@ function SectionHeaders() {
           count={2}
           right={
             <View style={styles.row}>
-              <Text style={styles.note}>Liking as</Text>
+              <Text style={styles.note}>Sending as</Text>
               <Avatar kind="creature" pseudonym="Night Cat" size={24} />
             </View>
           }
@@ -293,8 +292,8 @@ function Facepiles() {
       <Cell label="on a card · the ring takes its colour" testID="ds-facepile-surface" style={styles.surface}>
         <Facepile faces={FACES} total={14} ring={COLOR.surface} />
       </Cell>
-      <Cell label="FaceMark · liked · matched · requested" testID="ds-facemark-all" style={styles.row}>
-        <FaceMark kind="liked" />
+      <Cell label="FaceMark · waved at you · both waved · requested" testID="ds-facemark-all" style={styles.row}>
+        <FaceMark kind="wavedAtYou" />
         <FaceMark kind="matched" />
         <FaceMark kind="requested" />
       </Cell>
@@ -309,14 +308,14 @@ const NOVA = { face: photo(PHOTO_2), name: 'Priya', reason: 'Both into vinyl' }
 function GridFaces() {
   const marks = [
     ['here', {}],
-    ['liked', { liked: true }],
-    ['matched', { matched: true }],
+    ['wavedatyou', { wavedAtYou: true, reason: 'Waved at you' }],
+    ['bothwaved', { matched: true, reason: 'You both waved' }],
     ['away', { here: false }],
     ['pressed', { previewState: 'pressed' }],
     ['focused', { previewState: 'focused' }],
   ] as const
   return (
-    <Section title="GridFace" note="the column less 16 · here (live dot), liked (heart), matched (message) · away at 60% · silent tap">
+    <Section title="GridFace" note="the column less 16 · here (live dot), waved at you (rose hand), both waved (message) · away at 60% · silent tap">
       {marks.map(([state, props]) => (
         <Cell key={state} label={state} testID={`ds-gridface-${state}`}>
           <GridFace {...NOVA} width={COLUMN} onPress={noop} {...props} />
@@ -326,7 +325,7 @@ function GridFaces() {
         <SectionHeader title="Everyone here" count={14} />
         <View style={styles.grid}>
           {FACES.map((face, i) => (
-            <GridFace key={i} face={face} name={['Priya', 'Cosmic Panda', 'Quiet Heron', 'Sam', 'Night Cat', 'Velvet Otter'][i]} reason="Both into vinyl" width={COLUMN_360} liked={i === 1} here={i !== 5} onPress={noop} />
+            <GridFace key={i} face={face} name={['Priya', 'Cosmic Panda', 'Quiet Heron', 'Sam', 'Night Cat', 'Velvet Otter'][i]} reason="Both into vinyl" width={COLUMN_360} wavedAtYou={i === 1} here={i !== 5} onPress={noop} />
           ))}
         </View>
       </Cell>
@@ -337,12 +336,15 @@ function GridFaces() {
 function MeetNext() {
   const states = [
     ['default', {}],
-    ['liked', { liked: true }],
+    ['sending', { wave: 'sending' }],
+    ['waved', { wave: 'waved' }],
+    ['wavedatyou', { wave: 'wavedAtYou', wavedAgo: '4 min' }],
+    ['bothwaved', { wave: 'mutual' }],
     ['pressed', { previewState: 'pressed' }],
     ['focused', { previewState: 'focused' }],
   ] as const
   return (
-    <Section title="MeetNextCard" note="164 pt surface card · the face at the card less 32 · the liked mark · silent tap">
+    <Section title="MeetNextCard" note="the lit card · a labelled Wave pill: Wave → Wave back → ✓ Waved → Say hi · silent tap">
       {states.map(([state, props]) => (
         <Cell key={state} label={state} testID={`ds-meetnext-${state}`}>
           <MeetNextCard {...NOVA} width={COLUMN} onPress={noop} {...props} />
@@ -354,7 +356,7 @@ function MeetNext() {
       <Cell label="the row at 360 · 96 each" testID="ds-meetnext-row-360">
         <View style={styles.pair}>
           <MeetNextCard {...NOVA} width={COLUMN_360} onPress={noop} />
-          <MeetNextCard face={creature('Cosmic Panda')} name="Cosmic Panda" reason="Both open to dating" width={COLUMN_360} liked onPress={noop} />
+          <MeetNextCard face={creature('Cosmic Panda')} name="Cosmic Panda" reason="Both open to dating" width={COLUMN_360} wave="waved" onPress={noop} />
           <MeetNextCard face={photo(PHOTO)} name="Sam" reason="Both at 3 nights before" width={COLUMN_360} onPress={noop} />
         </View>
       </Cell>
@@ -382,17 +384,18 @@ function Holds() {
     ['refused', { refused: true }],
     ['busy', { busy: true, busyLabel: 'Checking you in…' }],
     ['confirmed', { confirmedLabel: 'You’re in' }],
+    ['neutral (check-out)', { kind: 'neutral', label: 'Hold to check out' }],
   ] as const
   return (
     <Section title="HoldToConfirm" note="#8: 900 ms · H.tick at 25 / 50 / 75 · H.commit at 100 · a release rewinds on M.settle · #10: refused is H.error and a drain · #9: You’re in · a screen reader gets one button">
       {states.map(([state, props]) => (
         <Cell key={state} label={state} testID={`ds-hold-${state}`}>
-          <HoldToConfirm label="Hold to blend in" onConfirm={noop} consequence="Checks you in. Other people at this event will see you." {...props} />
+          <HoldToConfirm label="Hold to Blend’n" onConfirm={noop} consequence="Checks you in. Other people at this event will see you." {...props} />
         </Cell>
       ))}
       <Cell label="live · hold it (busy for 1.5 s, then it drains)" testID="ds-hold-live">
         <HoldToConfirm
-          label="Hold to blend in"
+          label="Hold to Blend’n"
           srLabel="Check in"
           consequence="Checks you in. Other people at this event will see you."
           busy={busy}
@@ -469,60 +472,28 @@ function DoorCodes() {
         <DoorCode state="used" />
       </Cell>
       <Cell label="ended" testID="ds-doorcode-ended" style={styles.surface}>
-        <DoorCode state="ended" endedLabel="ENDED SUNDAY" />
+        <DoorCode state="ended" />
       </Cell>
     </Section>
   )
 }
 
-/** A stand-in for the map the screen draws (the Scene's MapView): the ground and two roads. */
-function Ground() {
-  return (
-    <View style={StyleSheet.absoluteFill}>
-      <View style={[styles.road, styles.roadA]} />
-      <View style={[styles.road, styles.roadB]} />
-    </View>
-  )
-}
 
-function Maps() {
-  return (
-    <Section title="MapCard · MapPin · MapCluster" note="the 200 pt band · the ember pin at the centre · Open in Maps · pins 10 pt in an ink ring · a cluster zooms, never lists">
-      <Cell label="default" testID="ds-mapcard-default">
-        <MapCard venue="Toit" map={<Ground />} onPress={noop} />
-      </Cell>
-      <Cell label="with the address and you" testID="ds-mapcard-address-you">
-        <MapCard venue="Toit" address="12th Main, Indiranagar" you map={<Ground />} onPress={noop} />
-      </Cell>
-      <Cell label="focused" testID="ds-mapcard-focused">
-        <MapCard venue="Toit" map={<Ground />} previewState="focused" onPress={noop} />
-      </Cell>
-      <Cell label="the pin family · event · venue · live · you · selected" testID="ds-mappin-family" style={[styles.row, styles.mapStage]}>
-        <MapPin kind="event" />
-        <MapPin kind="venue" />
-        <MapPin kind="live" />
-        <MapPin kind="you" />
-        <MapPin kind="event" selected />
-        <MapPin kind="event" label="Vinyl Night, 9 PM" onPress={noop} />
-      </Cell>
-      <Cell label="clusters · 3 · 12 · 120" testID="ds-mapcluster-all" style={[styles.row, styles.mapStage]}>
-        <MapCluster count={3} onPress={noop} />
-        <MapCluster count={12} onPress={noop} />
-        <MapCluster count={120} onPress={noop} />
-      </Cell>
-    </Section>
-  )
-}
 
 const PRIYA: PersonCardPerson = {
   face: photo(PHOTO_2),
   name: 'Priya',
   age: 27,
-  reason: 'Both open to dating',
-  reasons: ['Both open to dating', 'Both at 3 nights before', 'You both picked Filter coffee over Chai'],
-  chips: ['Vinyl', 'Techno', 'Filter coffee'],
+  meta: 'Anonymous · 27',
+  context: 'In the room at Rooftop Sundowner: House & Disco',
+  lead: [
+    { icon: 'users', label: 'Here for friends', lit: true },
+    { icon: 'sparkles', label: '3 in common', lit: false },
+  ],
+  tonight: { question: 'Who are you hoping they play?', answer: 'Anything from the new record. And one old disco edit, please.' },
+  common: { label: 'In common', items: ['Vinyl', 'Techno', 'Filter coffee'] },
 }
-const HANDLERS = { onLike: noop, onWave: noop, onMessage: noop, onSayHi: noop, onMore: noop, onViewProfile: noop, onClose: noop }
+const HANDLERS = { onWave: noop, onMessage: noop, onSayHi: noop, onMore: noop, onViewProfile: noop, onClose: noop }
 
 /** The L3 sheet, drawn in place (the live cell opens the real one). */
 function SheetFrame({ children }: { children: ReactNode }) {
@@ -538,30 +509,31 @@ function SheetFrame({ children }: { children: ReactNode }) {
 function PersonCards() {
   const [open, setOpen] = useState(false)
   const [state, setState] = useState<PersonState>('none')
+  const [wave, setWave] = useState<WaveStatus>('none')
   useEffect(() => {
-    if (state !== 'waveBusy') return
-    const timer = setTimeout(() => setState('waved'), ANSWER_MS)
+    if (wave !== 'sending') return
+    const timer = setTimeout(() => setWave('waved'), ANSWER_MS)
     return () => clearTimeout(timer)
-  }, [state])
+  }, [wave])
   const cards: [string, Partial<PersonCardContentProps>][] = [
     ['here', { variant: 'here' }],
     ['was', { variant: 'was' }],
     ['pre', { variant: 'pre' }],
-    ['matched', { variant: 'matched', here: true }],
+    ['bothwaved', { variant: 'matched', here: true, wave: 'mutual' }],
     ['friend', { variant: 'friend', here: true }],
     ['gone', { variant: 'gone' }],
     ['thin', { variant: 'thin', person: { face: creature('Cosmic Panda'), name: 'Cosmic Panda', age: 27, city: 'Bengaluru' } }],
-    ['liked', { variant: 'here', state: 'liked' }],
     ['requested', { variant: 'here', state: 'requested' }],
-    ['wavebusy', { variant: 'here', state: 'waveBusy' }],
-    ['waved', { variant: 'here', state: 'waved' }],
-    ['wavedatyou', { variant: 'here', wavedAtYou: '2 min' }],
-    ['wavedback', { variant: 'here', wavedAtYou: '2 min', state: 'waved' }],
+    ['sending', { variant: 'here', wave: 'sending' }],
+    ['waved', { variant: 'here', wave: 'waved' }],
+    ['wavedatyou', { variant: 'here', wave: 'wavedAtYou', wavedAtYou: '2 min' }],
+    ['wavedatyou-was', { variant: 'was', wave: 'wavedAtYou' }],
+    ['crew', { variant: 'here', crewLike: { name: 'Night Owls', onPress: noop } }],
     ['refused', { variant: 'was', refusal: { text: 'That didn’t go through.' } }],
     ['refused-checkin', { variant: 'here', refusal: { text: 'Check in to wave at people here.', action: { label: 'Check in', onPress: noop } } }],
   ]
   return (
-    <Section title="PersonCard" note="R3-D4 · variants a b d e f g h · Like is the gradient primary (H.like, #15 pop) · Say hi H.primary · Wave, Message, ⋯ silent · Waved settles to a still white pill">
+    <Section title="PersonCard" note="Wave dock A · Wave (lit, H.select) + Message · Wave back the filled one · ✓ Waved still · You both waved: Say hi only · crew like a row">
       {cards.map(([name, props]) => (
         <Cell key={name} label={name} testID={`ds-person-${name}`} style={styles.backdrop}>
           <SheetFrame>
@@ -569,18 +541,18 @@ function PersonCards() {
           </SheetFrame>
         </Cell>
       ))}
-      <Cell label="live · open the sheet: Like, Wave, Message" testID="ds-person-live">
+      <Cell label="live · open the sheet: Wave, Message" testID="ds-person-live">
         <Button label="Open the PersonCard" kind="secondary" size="md" onPress={() => setOpen(true)} testID="ds-person-open" />
-        <Button label="Reset its state" kind="tertiary" size="md" onPress={() => setState('none')} />
+        <Button label="Reset its state" kind="tertiary" size="md" onPress={() => { setState('none'); setWave('none') }} />
         <PersonCard
           visible={open}
           person={PRIYA}
           variant="here"
           state={state}
+          wave={wave}
           {...HANDLERS}
           onClose={() => setOpen(false)}
-          onLike={() => setState('liked')}
-          onWave={() => setState('waveBusy')}
+          onWave={() => setWave('sending')}
           onMessage={() => setState('requested')}
           testID="ds-person-sheet"
         />
@@ -634,17 +606,17 @@ function RevealBars() {
   const them = { face: creature('Cosmic Panda'), name: 'Cosmic Panda' }
   const states = [
     ['none', { state: 'none' }],
-    ['youonly', { state: 'youOnly', you: { face: photo(PHOTO), name: 'Sam' } }],
-    ['theyonly', { state: 'theyOnly', them: { face: photo(PHOTO_2), name: 'Priya' } }],
-    ['asked', { state: 'asked' }],
+    ['mine', { state: 'mine' }],
+    ['theirs', { state: 'theirs' }],
+    ['both', { state: 'both', you: { face: photo(PHOTO), name: 'Sam' }, them: { face: photo(PHOTO_2), name: 'Priya' } }],
     ['pressed', { state: 'none', previewState: 'pressed' }],
     ['focused', { state: 'none', previewState: 'focused' }],
   ] as const
   return (
-    <Section title="RevealBar" note="the sheet tier · you ↔ them, seen or anonymous · Show them (a sheet confirms) · Ask them · silent">
+    <Section title="RevealBar" note="the sheet tier · you ↔ them · Swap names (lit) · waiting + Cancel (quiet) · they want to swap · both">
       {states.map(([state, props]) => (
         <Cell key={state} label={state} testID={`ds-reveal-${state}`} style={styles.backdrop}>
-          <RevealBar you={you} them={them} onShow={noop} onAsk={noop} {...props} />
+          <RevealBar you={you} them={them} onSwap={noop} onCancel={noop} {...props} />
         </Cell>
       ))}
     </Section>
@@ -656,12 +628,12 @@ function TimeRings() {
     <Section title="TimeRing" note="Satoshi 500 at the 12 pt floor, 0.8 tracking, on the circle · fixed size · Bold 700, Increase Contrast white">
       <Cell label="the Room" testID="ds-timering-room" style={styles.centre}>
         <TimeRing text="In the room · 1h 12m">
-          <Avatar kind="photo" uri={PHOTO} size={72} />
+          <Avatar kind="photo" uri={PHOTO} name="Asha" size={72} />
         </TimeRing>
       </Cell>
       <Cell label="a venue room · countdown" testID="ds-timering-venue" style={styles.centre}>
         <TimeRing text="Live · 42 min left">
-          <Avatar kind="photo" uri={PHOTO} size={72} />
+          <Avatar kind="photo" uri={PHOTO} name="Asha" size={72} />
         </TimeRing>
       </Cell>
       <Cell label="anonymous · the creature" testID="ds-timering-anon" style={styles.centre}>
@@ -679,7 +651,6 @@ const DECK_WIDTH = 280
 const DECK_HEIGHT = 300
 const HERO_HEIGHT = 300
 const NARROW_CARD = 158
-const MAP_STAGE = 96
 const ROAD = SPACE.xs
 
 const styles = StyleSheet.create({
@@ -708,7 +679,6 @@ const styles = StyleSheet.create({
   backdrop: { backgroundColor: COLOR.surfaceRaised },
   heroCard: { height: HERO_HEIGHT },
   narrowCard: { width: NARROW_CARD, height: HERO_HEIGHT / 2 + SPACE.xl },
-  mapStage: { height: MAP_STAGE, backgroundColor: COLOR.surfaceSunken, justifyContent: 'space-around' },
   road: { position: 'absolute', backgroundColor: COLOR.hairline },
   roadA: { left: 0, right: 0, top: '35%', height: ROAD, transform: [{ rotate: '-8deg' }] },
   roadB: { top: 0, bottom: 0, left: '62%', width: ROAD, transform: [{ rotate: '6deg' }] },

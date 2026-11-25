@@ -14,12 +14,14 @@
  * have one source; the brand tokens the app theme does not carry are below.
  * A value that is not a token says why.
  */
-import { EMBER, SPACE } from './theme'
+import { COLOR, SPACE } from './design/tokens'
 
-/** Brand tokens `lib/theme.ts` does not carry, by their `colors.css` names. */
+/** The brand colours from the tokens, and the one stop they do not carry by its `colors.css` name. */
 const TOKEN = {
-  brandOrange: '#F05423', // --brand-orange
-  brandRose: '#BE5C71', // --brand-rose
+  white: COLOR.textPrimary,
+  violet: COLOR.selectionVioletGlyph,
+  brandOrange: COLOR.brandOrange,
+  brandRose: COLOR.brandRose,
   emberEnd: '#FF6D8D', // the far end of --gradient-ember
 } as const
 
@@ -41,6 +43,8 @@ export const MAP_THEME = {
     /** Where the map opens (and where "my location" goes back to): close enough that a lit building and a beacon read as 3D, tilted so they stand up. */
     zoom: 16,
     pitch: 55,
+    /** North up: "my location" takes a rotated map back to it (owner 2026-11-20). */
+    bearing: 0,
     /** Farther than this from where the map is, a move is to another city: no flight, a jump under a fade (design kit motion #41). */
     acrossCityKm: 30,
     /** Within a city, the camera eases this long. */
@@ -130,7 +134,8 @@ export const MAP_THEME = {
   event: {
     /** Foot to top. The foot is not a token: a darker step of brand orange, so the wall reads as lit from above. */
     walls: ['#A8330F', TOKEN.brandOrange],
-    crown: EMBER.accent,
+    /** The old Ember accent, kept as the map's own value until the Pulse map board restyles the crown. Not a token. */
+    crown: '#FF906D',
     /** A building in our tiles is one colour; live, it is a brighter step of the accent. Not a token. */
     liveCrown: '#FFB394',
     glow: EMBER_GLOW,
@@ -163,8 +168,6 @@ export const MAP_THEME = {
    */
   glow: {
     radiusM: 70,
-    /** Metres become pixels at this latitude (Bengaluru); within 10% for any Indian city. */
-    referenceLatitude: 13,
     /** Past this zoom the glow stops growing on screen: a huge blur is all overdraw. */
     maxZoom: 18,
     /** A lit building's glow, still. */
@@ -176,12 +179,47 @@ export const MAP_THEME = {
   /** Below the buildings' zoom, a pin is a dot (and a venue's glow steps with its bucket). */
   pin: {
     dotRadiusPx: 6,
-    dotStroke: EMBER.bg,
+    /** The map's ground under a dot. Not a token. */
+    dotStroke: '#0F0E0E',
     dotStrokePx: 2,
     glowPxPerStep: 12,
     glowOpacity: 0.5,
     event: { live: EMBER_GLOW, later: TOKEN.brandOrange },
     venue: { live: ORCHID, later: TOKEN.brandRose },
+    /** A live event's rim (pulse-map 08): a shape cue; ember alone is only ΔE 7–12 from a later one. Not a token. */
+    liveRim: TOKEN.white,
+    liveRimPx: 1.5,
+    /** The one bright thing (pulse-map 08): 9 pt, warmer and lighter than the rest, a white ring. Not a token. */
+    focus: { color: '#FF906D', radiusPx: 9, ring: TOKEN.white, ringPx: 2 },
+    /** With a focus, the rest stay visible but quiet: glow off, 5 pt, 85% (55% failed contrast, sheet 09). */
+    dimmed: { radiusPx: 5, opacity: 0.85 },
+  },
+
+  /**
+   * "You" (pulse-map 06; Foundations C: violet is you, never ember or rose). The halo is the fix's real accuracy. Stale is
+   * grey; approximate is a soft circle with this edge. The stale grey is not a token (contrast sheet 09: 5.28 on ground).
+   */
+  you: {
+    dot: TOKEN.violet,
+    ring: TOKEN.white,
+    ringPx: 2,
+    radiusPx: 7,
+    halo: 'rgba(186,150,211,0.18)',
+    approximateEdge: 'rgba(186,150,211,0.55)',
+    stale: '#8C8796',
+  },
+
+  /** A pile of events (pulse-map 08): ink 90% with an ember rim, white numerals in the style's own glyphs (Satoshi is never hosted). */
+  pile: {
+    fill: 'rgba(13,12,12,0.9)',
+    rim: TOKEN.brandOrange,
+    rimPx: 1.5,
+    text: TOKEN.white,
+    /** Opaque ink round the numerals: legible over the violet you-dot (white on violet alone is 2.5:1). */
+    halo: COLOR.ink,
+    haloPx: 1.5,
+    font: ['Noto Sans Bold'],
+    textSize: 13,
   },
 
   /** The name above a lit roof. Only the nearest few on screen get one. */

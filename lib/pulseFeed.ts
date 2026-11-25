@@ -80,10 +80,10 @@ export function pulseEmptyCopy(
     case 'noCity':
       return { title: 'No events yet', message: 'There are no published events to show right now.' }
     case 'notLive':
+      // The board's Canada frame (Waymo's shape): what is missing, then where we are. Demand is already recorded (`recordCityDemand`).
       return {
-        title: `Coming soon to ${city}`,
-        message:
-          "We’re not live here yet — you’re early. Browse another city in the meantime, and we’ll be here soon.",
+        title: `We’re not in ${city} yet`,
+        message: 'You’re early, and we’ve counted you in. The more people ask, the sooner we open here.',
       }
     case 'quiet':
       return {
@@ -91,4 +91,33 @@ export function pulseEmptyCopy(
         message: 'Nothing is on here at the moment. Try another city, or check back.',
       }
   }
+}
+
+const WEEK_MS = 7 * 86_400_000
+
+/**
+ * A quiet week's end (Flow 3 · Pulse, Canada): "That's everything in Toronto this week." Only when it is true: the whole
+ * list is loaded (no page may follow) and every event in it starts within the week.
+ */
+export function quietWeekEnd(events: readonly { start_time: string }[], s: { hasMore: boolean; now: number }): boolean {
+  if (s.hasMore || events.length === 0) return false
+  return events.every((e) => Date.parse(e.start_time) < s.now + WEEK_MS)
+}
+
+/** How many cities "Where Blend'n is on" lists. */
+export const WHERE_WE_ARE_MAX = 4
+
+/**
+ * "Where Blend'n is on", under a city we are not in yet: the open cities with events, busiest first, each with its count
+ * grouped ("1,240 events"), or no count under five (the floor every count on the Pulse keeps).
+ */
+export function whereWeAre<C extends { city: string; eventCount: number; access?: 'full' | 'comingSoon' }>(
+  options: readonly C[],
+  max: number = WHERE_WE_ARE_MAX
+): { city: C; count: string | null }[] {
+  return options
+    .filter((o) => o.access !== 'comingSoon' && o.eventCount > 0)
+    .sort((a, b) => b.eventCount - a.eventCount || a.city.localeCompare(b.city))
+    .slice(0, max)
+    .map((city) => ({ city, count: city.eventCount >= 5 ? `${city.eventCount.toLocaleString('en-US')} events` : null }))
 }

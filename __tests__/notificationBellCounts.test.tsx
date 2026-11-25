@@ -12,14 +12,15 @@ jest.mock('expo-router', () => ({
   useFocusEffect: (fn: () => void) => require('react').useEffect(() => fn(), [fn]),
 }))
 jest.mock('../lib/apiClient', () => ({ apiClient: { getNotifications: jest.fn() } }))
-jest.mock('../lib/socketClient', () => ({ subscribeToBell: () => () => {} }))
+jest.mock('../lib/socketClient', () => ({ subscribeToBell: () => () => {}, subscribeToUserNotifications: () => () => {} }))
 jest.mock('expo-notifications', () => ({ getPermissionsAsync: jest.fn(), setBadgeCountAsync: jest.fn() }))
-jest.mock('../components/ui/Material', () => ({ Material: () => null }))
+jest.mock('../components/ui/Material', () => ({ Material: () => null, useMapInk: () => null }))
 
 /* eslint-disable import/first */
 import * as Notifications from 'expo-notifications'
 import { router } from 'expo-router'
 import { NotificationBell } from '../components/pulse/NotificationBell'
+import { useInboxBadgeSync } from '../lib/inboxBadge'
 import { apiClient } from '../lib/apiClient'
 /* eslint-enable import/first */
 
@@ -45,6 +46,17 @@ it('the bell says its own rows, and the icon says rows and conversations', async
   expect(screen.getByLabelText('Notifications').props.accessibilityValue).toEqual({ text: '2 unseen' })
 })
 
+// Requests placement A (board 03): the server keeps talk-asks out of `unreadCount` (task 12, admin #996); the bell draws it as sent.
+it('a message request, a Lobby ask or a reveal ask never lights the bell: the badge is the server’s split count', async () => {
+  api.getNotifications.mockResolvedValue(feed({ unreadCount: 2, talkAsks: { messageRequests: 2, lobbyAsks: 1 }, badgeCount: 5 }))
+  await render(<NotificationBell />)
+  await waitFor(() => expect(screen.getByLabelText('Notifications').props.accessibilityValue).toEqual({ text: '2 unseen' }))
+  expect(screen.getByText('2', { includeHiddenElements: true })).toBeTruthy()
+  // Control: neither the icon's number nor the asks reach the bell.
+  expect(screen.queryByText('5', { includeHiddenElements: true })).toBeNull()
+  await waitFor(() => expect(setBadge).toHaveBeenCalledWith(5))
+})
+
 it('opening the bell clears the bell at once; the icon is the conversations\' until the next read', async () => {
   api.getNotifications.mockResolvedValue(feed({ unreadCount: 2, badgeCount: 3 }))
   await render(<NotificationBell />)
@@ -63,6 +75,12 @@ it('an older server sends no badgeCount: the bell works and the icon is left alo
   expect(setBadge).not.toHaveBeenCalled()
 })
 
+// The sync is mounted once, in the tab layout; the bell only looks when its tab is looked at.
+const WithSync = () => {
+  useInboxBadgeSync('u1')
+  return <NotificationBell />
+}
+
 it('when the app comes back to the front it reads the counts again, so the icon is right the moment it is looked at', async () => {
   let listener: (state: string) => void = () => {}
   const spy = jest.spyOn(AppState, 'addEventListener').mockImplementation(((_: string, fn: (s: string) => void) => {
@@ -70,7 +88,7 @@ it('when the app comes back to the front it reads the counts again, so the icon 
     return { remove: jest.fn() }
   }) as never)
   api.getNotifications.mockResolvedValue(feed({ unreadCount: 1, badgeCount: 1 }))
-  await render(<NotificationBell />)
+  await render(<WithSync />)
   await waitFor(() => expect(setBadge).toHaveBeenCalledWith(1))
   api.getNotifications.mockResolvedValue(feed({ unreadCount: 1, badgeCount: 4 }))
   await act(async () => listener('background'))

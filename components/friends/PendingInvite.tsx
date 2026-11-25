@@ -2,12 +2,15 @@ import { useEffect, useState } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 
 import { Avatar } from '../ds/Avatar'
+import { CrewEmblem } from '../ds/CrewEmblem'
 import { font, IC_HAIRLINE, useBoldText, useIncreaseContrast } from '../ds/shared'
 import { Icon } from '../ui/Icon'
 import { apiClient } from '../../lib/apiClient'
+import { crewsApi } from '../../lib/crewsApi'
 import { COLOR, FONT_FAMILY, ICON, RADIUS, SPACE } from '../../lib/design/tokens'
 import { isGone } from '../../lib/loadFailure'
-import { pendingInviteToken } from '../../lib/pendingRoute'
+import { pendingCrewToken, pendingInviteToken } from '../../lib/pendingRoute'
+import { personFace } from '../../lib/personFace'
 
 /** The avatar's box: the pill is 48 tall, the face 32 with 8 around it (Flow 1 `pendingInvite`). */
 const AVATAR = 32
@@ -20,7 +23,12 @@ export function pendingInviteLine(name: string, signIn: boolean): string {
   return signIn ? `${name} invited you. Sign in to accept.` : `${name} invited you`
 }
 
-type Preview = { kind: 'from'; name: string; photoUrl: string | null } | { kind: 'dead' }
+/** The same for a crew's link (S7, board waves-b2 06): who, and which crew. */
+export function pendingCrewLine(name: string, crew: string, signIn: boolean): string {
+  return signIn ? `${name} invited you to ${crew}. Sign in to join.` : `${name} invited you to ${crew}`
+}
+
+type Preview = { kind: 'from'; name: string; photoUrl: string | null } | { kind: 'crew'; name: string; crew: string; emblemSeed: string } | { kind: 'dead' }
 
 /**
  * Whose invite is waiting, on the landing and the sign-in form (Flow 1 landing 02 · 10, sign-in 13).
@@ -37,6 +45,7 @@ export function PendingInvite({ signIn = false }: { signIn?: boolean }) {
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const [token] = useState(() => pendingInviteToken())
+  const [crewToken] = useState(() => pendingCrewToken())
   const [preview, setPreview] = useState<Preview | null>(null)
 
   useEffect(() => {
@@ -58,6 +67,22 @@ export function PendingInvite({ signIn = false }: { signIn?: boolean }) {
     }
   }, [token])
 
+  useEffect(() => {
+    if (!crewToken) return
+    let live = true
+    crewsApi
+      .linkPreview(crewToken)
+      .then((result) => {
+        if (!live) return
+        if (result.success && result.data) setPreview({ kind: 'crew', name: result.data.invitedBy.name, crew: result.data.name, emblemSeed: result.data.emblemSeed })
+        else if (isGone(result)) setPreview({ kind: 'dead' })
+      })
+      .catch(() => {})
+    return () => {
+      live = false
+    }
+  }, [crewToken])
+
   if (!preview) return null
 
   const pill = [styles.pill, contrast ? IC_HAIRLINE : styles.edge]
@@ -73,13 +98,23 @@ export function PendingInvite({ signIn = false }: { signIn?: boolean }) {
     )
   }
 
+  if (preview.kind === 'crew') {
+    return (
+      <View testID="pending-crew-invite" accessible accessibilityLabel={pendingCrewLine(preview.name, preview.crew, signIn)} style={pill}>
+        <CrewEmblem seed={preview.emblemSeed} size={AVATAR} />
+        <Text style={[font('meta', bold), styles.line, styles.fill]} numberOfLines={3} maxFontSizeMultiplier={1.4}>
+          <Text style={font('meta', bold, FONT_FAMILY.brand[700])}>{preview.name}</Text>
+          {' invited you to '}
+          <Text style={font('meta', bold, FONT_FAMILY.brand[700])}>{preview.crew}</Text>
+          {signIn ? '. Sign in to join.' : ''}
+        </Text>
+      </View>
+    )
+  }
+
   return (
     <View testID="pending-invite" accessible accessibilityLabel={pendingInviteLine(preview.name, signIn)} style={pill}>
-      {preview.photoUrl ? (
-        <Avatar kind="photo" uri={preview.photoUrl} size={AVATAR} />
-      ) : (
-        <Avatar kind="creature" pseudonym={preview.name} size={AVATAR} />
-      )}
+      <Avatar {...personFace({ named: true, name: preview.name, photo: preview.photoUrl })} size={AVATAR} />
       <Text style={[font('meta', bold), styles.line, styles.fill]} numberOfLines={2} maxFontSizeMultiplier={1.4}>
         <Text style={font('meta', bold, FONT_FAMILY.brand[700])}>{preview.name}</Text>
         {signIn ? ' invited you. Sign in to accept.' : ' invited you'}
