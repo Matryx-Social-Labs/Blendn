@@ -39,6 +39,7 @@ import { pickerView, useFriendsList } from '../../lib/useFriendsList'
 import { roomCardRoute } from '../../lib/roomCard'
 import { isMuted, rememberRoomMute, useRoomMute } from '../../lib/roomMembership'
 import { useRoomRow } from '../../lib/roomRow'
+import { shareNatively } from '../../lib/shareTray'
 import { showSheet, type SheetOutcome } from '../../lib/sheet'
 import { useAuth } from '../../lib/useAuth'
 import { userMessage } from '../../lib/userMessage'
@@ -75,7 +76,7 @@ function CrewScreenContent() {
   const { showToast } = useToast()
   const [load, setLoad] = useState<Load>({ kind: 'loading' })
   const [refreshing, setRefreshing] = useState(false)
-  const [busy, setBusy] = useState<'anon' | 'mute' | 'invite' | 'edit' | null>(null)
+  const [busy, setBusy] = useState<'anon' | 'mute' | 'invite' | 'link' | 'edit' | null>(null)
   const [menu, setMenu] = useState(false)
   // The bar's glass and the crew's name in it follow the scroll: a render per threshold crossing, never per frame.
   const [barState, setBarState] = useState<TopBarState>('rest')
@@ -175,6 +176,16 @@ function CrewScreenContent() {
     patchCrew((c) => ({ ...c, seatsLeft: Math.max(0, crewSeatsLeft(c) - (result.data?.invited ?? 0)) }))
     // `invited` is how many you asked for, never who got one.
     showToast(result.data.invited === 1 ? 'Asked 1 friend' : `Asked ${result.data.invited} friends`, 'success')
+  }
+
+  /** S7: a fresh link (once, 7 days) into the system tray; whoever joins by it becomes your friend. */
+  const shareLink = async () => {
+    if (busy || !crew) return
+    setBusy('link')
+    const result = await crewsApi.makeLink(crewId)
+    setBusy(null)
+    if (!result.success || !result.data) return showToast(crewMessage(result, 'crew', 'Couldn’t make the link. Try again.'), 'error', { haptic: 'error' })
+    if ((await shareNatively({ kind: 'crew', name: crew.name, url: result.data.url })) === 'failed') showToast('Couldn’t open the share sheet. Try again.', 'error', { haptic: 'error' })
   }
 
   const saveEdit = async (patch: CrewPatch) => {
@@ -431,6 +442,8 @@ function CrewScreenContent() {
             asking={busy === 'invite'}
             onRetry={startInvite}
             onAsk={(ids) => void sendInvites(ids)}
+            onShareLink={() => void shareLink()}
+            sharing={busy === 'link'}
             onClose={() => setInviting(false)}
           />
           {owner ? (

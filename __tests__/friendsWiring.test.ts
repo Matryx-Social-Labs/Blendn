@@ -37,14 +37,14 @@ describe('after onboarding', () => {
 describe('an invite link', () => {
   it('opened by an account that has not finished onboarding waits for it', () => {
     const layout = read('app/_layout.tsx')
-    const signedIn = layout.slice(layout.indexOf("if (pathname.startsWith('/f/')) {"))
+    const signedIn = layout.slice(layout.indexOf("if (isInvitePath(pathname)) {"))
     expect(signedIn).toMatch(/resumeStep\(\{[\s\S]*?\}\);\s*if \(resume\) \{\s*setRouteReady\(false\);\s*openWhenReady\(pathname as Href\);\s*replaceIfNeeded\(ONBOARDING_ROUTES\[resume\]\);/)
   })
 
   it('opened while signed out is held and opened once they are in', () => {
     const layout = read('app/_layout.tsx')
     const signedOut = layout.slice(layout.indexOf('if (!user) {'), layout.indexOf('removePushTokenFromProfile().catch'))
-    expect(signedOut).toContain("if (pathname.startsWith('/f/') || pathname.startsWith('/event/')) openWhenReady(pathname as Href);")
+    expect(signedOut).toContain("if (isInvitePath(pathname) || pathname.startsWith('/event/')) openWhenReady(pathname as Href);")
     // Held BEFORE the bounce to sign-in, or the path is gone.
     expect(signedOut.indexOf('openWhenReady')).toBeLessThan(signedOut.indexOf("replaceIfNeeded('/')"))
   })

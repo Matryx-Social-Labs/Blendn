@@ -32,8 +32,9 @@ import { SectionHeader } from '../../components/ds/SectionHeader'
 import { Button } from '../../components/ds/Button'
 import { BanterRequestsRow } from '../../components/banter/BanterRequestsRow'
 import { BanterWavesRow } from '../../components/banter/BanterWavesRow'
-import { useWavesWaiting } from '../../lib/receivedWaves'
-import { ignoreWavesFrom, useRoomWaves } from '../../lib/roomWaves'
+import { showCrewSafetyActions } from '../../lib/crewSafety'
+import { isCrewWave, useWavesWaiting } from '../../lib/receivedWaves'
+import { ignoreCrewWaves, ignoreWavesFrom, useRoomWaves } from '../../lib/roomWaves'
 import { showUserSafetyActions } from '../../lib/safetyUtils'
 import { PageFooter } from '../../components/chat/PageFooter'
 import { font, HueProvider, useBoldText } from '../../components/ds/shared'
@@ -534,6 +535,7 @@ function ChatInner() {
               room={r}
               title={waveRoomTitle(r.eventId)}
               onSafety={(w) => {
+                if (isCrewWave(w)) return showCrewSafetyActions(w, () => ignoreCrewWaves(w.crewId))
                 const done = () => {
                   ignoreWavesFrom(w.userId)
                   waiting.reload()

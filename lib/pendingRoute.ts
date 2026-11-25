@@ -61,6 +61,15 @@ export function pendingInviteToken(): string | null {
   return match ? decodeURIComponent(match[1]) : null
 }
 
+/** The token of a crew's link waiting for sign-in (`/c/<token>`, S7), or null. */
+export function pendingCrewToken(): string | null {
+  const match = pendingPath()?.match(/^\/c\/([A-Za-z0-9_-]{1,64})$/)
+  return match ? match[1] : null
+}
+
+/** Whether a path is an invite (a friend's `/f/` or a crew's `/c/`): held until sign-in, and until onboarding is done. */
+export const isInvitePath = (path: string): boolean => path.startsWith('/f/') || path.startsWith('/c/')
+
 /** The held target's path, whichever shape it was held in. */
 function pendingPath(): string | null {
   const target = pending as unknown
@@ -107,7 +116,7 @@ export function resetPendingRoute(): void {
  * The root stack's modal routes: those with a modal `presentation` in `app/_layout.tsx` (`__tests__/linkOverModal.test.tsx`
  * reads it back).
  */
-export const ROOT_MODAL_ROUTES: readonly string[] = ['event-preferences/[eventId]', 'crews/new', 'waves/[eventId]', 'plus', 'f/[token]', 'sign-in', 'forgot-password']
+export const ROOT_MODAL_ROUTES: readonly string[] = ['event-preferences/[eventId]', 'crews/new', 'waves/[eventId]', 'plus', 'f/[token]', 'c/[token]', 'sign-in', 'forgot-password']
 
 type LinkNavigator = Pick<ReturnType<typeof useNavigationContainerRef>, 'isReady' | 'getRootState' | 'dispatch' | 'addListener'>
 type NavigationState = ReturnType<LinkNavigator['getRootState']>

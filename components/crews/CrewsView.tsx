@@ -4,7 +4,6 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { subscribeCheckInChanged } from '../../lib/checkIn'
 import {
   blendWith,
-  CREW_REPORT_REASONS,
   crewMessage,
   likeAs,
   mergeCrewPage,
@@ -14,8 +13,11 @@ import {
   type CrewCard,
   type CrewsAtEvent,
 } from '../../lib/crews'
+import { blockCrewSheet, reportCrewSheet } from '../../lib/crewSafety'
 import { crewsApi } from '../../lib/crewsApi'
+import { onOpenedToCrews } from '../../lib/crewWaveBack'
 import { isOrganiserSuspended } from '../../lib/noLongerAvailable'
+import { ignoreCrewWaves } from '../../lib/roomWaves'
 import { showSheet } from '../../lib/sheet'
 import { useToast } from '../Toast'
 
@@ -267,45 +269,15 @@ export function useCrewActions(
     }
   }
 
-  const report = (card: CrewCard) =>
-    showSheet({
-      kind: 'reasons',
-      hue: 'rose',
-      title: `Report ${card.name}`,
-      message: 'What’s wrong with this crew’s name or bio? Nobody in the crew is told who reported it.',
-      reasons: CREW_REPORT_REASONS.map((r) => ({ value: r.value, label: r.label })),
-      submitLabel: 'Send report',
-      run: async (reason, description) => {
-        const result = await crewsApi.report(card.crewId, {
-          reason: reason as (typeof CREW_REPORT_REASONS)[number]['value'],
-          ...(description ? { description } : {}),
-        })
-        if (!result.success) return { ok: false, error: crewMessage(result, 'card', 'Couldn’t send the report. Try again.') }
-        return { ok: true, toast: 'Thanks — our team will look at it' }
-      },
-    })
-
-  /** Block this crew (advisor S-A): a neutral confirm, then for good (`POST /crews/:id/hide`); its card goes. */
+  const report = (card: CrewCard) => showSheet(reportCrewSheet(card))
+  /** Block this crew; its card goes, and so do its waves at you. */
   const block = (card: CrewCard) =>
-    showSheet({
-      kind: 'actions',
-      hue: 'rose',
-      title: `Block ${card.name}?`,
-      message: `You won’t see ${card.name} in any room again. Its members aren’t told. Unblock any time in Settings → Blocked.`,
-      actions: [
-        {
-          label: `Block ${card.name}`,
-          variant: 'secondary',
-          run: async () => {
-            const result = await crewsApi.hideCrew(card.crewId)
-            if (!result.success) return { ok: false, error: crewMessage(result, 'card', `Couldn’t block ${card.name}. Try again.`) }
-            drop(card.crewId)
-            return { ok: true, toast: `${card.name} is blocked` }
-          },
-        },
-        { label: 'Cancel', cancel: true },
-      ],
-    })
+    showSheet(
+      blockCrewSheet(card, () => {
+        drop(card.crewId)
+        ignoreCrewWaves(card.crewId)
+      })
+    )
 
   return { liking, wave, report, block }
 }
@@ -364,6 +336,19 @@ export function useOpenToCrews(eventId: string, checkInKey: string) {
       live = false
     }
   }, [eventId, key])
+
+  // Turned on from a Wave back (`askOpenToCrews`): the switch follows.
+  useEffect(
+    () =>
+      onOpenedToCrews((openedAt) => {
+        if (openedAt !== eventId) return
+        latest.current += 1
+        openToCrewsByCheckIn.set(key, true)
+        setReadFailed(false)
+        setValue(true)
+      }),
+    [eventId, key]
+  )
 
   const set = async (next: boolean) => {
     const seq = ++latest.current

@@ -15,6 +15,7 @@ import { ignoreWavesFrom, listenForWaves, useRoomWaves, WAVED_AT_YOU_MS, wavedAt
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
 const mockWaveListeners = new Set<(d: { eventId: string; fromUserId: string; fromName: string }) => void>()
 jest.mock('../lib/socketClient', () => ({
+  subscribeToRoomCrewWave: () => () => {},
   subscribeToRoomWave: (fn: (d: { eventId: string; fromUserId: string; fromName: string }) => void) => {
     mockWaveListeners.add(fn)
     return () => mockWaveListeners.delete(fn)

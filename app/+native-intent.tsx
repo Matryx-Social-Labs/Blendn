@@ -4,7 +4,7 @@ import { nativeIntentPath } from '../lib/shareLinks'
 /**
  * Links that open the app arrive here before the router sees them (Expo Router's native intent).
  *
- * The links we send are `https://www.blendn.app/event/<id>` and `/f/<token>` for now (`lib/shareLinks.ts`,
+ * The links we send are `https://www.blendn.app/event/<id>`, `/f/<token>` and `/c/<token>` for now (`lib/shareLinks.ts`,
  * `WEB_PAGES_LIVE`), and `/e/<id>`, `/v/<id>` once the public pages ship: all of them are read here. The screens are
  * `app/event/[id]`, `app/venue/[id]` and `app/f/[token]`, so `/e/` and `/v/` have no screen of their own and are
  * rewritten to those. Without this an `/e/` link opened the "Unmatched route" screen.

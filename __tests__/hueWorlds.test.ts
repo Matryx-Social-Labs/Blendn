@@ -21,6 +21,7 @@ const ROSE = [
   'app/friends/add.tsx',
   'app/friends/requests.tsx',
   'app/friends/[userId].tsx',
+  'app/c/[token].tsx',
   'app/f/[token].tsx',
   'app/notifications.tsx',
   'app/(tabs)/chat.tsx',

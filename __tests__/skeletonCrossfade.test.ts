@@ -21,6 +21,7 @@ const OWN_ARRIVAL: Record<string, string> = {
   'app/(tabs)/going.tsx': 'FadeInUp',
   'app/(tabs)/profile.tsx': 'FadeInUp',
   'app/board/[eventId].tsx': 'riseIn',
+  'app/c/[token].tsx': 'FadeInUp',
   'app/f/[token].tsx': 'FadeInUp',
   'app/rate/[eventId].tsx': 'riseIn',
   'app/offer/[id].tsx': 'SKELETON_OUT',

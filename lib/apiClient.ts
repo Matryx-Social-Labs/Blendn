@@ -717,12 +717,25 @@ export interface ReceivedWave {
   wavedBack: boolean
 }
 
+/** A crew's wave at you (admin #1007): the crew only, never who tapped. Waved back at as yourself (`lib/crewWaveBack.ts`). */
+export interface CrewWave {
+  crewId: string
+  name: string
+  emblemSeed: string
+  wavedAt: string
+  wavedBack: boolean
+}
+
 /** Waves to you in one room, newest first, 20 a page. `open: false` once the room has closed: nothing is answerable. */
 export interface ReceivedWavesPage {
   open: boolean
+  /** The people; the crews are `crewTotal`. */
   total: number
   waves: ReceivedWave[]
   nextCursor: string | null
+  /** The first page only, at most 50, newest first; absent from a server that predates them. */
+  crewTotal?: number
+  crewWaves?: CrewWave[]
 }
 
 /** B-A: one Banter row per open room with waves you have not answered (`GET /waves`). */
@@ -732,6 +745,13 @@ export interface WavesWaitingRoom {
   latest: ReceivedWave
   /** The newest three waiting, newest first (handle and name only); absent from a server that predates it. */
   latestFaces?: Pick<ReceivedWave, 'userId' | 'displayName'>[]
+}
+
+/** A room where crews' waves wait for you (`GET /waves` → `crewRooms`), merged into the room's one row by `eventId`. */
+export interface CrewWavesWaitingRoom {
+  eventId: string
+  waiting: number
+  latest: CrewWave
 }
 
 /**
@@ -3291,8 +3311,8 @@ class ApiClientClass {
   }
 
   /** B-A: the open rooms with waves you have not answered, one entry per room. */
-  async getWavesWaiting(): Promise<ApiResponse<{ rooms: WavesWaitingRoom[] }>> {
-    return this.queuedRequest<{ rooms: WavesWaitingRoom[] }>('/api/mobile/waves')
+  async getWavesWaiting(): Promise<ApiResponse<{ rooms: WavesWaitingRoom[]; crewRooms?: CrewWavesWaitingRoom[] }>> {
+    return this.queuedRequest<{ rooms: WavesWaitingRoom[]; crewRooms?: CrewWavesWaitingRoom[] }>('/api/mobile/waves')
   }
 
   async sendWave(eventId: string, toUserId: string): Promise<ApiResponse<WaveOutcome>> {

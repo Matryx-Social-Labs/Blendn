@@ -147,3 +147,11 @@ describe('every string, at any key (review HIGH-1, MED-1)', () => {
 it('iOS native network breadcrumbs are off: a native crash would send them unscrubbed', () => {
   expect(hooks()).toMatchObject({ enableNetworkBreadcrumbs: false })
 })
+
+it('a crew link’s token (S7) never leaves: the app’s link, its scheme form and the API’s; control: a crew’s page keeps its shape', () => {
+  const { beforeBreadcrumb } = hooks()
+  const out = beforeBreadcrumb({ category: 'navigation', data: { from: `/c/${LINK}`, to: `blendn://c/${LINK}`, url: `https://x/api/mobile/crews/links/${LINK}/preview` } })
+  expect(leaks(out)).toEqual([])
+  expect(JSON.stringify(out)).toContain('/crews/links/:token/preview')
+  expect(beforeBreadcrumb({ category: 'navigation', data: { to: '/crews/new' } })).toMatchObject({ data: { to: '/crews/new' } })
+})

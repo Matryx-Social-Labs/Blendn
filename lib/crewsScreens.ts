@@ -84,17 +84,25 @@ export const inviteMeta = (invite: Pick<CrewInvite, 'size' | 'tags'>): string =>
   return [`Crew of ${invite.size}`, ...shown, ...(more > 0 ? [`+${more}`] : [])].join(' · ')
 }
 
+/** "Open for 5 more days": part of a day is a day; past it or unreadable, nothing is claimed. */
+export function openForLine(expiresAt: string | number, now: number = Date.now()): string | null {
+  const days = Math.ceil(((typeof expiresAt === 'number' ? expiresAt : Date.parse(expiresAt)) - now) / DAY_MS)
+  if (!Number.isFinite(days) || days <= 0) return null
+  return `Open for ${days} more ${days === 1 ? 'day' : 'days'}`
+}
+
 /**
  * "Open for 13 more days · Priya isn't told if you say not now", under Not now. The days come from the server's `expiresAt`
- * (an older server's invite: 14 days from `invitedAt`); part of a day is a day, and past it or unreadable no days are claimed.
+ * (an older server's invite: 14 days from `invitedAt`).
  */
 export function inviteNote(invite: Pick<CrewInvite, 'invitedBy' | 'invitedAt' | 'expiresAt'>, now: number = Date.now()): string {
-  const ends = invite.expiresAt ? Date.parse(invite.expiresAt) : Date.parse(invite.invitedAt) + INVITE_TTL_DAYS * DAY_MS
-  const days = Math.ceil((ends - now) / DAY_MS)
+  const open = openForLine(invite.expiresAt ?? Date.parse(invite.invitedAt) + INVITE_TTL_DAYS * DAY_MS, now)
   const silent = `${invite.invitedBy} isn’t told if you say not now`
-  if (!Number.isFinite(days) || days <= 0) return silent
-  return `Open for ${days} more ${days === 1 ? 'day' : 'days'} · ${silent}`
+  return open ? `${open} · ${silent}` : silent
 }
+
+/** What joining by a link also does, on the consent panel (advisor Z-B 2026-11-25). */
+export const friendsToo = (invitedBy: string): string => `Joining also makes you and ${invitedBy} friends.`
 
 /** The longest crew name a button names; past it the button says "the crew", so a 32-character name never cuts its words off. */
 const BUTTON_NAME_MAX = 12
