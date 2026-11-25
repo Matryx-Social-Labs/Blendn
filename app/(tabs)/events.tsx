@@ -4,7 +4,6 @@ import { router, useLocalSearchParams, useScrollToTop } from 'expo-router'
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   Dimensions,
-  AppState,
   Keyboard,
   Linking,
   type NativeScrollEvent,
@@ -100,6 +99,7 @@ import { saveHomeCity, useHomeCitySlug } from '../../lib/homeCity'
 import { getDistanceMetres, roundCoord } from '../../lib/geo'
 import { EVENT_DETAIL_QUERY } from '../../lib/eventDetailQuery'
 import { FIX_MAX_AGE_MS, fixAfterPermission, fixOf, type PreciseFix } from '../../lib/roomButton'
+import { useFixRefresh } from '../../lib/useFixRefresh'
 import { readingOf } from '../../lib/mapPresence'
 import type { DistanceShown } from '../../lib/placesPane'
 import { homeCardProps, groupByDay } from '../../lib/pulse'
@@ -1167,15 +1167,15 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
    * stored or sent — `resolveBrowseCity` returns the server's spelling when the
    * two match, so the value used as a filter is always one the server knows.
    */
+  // Named from the point to ~110 m, so the fix asked every minute while open (`useFixRefresh`) is not a geocode a minute.
+  const namedLat = roundCoord(userLocation?.latitude)
+  const namedLon = roundCoord(userLocation?.longitude)
   useEffect(() => {
-    if (!userLocation || !sharing) return
+    if (namedLat === undefined || namedLon === undefined || !sharing) return
     let cancelled = false
     ;(async () => {
       try {
-        const [place] = await Location.reverseGeocodeAsync({
-          latitude: userLocation.latitude,
-          longitude: userLocation.longitude,
-        })
+        const [place] = await Location.reverseGeocodeAsync({ latitude: namedLat, longitude: namedLon })
         if (cancelled) return
         setNamedCity(place?.city || place?.subregion || place?.region || null)
         setNamedCountry(place?.isoCountryCode?.toUpperCase() || null)
@@ -1188,7 +1188,7 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
     return () => {
       cancelled = true
     }
-  }, [userLocation, sharing])
+  }, [namedLat, namedLon, sharing])
 
   /*
    * Once the device city is known, a **guess** may be improved. A choice is not.
@@ -1237,43 +1237,23 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
    * Only the *coordinates* are refreshed here. What happens next is the effect
    * above, which is where the never-override-a-choice rule lives.
    */
-  useEffect(() => {
-    const sub = AppState.addEventListener('change', (state) => {
-      if (state !== 'active') return
-      /*
-       * Re-check permission, not only coordinates. The mount effect reads the
-       * permission once; the "Enable location" banner is keyed off
-       * `locationStatus`, so somebody who granted location in Settings (or in
-       * the OS dialog after the app was backgrounded) came back to a banner
-       * that stayed pinned for ever — the app never looked again. Refresh the
-       * status on every foreground so a grant elsewhere clears it.
-       */
-      Location.getForegroundPermissionsAsync()
-        .then(({ status }) => {
-          setLocationStatus(status === 'granted' ? 'granted' : status === 'denied' ? 'denied' : 'undetermined')
-          // Location turned off in Settings while away: the fix from before goes, and every distance with it.
-          setUserLocation((current) => fixAfterPermission(status, current))
-          // …and the last-known position that orders the lap: it is a position too, sent with the Featured read.
-          setLapSeed((seed) => (status === 'granted' ? seed : null))
-          return status === 'granted' ? Location.getLastKnownPositionAsync({ maxAge: FIX_MAX_AGE_MS }) : null
-        })
-        .then((position) => {
-          if (!position) return
-          // The state keeps its identity for a nearby fix (a new one would refetch the feed).
-          setUserLocation((current) =>
-            current &&
-            Math.abs(current.latitude - position.coords.latitude) < 0.01 &&
-            Math.abs(current.longitude - position.coords.longitude) < 0.01
-              ? current
-              : fixOf(position)
-          )
-        })
-        // A refused or unavailable fix is not an error worth surfacing: it just
-        // means the city stays where it was.
-        .catch(() => {})
-    })
-    return () => sub.remove()
-  }, [])
+  /*
+   * Re-check permission, not only coordinates, on every return and every minute while open (`useFixRefresh`). The mount
+   * effect reads the permission once; the "Enable location" banner is keyed off `locationStatus`, so somebody who granted
+   * location in Settings came back to a banner that stayed pinned for ever. And a new fix with its own time each time: the
+   * map's "Last seen here N min ago" counted up for ever while the app was open (SCRUM-1324).
+   */
+  useFixRefresh({
+    permission: (status) => {
+      setLocationStatus(status === 'granted' ? 'granted' : status === 'denied' ? 'denied' : 'undetermined')
+      // Location turned off in Settings while away: the fix from before goes, and every distance with it.
+      setUserLocation((current) => fixAfterPermission(status, current))
+      // …and the last-known position that orders the lap: it is a position too, sent with the Featured read.
+      setLapSeed((seed) => (status === 'granted' ? seed : null))
+    },
+    // A new object each time is cheap: every read keyed on the fix is keyed to ~110 m (`roundCoord`, `feedKey`).
+    fix: setUserLocation,
+  })
 
   /**
    * Every path a user can take to a city, and all of them count as choosing.
