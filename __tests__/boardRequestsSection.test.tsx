@@ -141,6 +141,46 @@ describe('answering an ask', () => {
     await waitFor(() => expect(screen.queryByText('Arctic Falcon')).toBeNull())
   })
 
+  // The server silences an ask once the pair has a chat (`silenced_at`) and answers it 404 (SCRUM-1107).
+  const SILENCED = { success: false, errorCode: 'NOT_FOUND', error: 'Request not found' }
+
+  it('an accept on an ask the server silenced (404) goes quietly, and reads again', async () => {
+    api.getBoardRequests.mockResolvedValueOnce(listing([INCOMING])).mockResolvedValue(listing([]))
+    api.answerBoardRequest.mockResolvedValue(SILENCED)
+    await render(<BoardRequestsSection refreshKey={0} onCount={jest.fn()} seatedPosts={new Set()} />)
+
+    await fireEvent.press(await screen.findByLabelText('Accept the request from Arctic Falcon'))
+
+    await waitFor(() => expect(screen.queryByText('Arctic Falcon')).toBeNull())
+    await waitFor(() => expect(api.getBoardRequests).toHaveBeenCalledTimes(2))
+    expect(mockShowToast).not.toHaveBeenCalled()
+    expect(screen.queryByText('Request not found')).toBeNull()
+    expect(router.push).not.toHaveBeenCalled()
+  })
+
+  it('a silenced ask goes even when the reload fails', async () => {
+    api.getBoardRequests.mockResolvedValueOnce(listing([INCOMING])).mockResolvedValue({ success: false, error: 'offline' })
+    api.answerBoardRequest.mockResolvedValue(SILENCED)
+    await render(<BoardRequestsSection refreshKey={0} onCount={jest.fn()} seatedPosts={new Set()} />)
+
+    await fireEvent.press(await screen.findByLabelText('Accept the request from Arctic Falcon'))
+
+    await waitFor(() => expect(screen.queryByText('Arctic Falcon')).toBeNull())
+    expect(mockShowToast).not.toHaveBeenCalled()
+  })
+
+  it('a decline on a silenced ask (404) stays gone, and nothing is said', async () => {
+    api.getBoardRequests.mockResolvedValueOnce(listing([INCOMING])).mockResolvedValue(listing([]))
+    api.answerBoardRequest.mockResolvedValue(SILENCED)
+    await render(<BoardRequestsSection refreshKey={0} onCount={jest.fn()} seatedPosts={new Set()} />)
+
+    await fireEvent.press(await screen.findByLabelText('Decline the request from Arctic Falcon'))
+
+    await waitFor(() => expect(api.getBoardRequests).toHaveBeenCalledTimes(2))
+    expect(screen.queryByText('Arctic Falcon')).toBeNull()
+    expect(mockShowToast).not.toHaveBeenCalled()
+  })
+
   it('an accept refused outright (403): says so, opens nothing, and the row stays', async () => {
     api.getBoardRequests.mockResolvedValue(listing([INCOMING]))
     api.answerBoardRequest.mockResolvedValue({
