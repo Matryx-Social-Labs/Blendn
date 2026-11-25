@@ -25,6 +25,8 @@ export interface FollowEnd {
   /**
    * From `onScroll`. Once `stop`ped, only a reader's own drag lets it follow again: a jump that lands short of a list
    * still laying out clamps to its end, and following from there carried the thread past the first unread (SCRUM-958).
+   * Mid-gesture it is ignored, as `noteAtEnd` is: a drag from the newest message reads "at the end" for its first events,
+   * and following from there pulled every drag back to the newest, so a long DM would not scroll (SCRUM-1321).
    */
   noteScroll: (atEnd: boolean) => void
   /** Stop following — the thread opened somewhere else, at its first unread. */
@@ -63,7 +65,7 @@ export function followEnd(scrollToEnd: () => void): FollowEnd {
       held = false
     },
     noteScroll: (atEnd) => {
-      if (!held && atEnd) following = true
+      if (!held && !gesture && atEnd) following = true
     },
     stop: () => {
       following = false

@@ -374,9 +374,10 @@ function PrivateChatInner() {
       })
       .finally(() => setLoading(false))
 
+  const atEndOf = ({ contentSize, contentOffset, layoutMeasurement }: NativeScrollEvent) => contentSize.height - contentOffset.y - layoutMeasurement.height < AT_END
   /* Where the list is, from onScroll and from where a drag or the pill's jump came to rest. */
-  const noteOffset = ({ contentSize, contentOffset, layoutMeasurement }: NativeScrollEvent) => {
-    const atBottom = contentSize.height - contentOffset.y - layoutMeasurement.height < AT_END
+  const noteOffset = (n: NativeScrollEvent) => {
+    const atBottom = atEndOf(n)
     isAtBottomRef.current = atBottom
     follow.noteScroll(atBottom)
     setAwayFromEnd(!atBottom)
@@ -847,7 +848,12 @@ function PrivateChatInner() {
               keyboardShouldPersistTaps="handled"
               keyboardDismissMode={KEYBOARD_DISMISS}
               onTouchEnd={foldPanel}
-              onScrollEndDrag={foldPanel}
+              // The reader's gesture decides where it came to rest, as the room's does (SCRUM-1321).
+              onScrollEndDrag={(e) => {
+                foldPanel()
+                follow.onGestureEnd(atEndOf(e.nativeEvent))
+              }}
+              onMomentumScrollBegin={follow.onScrollBeginDrag}
               // Android clips off-screen rows by default; the jump to the newest under Reduce Motion lands before they are re-attached, a blank frame (SCRUM-1040).
               removeClippedSubviews={false}
               maxToRenderPerBatch={12}
@@ -910,6 +916,7 @@ function PrivateChatInner() {
               onScroll={(e) => noteOffset(e.nativeEvent)}
               // Where a drag or the pill's jump came to rest: onScroll's last reading can be throttled away (driven 2026-11-11).
               onMomentumScrollEnd={(e) => {
+                follow.onGestureEnd(atEndOf(e.nativeEvent))
                 noteOffset(e.nativeEvent)
               }}
               scrollEventThrottle={80}

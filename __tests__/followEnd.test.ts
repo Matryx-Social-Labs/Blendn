@@ -94,12 +94,16 @@ describe('a thread opened at its first unread (SCRUM-958)', () => {
     expect(toEnd).not.toHaveBeenCalled()
   })
 
-  it('follows again once the reader has dragged back to the end', () => {
+  it('follows again once the reader has dragged back to the end and let go there', () => {
     const toEnd = jest.fn()
     const f = followEnd(toEnd)
     f.stop()
     f.onScrollBeginDrag()
+    // Mid-drag "at the end" is the drag's own first events, not the reader arriving (SCRUM-1321).
     f.noteScroll(true)
+    f.onContentSizeChange()
+    expect(toEnd).not.toHaveBeenCalled()
+    f.onGestureEnd(true)
     f.onContentSizeChange()
     expect(toEnd).toHaveBeenCalledTimes(1)
   })
