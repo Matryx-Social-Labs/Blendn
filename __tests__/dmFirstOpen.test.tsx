@@ -244,4 +244,41 @@ describe('a long DM, opened with nothing cached (SCRUM-1321)', () => {
     await act(async () => fireEvent(feed(), 'contentSizeChange', 393, CONTENT + 900))
     expect(scrollToEnd).toHaveBeenCalled()
   })
+
+  /*
+   * Review, Android: a finger that grabs the list during the app's own animated scroll gets begin-drag, then that scroll's
+   * momentum end while it is still down. Read as the gesture ending at the end, it re-armed the follow mid-drag, and the
+   * older page the reader then asked for pulled them back to the newest.
+   */
+  it('a momentum end while the finger is still down does not end the reader’s drag', async () => {
+    await render(<PrivateChat />)
+    await flush()
+    await firstFrame()
+    await act(async () => fireEvent(feed(), 'scrollBeginDrag', scrolled(CONTENT - VIEW - 10)))
+    await act(async () => fireEvent(feed(), 'momentumScrollEnd', scrolled(CONTENT - VIEW - 10)))
+    await act(async () => fireEvent.scroll(feed(), scrolled(900)))
+    scrollToEnd.mockClear()
+    // An older page lands above the reader.
+    await act(async () => fireEvent(feed(), 'contentSizeChange', 393, CONTENT + 2000))
+    expect(scrollToEnd).not.toHaveBeenCalled()
+  })
+
+  /* Review, iOS: a fling stopped by a tap sends no momentum end; the tap ends the gesture where the list stopped. */
+  it('a fling stopped by a tap at the newest message follows again', async () => {
+    await render(<PrivateChat />)
+    await flush()
+    await firstFrame()
+    const fling = (y: number) => ({ nativeEvent: { ...scrolled(y).nativeEvent, velocity: { x: 0, y: -2.4 } } })
+    await act(async () => fireEvent(feed(), 'touchStart'))
+    await act(async () => fireEvent(feed(), 'scrollBeginDrag', scrolled(1500)))
+    await act(async () => fireEvent(feed(), 'scrollEndDrag', fling(1600)))
+    await act(async () => fireEvent(feed(), 'touchEnd'))
+    await act(async () => fireEvent.scroll(feed(), scrolled(CONTENT - VIEW)))
+    // The tap that stops it: a touch with no drag.
+    await act(async () => fireEvent(feed(), 'touchStart'))
+    await act(async () => fireEvent(feed(), 'touchEnd'))
+    scrollToEnd.mockClear()
+    await act(async () => fireEvent(feed(), 'contentSizeChange', 393, CONTENT + 300))
+    expect(scrollToEnd).toHaveBeenCalled()
+  })
 })
