@@ -39,6 +39,7 @@ jest.mock('react-native-safe-area-context', () => {
 jest.mock('../lib/apiClient', () => ({
   apiClient: {
     getBoard: jest.fn(),
+    markBoardSeen: jest.fn(() => Promise.resolve({ success: true, data: { seenAt: '2026-11-08T10:00:00Z' } })),
     getBoardPost: jest.fn(),
     getBoardRequests: jest.fn(),
     getEvent: jest.fn(),
@@ -55,7 +56,6 @@ jest.mock('../lib/apiClient', () => ({
   },
 }))
 jest.mock('../lib/blendnOverlay', () => ({ openBlendn: jest.fn() }))
-jest.mock('../lib/lobbySeen', () => ({ lobbySeenAt: jest.fn(), rememberLobbySeen: jest.fn() }))
 const mockPushListeners: ((n: { request: { content: { data: Record<string, unknown> } } }) => void)[] = []
 jest.mock('expo-notifications', () => ({
   addNotificationReceivedListener: (fn: (typeof mockPushListeners)[number]) => {
@@ -1259,33 +1259,33 @@ describe('L-A: the list starts under the bar as tall as it draws (AX XXXL: the b
 })
 
 describe('Lobby PR 5: the bell, what you have seen, and Post something from the event page', () => {
-  const { rememberLobbySeen } = jest.requireMock('../lib/lobbySeen') as { rememberLobbySeen: jest.Mock }
+  const markSeen = () => api.markBoardSeen
   const newer = { ...SEEKING, id: 'p-new', createdAt: '2026-11-08T10:00:00Z' }
   const older = { ...OFFER, createdAt: '2026-11-08T09:00:00Z' }
 
-  it('remembers the newest post it showed on All, for Going’s badge (control: a filter remembers nothing)', async () => {
+  it('tells the server the newest post it showed on All, for Going’s count across phones (control: a filter remembers nothing)', async () => {
     api.getBoard.mockResolvedValue(board([newer, older]))
     await render(<BoardScreen />)
     await screen.findByText(OFFER.body)
-    expect(rememberLobbySeen).toHaveBeenCalledWith('e1', '2026-11-08T10:00:00Z')
-    rememberLobbySeen.mockClear()
+    expect(markSeen()).toHaveBeenCalledWith('e1', '2026-11-08T10:00:00Z')
+    markSeen().mockClear()
     api.getBoard.mockResolvedValue({ success: true, data: { posts: [older], counts: { all: 2, offer: 1, seeking: 1, chat: 0, offerRides: 1, mine: 0, replies: 0 } } } as never)
     await pullToRefresh()
-    rememberLobbySeen.mockClear()
+    markSeen().mockClear()
     await act(async () => fireEvent.press(screen.getByTestId('lobby-chip-offer')))
-    expect(rememberLobbySeen).not.toHaveBeenCalled()
+    expect(markSeen()).not.toHaveBeenCalled()
   })
 
   it('does not mark as seen what a background read holds behind the pill (control: the shown read did)', async () => {
     api.getBoard.mockResolvedValue(board([older]))
     await render(<BoardScreen />)
     await screen.findByText(OFFER.body)
-    expect(rememberLobbySeen).toHaveBeenCalledWith('e1', '2026-11-08T09:00:00Z')
-    rememberLobbySeen.mockClear()
+    expect(markSeen()).toHaveBeenCalledWith('e1', '2026-11-08T09:00:00Z')
+    markSeen().mockClear()
     api.getBoard.mockResolvedValue(board([newer, older]))
     await act(async () => mockPushListeners.forEach((fn) => fn({ request: { content: { data: { type: 'board_request' } } } })))
     expect(api.getBoard).toHaveBeenCalledTimes(2)
-    expect(rememberLobbySeen).not.toHaveBeenCalled()
+    expect(markSeen()).not.toHaveBeenCalled()
   })
 
   it('rings the bell into the two alert switches', async () => {

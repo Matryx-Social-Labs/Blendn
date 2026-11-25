@@ -139,25 +139,16 @@ export function countLine(counts: Pick<LobbyCounts, 'all' | 'offerRides'>): { po
 /** Going's unread badge: exact to 9, then "9+". */
 export const badgeCount = (n: number) => (n > 9 ? '9+' : String(n))
 
-/** Going reads one page this long: enough to say "9+". */
+/** Going reads one page this long for the faces on "New in the Lobby". */
 export const LOBBY_NEWS_PAGE = 10
 
-type NewsPost = Pick<BoardPost, 'id' | 'author' | 'createdAt' | 'mine'>
 
 /**
- * Going's "New in the Lobby": what others posted after the newest post you were shown when you last opened the Lobby
- * (all of it if you never did), newest first, and the three newest authors for the creature stack. A page that is new
- * to its last post says nothing about the rest, so it counts as the page (9+).
- *
- * ponytail: one page of the newest posts, counted on the phone against a marker kept on the phone (`lib/lobbySeen.ts`);
- * a server count (`?since=`) when the badge has to follow you across phones.
+ * Faces for Going's "New in the Lobby": the newest others on one page, as many as the server counts new
+ * (`lobby.newCount`), three at most. The count is the server's; the page only puts faces to it.
  */
-export function lobbyNews(posts: readonly NewsPost[], seenAt: string | null, page = LOBBY_NEWS_PAGE): { count: number; authors: NewsPost[] } {
-  const seen = seenAt ? Date.parse(seenAt) : -Infinity
-  const newer = (p: NewsPost) => Date.parse(p.createdAt) > seen
-  const fresh = posts.filter((p) => !p.mine && newer(p))
-  const overflow = posts.length >= page && posts.every(newer)
-  return { count: overflow ? Math.max(fresh.length, page) : fresh.length, authors: fresh.slice(0, 3) }
+export function newsAuthors<P extends Pick<BoardPost, 'mine'>>(posts: readonly P[], count: number): P[] {
+  return posts.filter((p) => !p.mine).slice(0, Math.min(3, Math.max(0, count)))
 }
 
 /** The marker the Lobby leaves when it shows its newest page: the newest post's own time, the server's clock. */

@@ -1,3 +1,4 @@
+import type { OrganizerKind } from './apiClient'
 import { whenLabel } from './pulse'
 
 /**
@@ -8,15 +9,26 @@ import { whenLabel } from './pulse'
 export type RoomHost = { name: string }
 
 /**
- * The host is the org, never a person (hosts-see-pseudonyms-only; NOTES.md names flag 3). The event detail's
- * `organizer` is the org's public name; the server sends `id: null` when the platform stands in (a curated event
- * nobody has claimed is "Blendn", a venue's day is the venue), and that is not somebody running the night: no row
- * (owner call D2, recommended A).
+ * The host is the org, never a person (hosts-see-pseudonyms-only; NOTES.md names flag 3). The server says whose event it
+ * is in `organizer.kind`: only an "org" runs the night. The platform standing in for a curated event nobody has claimed
+ * ("Blendn"), a venue's own day and a person's own event (whose name is somebody's own) get no row, and neither does a
+ * server that does not say (owner call D2, recommended A).
  */
-export function roomHost(organizer: { id?: string | null; name?: string | null } | null | undefined): RoomHost | null {
+export function roomHost(organizer: { kind?: OrganizerKind | null; name?: string | null } | null | undefined): RoomHost | null {
   const name = organizer?.name?.trim()
-  if (!organizer?.id || !name) return null
+  if (organizer?.kind !== 'org' || !name) return null
   return { name }
+}
+
+/**
+ * The event page's "By {name}": attribution, not a role, so the org, the venue and Blendn standing in all sign it. A
+ * person's own event does not (their name is somebody's own), and neither does a server that does not say (decided per
+ * advisor, SCRUM-1115).
+ */
+export function byLine(organizer: { kind?: OrganizerKind | null; name?: string | null } | null | undefined): string | null {
+  const name = organizer?.name?.trim()
+  if (!organizer?.kind || organizer.kind === 'person' || !name) return null
+  return name
 }
 
 /**

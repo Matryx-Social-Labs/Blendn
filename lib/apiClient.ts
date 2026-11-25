@@ -596,6 +596,9 @@ export type PeerRatingIssue = 'none' | 'uncomfortable' | 'no_show' | 'misreprese
 
 export type RsvpStatus = 'going' | 'maybe' | 'not_going' | 'waitlisted'
 
+/** `organizer.kind` on an event (admin #1005): an org, a venue's own day, Blendn standing in, or a person's own event. */
+export type OrganizerKind = 'org' | 'venue' | 'platform' | 'person'
+
 export interface MatchCard {
   userId: string
   /** Pseudonym unless they revealed for this event. Never the real name otherwise. */
@@ -1042,10 +1045,12 @@ export interface EventApiItem {
   interested_preview?: Array<{ id: string; name: string | null; image: string | null }>
   interestedUsers?: Array<{ id: string; name?: string | null; avatar?: string | null }>
   organizer?: {
-    id?: string
+    id?: string | null
     name?: string | null
     image?: string | null
     email?: string
+    /** Whose event it is: only an org is a host (Room info); a person's own event signs nothing (`lib/roomInfo.ts`). */
+    kind?: OrganizerKind
   }
   /**
    * "Running this event? Claim it" — detail endpoint only. `{ url }` for a
@@ -4129,6 +4134,19 @@ class ApiClientClass {
   async getBoard(eventId: string, query: Record<string, string> = {}): Promise<ApiResponse<Partial<LobbyMeta> & { posts: BoardPost[] }>> {
     const qs = new URLSearchParams(query).toString()
     return this.queuedRequest(`/api/mobile/events/${encodeURIComponent(eventId)}/board${qs ? `?${qs}` : ''}`)
+  }
+
+  /**
+   * The Lobby seen up to `at`, the newest post on the page shown (SCRUM-1115): the server's marker, so Going's count
+   * (`lobby.newCount` on /me/rsvps) follows the account across phones. It only moves forward; readers only.
+   */
+  async markBoardSeen(eventId: string, at: string): Promise<ApiResponse<{ seenAt: string }>> {
+    return this.queuedRequest(
+      `/api/mobile/events/${encodeURIComponent(eventId)}/board/seen`,
+      { method: 'POST', body: JSON.stringify({ at }) },
+      true,
+      2
+    )
   }
 
   /** One post, for a post link: the Lobby's own gate. */

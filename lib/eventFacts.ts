@@ -114,7 +114,10 @@ export function eventDock(s: {
   between: string | null
   /** Nobody else checked in: rate the night, not people. */
   alone: boolean
-  /** Live, and this person just said "Can’t make it" here: "Not going", with I’m going to take it back (sheet 05). */
+  /**
+   * Live, and this person said "Can’t make it": just now here, or before (the server keeps a late cancel as `not_going`,
+   * SCRUM-1115). "Not going", with I’m going to take it back (sheet 05).
+   */
   leftTonight?: boolean
 }): EventDockModel | null {
   const invite = s.canInvite ? { action: { label: 'Invite', kind: 'lit' as const, icon: 'share' as const, does: 'invite' as const } } : {}
