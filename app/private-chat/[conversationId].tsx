@@ -848,12 +848,11 @@ function PrivateChatInner() {
               keyboardShouldPersistTaps="handled"
               keyboardDismissMode={KEYBOARD_DISMISS}
               onTouchEnd={foldPanel}
-              // The reader's gesture decides where it came to rest, as the room's does (SCRUM-1321).
+              // Where the reader's gesture comes to rest decides (SCRUM-1321): here, or at the end of the fling it started.
               onScrollEndDrag={(e) => {
                 foldPanel()
-                follow.onGestureEnd(atEndOf(e.nativeEvent))
+                if (!e.nativeEvent.velocity?.y) follow.onGestureEnd(atEndOf(e.nativeEvent))
               }}
-              onMomentumScrollBegin={follow.onScrollBeginDrag}
               // Android clips off-screen rows by default; the jump to the newest under Reduce Motion lands before they are re-attached, a blank frame (SCRUM-1040).
               removeClippedSubviews={false}
               maxToRenderPerBatch={12}

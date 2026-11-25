@@ -59,6 +59,8 @@ export function followEnd(scrollToEnd: () => void): FollowEnd {
       asked = true
     },
     onGestureEnd: (atEnd) => {
+      // Android reports momentum for the app's own animated jump too: with no gesture of the reader live, nothing ends.
+      if (!gesture) return
       gesture = false
       following = atEnd
       held = false
