@@ -71,7 +71,7 @@ export function InviteFriendsSheet({
       testID="crew-invite-sheet"
     >
       {/* Y-A (advisor 2026-11-25): above the friends, so it is there with none to ask too. */}
-      <RowsCard testID="crew-link">
+      <RowsCard onSheet testID="crew-link">
         <SettingsRow leading={<Icon name="link" size={ICON.nav} color={sel.glyph} />} title="Share a crew link" hint={LINK_HINT} trail="chevron" disabled={sharing} onPress={onShareLink} testID="crew-link-row" />
       </RowsCard>
       <FriendsStep friends={friends} picked={picked} onToggle={toggle} onRetry={onRetry} none={NONE_TO_ASK} limit={Math.min(room, CREW_MAX_MEMBERS - 1)} paging={paging} search={search} />

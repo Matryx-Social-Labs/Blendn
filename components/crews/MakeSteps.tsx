@@ -1,8 +1,8 @@
 import { useRef } from 'react'
-import { FlatList, Platform, Pressable, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native'
+import { FlatList, Pressable, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native'
 import Animated from 'react-native-reanimated'
 
-import { COLOR, FONT_FAMILY, ICON, MATERIAL, MAX_FONT_SCALE, RADIUS, SPACE, TYPE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, ICON, MAX_FONT_SCALE, RADIUS, SPACE, TYPE } from '../../lib/design/tokens'
 import { CONSENT_LINE, CREW_BIO_MAX, CREW_MAX_MEMBERS, CREW_NAME_MAX, KEEP_ANONYMOUS_LABEL } from '../../lib/crews'
 import { INTENT_CHOICES, type IntentChoice } from '../../lib/crewsScreens'
 import type { Friend } from '../../lib/friends'
@@ -19,6 +19,7 @@ import { CONTROL_FONT_CAP, font, minTarget, quickTransition, useBoldText, useInc
 import { FieldLabel, TextArea, TextField } from '../ds/TextField'
 import { Toggle } from '../ds/Toggle'
 import { Glyph } from '../ui/Glyph'
+import { SHEET_FILL } from './RowsCard'
 import { TagsInput } from './TagsInput'
 import { personFace } from '../../lib/personFace'
 
@@ -36,8 +37,6 @@ const FRIEND_FACE = 48
 const PICK = 28
 const PICK_FILL = quickTransition('background-color', 'border-color')
 const PICK_RING = 0.35
-/** flow10.js `make`: a block inside the sheet is 8% white on iOS glass, sunken on Android's solid sheet. */
-const SHEET_FILL = Platform.OS === 'android' ? COLOR.surfaceSunken : MATERIAL.fillOnGlass
 
 export type NameStepProps = {
   name: string
