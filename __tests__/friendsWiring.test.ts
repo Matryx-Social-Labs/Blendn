@@ -104,9 +104,10 @@ describe('the in-rooms switch', () => {
 
 describe('the links open the app', () => {
   it('on iOS, from the entitlements the build is signed with', () => {
-    expect(read('ios/blendn/blendn.entitlements')).toContain('<string>applinks:www.blendn.app</string>')
-    // `www`: the apex answers with a redirect, and Apple refuses an association file behind one.
-    expect(JSON.parse(read('app.json')).expo.ios.associatedDomains).toEqual(['applinks:www.blendn.app'])
+    // `www`, never the apex: it answers with a redirect, and Apple refuses an association file behind one. Staging too:
+    // a staging build's links are on staging.blendn.app (SCRUM-1365), and the binaries share one bundle id.
+    for (const host of ['www.blendn.app', 'staging.blendn.app']) expect(read('ios/blendn/blendn.entitlements')).toContain(`<string>applinks:${host}</string>`)
+    expect(JSON.parse(read('app.json')).expo.ios.associatedDomains).toEqual(['applinks:www.blendn.app', 'applinks:staging.blendn.app'])
   })
 
   it('on iOS, may ask whether WhatsApp is installed, from the committed Info.plist as well as app.json', () => {
@@ -122,8 +123,9 @@ describe('the links open the app', () => {
     const manifest = read('android/app/src/main/AndroidManifest.xml')
     const verified = manifest.match(/<intent-filter android:autoVerify="true">([\s\S]*?)<\/intent-filter>/g) ?? []
     expect(verified).toHaveLength(1)
-    const manifestPaths = [...(verified[0] ?? '').matchAll(/<data android:scheme="https" android:host="www.blendn.app" android:pathPrefix="([^"]+)"\/>/g)].map((m) => m[1])
-    expect(manifestPaths).toEqual(['/f/', '/event/', '/e/', '/v/'])
+    const manifestPaths = [...(verified[0] ?? '').matchAll(/<data android:scheme="https" android:host="([^"]+)" android:pathPrefix="([^"]+)"\/>/g)].map((m) => `${m[1]}${m[2]}`)
+    const PATHS = ['/f/', '/event/', '/e/', '/v/']
+    expect(manifestPaths).toEqual([...PATHS.map((p) => `www.blendn.app${p}`), ...PATHS.map((p) => `staging.blendn.app${p}`)])
     const filters = JSON.parse(read('app.json')).expo.android.intentFilters
     expect(filters).toContainEqual(
       expect.objectContaining({
@@ -133,6 +135,10 @@ describe('the links open the app', () => {
           { scheme: 'https', host: 'www.blendn.app', pathPrefix: '/event/' },
           { scheme: 'https', host: 'www.blendn.app', pathPrefix: '/e/' },
           { scheme: 'https', host: 'www.blendn.app', pathPrefix: '/v/' },
+          { scheme: 'https', host: 'staging.blendn.app', pathPrefix: '/f/' },
+          { scheme: 'https', host: 'staging.blendn.app', pathPrefix: '/event/' },
+          { scheme: 'https', host: 'staging.blendn.app', pathPrefix: '/e/' },
+          { scheme: 'https', host: 'staging.blendn.app', pathPrefix: '/v/' },
         ],
       })
     )

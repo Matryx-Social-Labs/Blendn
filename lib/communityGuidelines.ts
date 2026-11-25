@@ -1,9 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 
 import { Logger } from './logger'
+import { SITE_ORIGIN } from './shareLinks'
 
 /** The published guidelines. Settings and the room chat's banner both link here. */
-export const COMMUNITY_GUIDELINES_URL = 'https://www.blendn.app/community-guidelines'
+export const COMMUNITY_GUIDELINES_URL = `${SITE_ORIGIN}/community-guidelines`
 
 /**
  * The in-app disclosure that what people post goes to a third-party AI for moderation (App Review 5.1.2(i)): room

@@ -225,7 +225,7 @@ describe('the way on that costs nothing', () => {
     await act(async () => {
       fireEvent.press(screen.getByRole('link', { name: 'Terms' }))
     })
-    expect(openInApp).toHaveBeenCalledWith('https://blendn.app/terms')
+    expect(openInApp).toHaveBeenCalledWith('https://www.blendn.app/terms')
   })
 })
 
