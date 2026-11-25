@@ -16,8 +16,9 @@
  * line height and tracking scaled to match. Nothing happens at 1× or below: the floor leaves nothing to shrink.
  */
 import { isValidElement, useRef, useState, type ComponentPropsWithRef, type ReactNode } from 'react'
-import { StyleSheet, Text, useWindowDimensions, type TextLayoutEvent, type TextStyle } from 'react-native'
+import { Platform, StyleSheet, Text, useWindowDimensions, type TextLayoutEvent, type TextStyle } from 'react-native'
 
+import { androidSpToDp, NONLINEAR_FONT_API } from '../../lib/design/androidFontScale'
 import { MAX_FONT_SCALE, TYPE } from '../../lib/design/tokens'
 import { font, PAGE_TITLE, useBoldText } from './shared'
 
@@ -97,6 +98,14 @@ export function metricsAt(base: Metrics, size: number): TextStyle {
   return { fontSize: size, lineHeight: Math.round(base.lineHeight * ratio), letterSpacing: base.letterSpacing * ratio }
 }
 
+/** Android 14+ draws `sp` along its own curves (`androidFontScale`); elsewhere a size is multiplied by the scale. */
+const curvedScaling = () => Platform.OS === 'android' && Number(Platform.Version) >= NONLINEAR_FONT_API
+
+/** The size the phone draws a `size` role at `fontScale`, stopped at the role's cap as React Native stops it. */
+export function drawnSize(size: number, fontScale: number, cap: number): number {
+  return curvedScaling() ? Math.min(androidSpToDp(size, fontScale), size * cap) : size * Math.min(fontScale, cap)
+}
+
 type Fit = { key: string; size: number }
 type Pending = { key: string; words: string[]; line: number }
 
@@ -134,6 +143,11 @@ export function Title({ variant = 'title', family, maxFontSizeMultiplier, style,
   const line = useRef(0)
   const split = useRef<Omit<Pending, 'line'> | null>(null)
   const shrunk = canShrink && fit?.key === key ? fit : null
+  const drawn = drawnSize(base.fontSize, fontScale, cap)
+  // Android 14+ grows the line less than the glyphs in it (30 sp → 30 dp around 24 sp → 26.4 at 1.3), under Satoshi's 1.25 em,
+  // and the last line lost its descenders (SCRUM-1109). Past 1× an Android title draws at the phone's own size, in dp, with the
+  // role's line height in proportion, as a shrunk one does.
+  const ownSize = shrunk?.size ?? (canShrink && curvedScaling() ? drawn : null)
 
   // The box and the lines arrive in either order: measure once both are in.
   const measureIfSplit = () => {
@@ -175,7 +189,7 @@ export function Title({ variant = 'title', family, maxFontSizeMultiplier, style,
     const size = fittedSize(base, widest, pending.line)
     setPending(null)
     // Only ever smaller than drawn: a word that already fits at the scaled size is left as it is.
-    if (size !== null && size < base.fontSize * Math.min(fontScale, cap)) setFit({ key: pending.key, size })
+    if (size !== null && size < drawn) setFit({ key: pending.key, size })
   }
 
   const measuring = canShrink && !shrunk && pending?.key === key
@@ -184,8 +198,8 @@ export function Title({ variant = 'title', family, maxFontSizeMultiplier, style,
       <Text
         {...rest}
         maxFontSizeMultiplier={cap}
-        allowFontScaling={shrunk ? false : rest.allowFontScaling}
-        style={[roleType, style, shrunk && metricsAt(base, shrunk.size)]}
+        allowFontScaling={ownSize === null ? rest.allowFontScaling : false}
+        style={[roleType, style, ownSize !== null && metricsAt(base, ownSize)]}
         onLayout={canShrink ? handleLayout : onLayout}
         onTextLayout={canShrink ? handleTextLayout : onTextLayout}
       >
