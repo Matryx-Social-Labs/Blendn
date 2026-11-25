@@ -518,6 +518,8 @@ function PrivateChatInner() {
       if (outcome.kind === 'failed') {
         // A rate limit or the spam filter locks the composer; anything else is the server's sentence.
         composer.apply(result.errorCode, result.retryAfter, result.error)
+        // Gone or barred: they may have left or blocked, which the socket never says. The read decides whether it has ended.
+        if (result.errorCode === 'NOT_FOUND' || result.errorCode === 'FORBIDDEN') void loadMessages()
         if (mediaUrl) return fail(result.error || outcome.reason)
         fail()
         if (result.errorCode !== 'RATE_LIMITED' && result.errorCode !== 'SPAM_BLOCKED') showToast(outcome.reason, 'error')
@@ -734,6 +736,8 @@ function PrivateChatInner() {
       return loadMessages()
     },
     domains: ['chat'],
+    // The socket applies messages, reads, deliveries and the reveal; a `chat` mark is any room's or DM's message (SCRUM-1173).
+    syncOnDirty: false,
     syncOnReconnect: true,
     disconnectedIntervalMs: 15000,
   })

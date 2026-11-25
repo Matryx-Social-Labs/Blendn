@@ -469,6 +469,30 @@ describe('the thread’s states', () => {
     expect(screen.queryByLabelText('Message')).toBeNull()
     expect(screen.queryByText(/block/i)).toBeNull()
   })
+
+  /*
+   * They left, blocked or deleted it: the server says nothing on the socket, and no `chat` mark re-reads the thread any
+   * more (SCRUM-1173). A send it refuses as gone or forbidden reads the thread again, and the read decides.
+   */
+  it.each(['NOT_FOUND', 'FORBIDDEN'])('a send refused as %s reads the thread again, and a gone thread shows as ended', async (errorCode) => {
+    api.getConversationMessages.mockResolvedValueOnce(page([]) as never)
+    await open()
+    api.getConversationMessages.mockResolvedValue({ success: false, errorCode: 'NOT_FOUND', error: 'Conversation not found' } as never)
+    api.sendPrivateMessage.mockResolvedValue({ success: false, errorCode, error: 'Conversation not found' } as never)
+    await act(async () => fireEvent.press(screen.getByLabelText(/Say hi/)))
+    await flush()
+    expect(screen.getByText('This conversation has ended')).toBeTruthy()
+  })
+
+  it('a send refused for any other reason does not read the thread again', async () => {
+    api.getConversationMessages.mockResolvedValueOnce(page([]) as never)
+    await open()
+    const reads = api.getConversationMessages.mock.calls.length
+    api.sendPrivateMessage.mockResolvedValue({ success: false, errorCode: 'RATE_LIMITED', error: 'Slow down' } as never)
+    await act(async () => fireEvent.press(screen.getByLabelText(/Say hi/)))
+    await flush()
+    expect(api.getConversationMessages.mock.calls.length).toBe(reads)
+  })
 })
 
 describe('the composer rides the keyboard', () => {

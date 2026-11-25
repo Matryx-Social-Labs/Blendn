@@ -5,6 +5,15 @@ import { clearDirtyDomains, hasDirtyDomain, LiveSyncDomain, subscribeDirtyDomain
 import { getConnectionStatus, SocketConnectionStatus, subscribeConnectionStatus } from './socketClient'
 import { useLatest } from './useLatest'
 
+/**
+ * A dirty mark re-reads the screen in front at most once per this long, the last mark in a window still read at its end
+ * (SCRUM-1173). Every `chat:message` marks `chat` and every check-in marks `events` and `match`: unthrottled, a room of
+ * N phones was N re-reads of the page per message.
+ */
+export const DIRTY_SYNC_MIN_MS = 10_000
+/** A reconnect re-reads after a random wait of up to this long: a deploy drops every phone at once. */
+export const RECONNECT_SYNC_JITTER_MS = 5_000
+
 interface UseLiveSyncOptions {
   enabled?: boolean
   onSync: () => void | Promise<void>
@@ -14,6 +23,8 @@ interface UseLiveSyncOptions {
   maxDisconnectedIntervalMs?: number
   syncOnFocus?: boolean
   syncOnReconnect?: boolean
+  /** Off for a screen whose own socket handlers already apply what the mark is about (a room's or a DM's messages). */
+  syncOnDirty?: boolean
   /** After more than a minute in the background, sync once on return so counts roll once to now (motion #49). */
   syncOnReturn?: boolean
 }
@@ -28,6 +39,7 @@ export function useLiveSync(options: UseLiveSyncOptions): SocketConnectionStatus
     maxDisconnectedIntervalMs = 60000,
     syncOnFocus = true,
     syncOnReconnect = true,
+    syncOnDirty = true,
     syncOnReturn = true,
   } = options
 
@@ -137,7 +149,7 @@ export function useLiveSync(options: UseLiveSyncOptions): SocketConnectionStatus
     ])
   )
 
-  // Only the screen in front catches up on return: the ones behind it do on their own next focus.
+  // Only the screen in front catches up on return, on a reconnect or on a dirty mark: the ones behind it do on their own next focus.
   const focusedRef = useRef(false)
   useFocusEffect(
     useCallback(() => {
@@ -162,25 +174,39 @@ export function useLiveSync(options: UseLiveSyncOptions): SocketConnectionStatus
 
   useEffect(() => {
     const previousState = lastSocketStateRef.current
-    if (enabled && syncOnReconnect && socketStatus.state === 'connected' && previousState !== 'connected') {
-      void runSync()
-    }
     lastSocketStateRef.current = socketStatus.state
     socketStateRef.current = socketStatus.state
+    const reconnected = socketStatus.state === 'connected' && previousState !== 'connected'
+    if (!enabled || !syncOnReconnect || !reconnected || !focusedRef.current) return
+    const timer = setTimeout(() => {
+      if (focusedRef.current) void runSync()
+    }, Math.random() * RECONNECT_SYNC_JITTER_MS)
+    return () => clearTimeout(timer)
   }, [enabled, runSync, socketStatus.state, syncOnReconnect])
 
+  const lastDirtySyncRef = useRef(0)
   useEffect(() => {
-    if (!enabled) return () => {}
+    if (!enabled || !syncOnDirty) return () => {}
+    let trailing: ReturnType<typeof setTimeout> | null = null
+    const live = () => focusedRef.current && socketStateRef.current === 'connected'
+    const sync = () => {
+      trailing = null
+      if (!live()) return
+      lastDirtySyncRef.current = Date.now()
+      void runSync()
+    }
     const unsub = subscribeDirtyDomains((domain) => {
       if (domainsRef.current.length > 0 && !domainsRef.current.includes(domain)) return
-      if (socketStateRef.current === 'connected') {
-        void runSync()
-      }
+      if (!live() || trailing) return
+      const wait = lastDirtySyncRef.current + DIRTY_SYNC_MIN_MS - Date.now()
+      if (wait <= 0) sync()
+      else trailing = setTimeout(sync, wait)
     })
     return () => {
       unsub()
+      if (trailing) clearTimeout(trailing)
     }
-  }, [domainsRef, enabled, runSync])
+  }, [domainsRef, enabled, runSync, syncOnDirty])
 
   return socketStatus
 }
