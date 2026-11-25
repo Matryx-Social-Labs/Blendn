@@ -14,7 +14,8 @@ import {
 import { router } from 'expo-router'
 import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AppState, Linking, Platform, StyleSheet, useWindowDimensions, View, type NativeSyntheticEvent } from 'react-native'
-import Animated, { useAnimatedStyle, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated'
+import Animated, { useAnimatedReaction, useAnimatedStyle, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated'
+import { scheduleOnRN } from 'react-native-worklets'
 
 import { eventFromApi } from '../../lib/api'
 import { apiClient } from '../../lib/apiClient'
@@ -44,6 +45,7 @@ import {
   reachShapes,
   reachTarget,
   compassBelow,
+  edgeBoxOf,
 } from '../../lib/homeMap'
 import { getDistanceKm } from '../../lib/geo'
 import { Logger } from '../../lib/logger'
@@ -228,6 +230,14 @@ export const HomeMap = memo(function HomeMap({
 }) {
   const { width, height } = useWindowDimensions()
   const insets = useSafeAreaInsets()
+  // The banner's lift on "my location", on the JS side: the edge box keeps above the lifted button (SCRUM-1096).
+  const [lift, setLift] = useState(0)
+  useAnimatedReaction(
+    () => locateLift?.get() ?? 0,
+    (now, before) => {
+      if (now !== before) scheduleOnRN(setLift, now)
+    }
+  )
   /*
    * "Share location for nearby events" off: the map has no fix of its own. It opens on the city and follows only the camera the
    * person moves, so a viewport query means where they looked, never where they are (SCRUM-908). The same null as before a fix
@@ -470,8 +480,8 @@ export const HomeMap = memo(function HomeMap({
     return gate ? { target: { id: focusPin.id, name: focusPin.place || focusPin.title, at }, distance: gate.distance } : null
   }, [focusPin, segment, cityCentre, mapCentre?.[0], mapCentre?.[1], center, settled]) // eslint-disable-line react-hooks/exhaustive-deps -- by value; `settled` re-reads the camera
   const edgeTarget = edge?.target ?? null
-  // Where the edge marker may sit: the map you can see, above "my location" (pulse-map 05 frame 6).
-  const edgeBox = { left: 0, top: padding.top, right: width, bottom: height - padding.bottom - MAP_THEME.locate.sizePx - SPACE.sm }
+  // Where the edge marker may sit: the map you can see, above "my location" as a banner lifts it (SCRUM-1096).
+  const edgeBox = edgeBoxOf({ width, height, padding, lift })
   // What the map says about you (pulse-map 06): approximate and stale each get their one line.
   const you = youMark({ sharing, permission: 'granted', fix: center, now })
   // Every distance the map says from that fix: "about 1 km" from an approximate one, the card's words (SCRUM-1080).

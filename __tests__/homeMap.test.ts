@@ -6,6 +6,7 @@ import {
   buildingUnder,
   cameraMove,
   cityPickAction,
+  edgeBoxOf,
   boxAround,
   insideLastBox,
   lightCandidates,
@@ -26,6 +27,7 @@ import {
   compassBelow,
 } from '../lib/homeMap'
 import { drawerSnapPoints } from '../lib/home'
+import { edgeMarker } from '../lib/mapPresence'
 import { glowRadius } from '../lib/mapLit'
 import { CITY_BUILDINGS, EMBER_MAP_STYLE, homeMapStyle, styleHost } from '../lib/mapStyleEmber'
 import { MAP_THEME } from '../lib/mapTheme'
@@ -614,6 +616,28 @@ describe('"my location"', () => {
     // A screen with no room between half and full: never NaN (review L3).
     expect(locateRide(400, { half: 120, full: 120 }).opacity).toBe(1)
     expect(locateRide(120, { half: 120, full: 120 }).opacity).toBe(0)
+  })
+
+  it('keeps the edge marker above "my location", lifted by a banner too (SCRUM-1096: the pill drew over the lifted button)', () => {
+    const drawer = { half: 420, full: 120 }
+    const drawerTop = 420
+    const padding = { top: 100, bottom: 800 - drawerTop }
+    const pill = { width: 120, height: 28 }
+    // A venue far below and right, behind "my location": the marker as placed (`edgeMarker`) ends above the button.
+    const venue: [number, number] = [380, 790]
+    const markerFoot = (lift: number) => {
+      const spot = edgeMarker(venue, edgeBoxOf({ width: 390, height: 800, padding, lift }), pill)
+      return spot ? spot.top + pill.height : null
+    }
+    for (const lift of [0, 74, 120]) {
+      expect(markerFoot(lift)).toBeLessThanOrEqual(locateRide(drawerTop, drawer, lift).translateY)
+      expect(edgeBoxOf({ width: 390, height: 800, padding, lift })).toMatchObject({ left: 0, top: 100, right: 390 })
+    }
+    // Negative control: a box that ignores the lift puts the marker over the lifted button (the bug as found).
+    expect(markerFoot(0)).toBeGreaterThan(locateRide(drawerTop, drawer, 74).translateY)
+    // Wired: the screen hands the banner's lift to the box the marker and the names keep to.
+    expect(component).toMatch(/const edgeBox = edgeBoxOf\(\{ width, height, padding, lift \}\)/)
+    expect(component).toMatch(/useAnimatedReaction\(\s*\(\) => locateLift\?\.get\(\) \?\? 0,/)
   })
 
   it('lands at its zoom on iOS when the ease also tilts the camera (review M2)', () => {
