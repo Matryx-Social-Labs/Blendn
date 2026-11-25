@@ -402,6 +402,14 @@ describe('a crew’s wave at you (S5 b2, advisor T-A / U-A / W-A / X-A 2026-11-2
     expect(screen.getByRole('button', { name: 'Waved at Crew 4' })).toBeTruthy()
   })
 
+  it('the row’s pill is centred on its row, waved or not', async () => {
+    mockGetReceivedWaves.mockResolvedValueOnce({ success: true, data: page([wave(21, { wavedBack: true })], { crewWaves: [crew(4)], crewTotal: 1 }) })
+    await render(<WavedAtYouList eventId="e1" now={NOW} onWaveBack={jest.fn()} onSafety={jest.fn()} />)
+    await screen.findByRole('button', { name: 'Wave back at Crew 4' })
+    const aligned = (n: { parent: unknown; props: { style?: unknown } } | null): boolean => !!n && ((StyleSheet.flatten(n.props.style as never) as { alignSelf?: string } | undefined)?.alignSelf === 'center' || aligned(n.parent as never))
+    for (const name of ['Wave back at Crew 4', 'Waved at Person 21']) expect(aligned(screen.getByRole('button', { name }) as never)).toBe(true)
+  })
+
   it('a crew that left: the row stays, says so and offers nothing; control: a refusal keeps Wave back', async () => {
     mockGetReceivedWaves.mockResolvedValueOnce({ success: true, data: page([], { crewWaves: [crew(4), crew(5)], crewTotal: 2 }) })
     const answers = ['gone', 'none']

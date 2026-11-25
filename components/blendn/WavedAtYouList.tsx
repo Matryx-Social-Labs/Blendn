@@ -197,11 +197,12 @@ export function WavedAtYouList({
                       if (sending !== id) void answer(w)
                     }}
                     accessibilityLabel={`Wave back at ${name}`}
+                    style={styles.pill}
                     testID={`waved-row-${id}-wave`}
                   />
                 ) : w.wavedBack ? (
                   // ✓ Waved is still: the neutral, disabled (no Wave again), as the person page's.
-                  <Button kind="secondary" size="pill" icon="check" label="Waved" disabled accessibilityLabel={`Waved at ${name}`} />
+                  <Button kind="secondary" size="pill" icon="check" label="Waved" disabled accessibilityLabel={`Waved at ${name}`} style={styles.pill} />
                 ) : null}
               </Pressable>
             )
@@ -220,5 +221,7 @@ const styles = StyleSheet.create({
   centre: { textAlign: 'center' },
   row: { height: ROW, flexDirection: 'row', alignItems: 'center', gap: SPACE.md },
   text: { flex: 1, minWidth: 0, gap: SPACE.xxs },
+  // A pill starts at its row's top by default; the row is taller than it.
+  pill: { alignSelf: 'center' },
   foot: { minHeight: ROW, justifyContent: 'center' },
 })
