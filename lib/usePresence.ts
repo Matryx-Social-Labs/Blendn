@@ -59,18 +59,19 @@ export interface PresenceStatus {
   finished: boolean
 }
 
-export function usePresence(eventId: string | null | undefined): PresenceStatus {
+/** `checkInId`, when known, restarts the loop for a new check-in at the same event (one that ended stops it for good). */
+export function usePresence(eventId: string | null | undefined, checkInId?: string): PresenceStatus {
   const [status, setStatus] = useState<PresenceStatus>(IDLE)
   // A new check-in starts from nothing: "finished" was about the last one (M9).
-  const [statusFor, setStatusFor] = useState(eventId)
-  if (statusFor !== eventId) {
-    setStatusFor(eventId)
+  const statusKey = `${eventId ?? ''}|${checkInId ?? ''}`
+  const [statusFor, setStatusFor] = useState(statusKey)
+  if (statusFor !== statusKey) {
+    setStatusFor(statusKey)
     setStatus(IDLE)
   }
 
   // Refs, not state: changing these must not re-run the effect and restart the
   // timer, which would reset the interval on every ping.
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const stopped = useRef(false)
   const appState = useRef<AppStateStatus>(AppState.currentState)
 
@@ -78,21 +79,25 @@ export function usePresence(eventId: string | null | undefined): PresenceStatus 
     if (!eventId) return
 
     stopped.current = false
+    // What the app is doing now, not when the last loop ended (it may have gone to the background with no loop running).
+    appState.current = AppState.currentState
     let cancelled = false
+    // Effect-local: a late ping from the last event must not clear this one's timer.
+    let timer: ReturnType<typeof setTimeout> | null = null
     // One ping at a time: a return to the app while one waits for its fix must not send a second.
     let busy = false
 
     const clear = () => {
-      if (timer.current) {
-        clearTimeout(timer.current)
-        timer.current = null
+      if (timer) {
+        clearTimeout(timer)
+        timer = null
       }
     }
 
     const schedule = (seconds: number) => {
-      clear()
       if (cancelled || stopped.current) return
-      timer.current = setTimeout(ping, seconds * 1000)
+      clear()
+      timer = setTimeout(ping, seconds * 1000)
     }
 
     const ping = async () => {
@@ -131,7 +136,8 @@ export function usePresence(eventId: string | null | undefined): PresenceStatus 
         if (cancelled) return
 
         if (!result.success || !result.data) {
-          // A failed ping is not an error worth surfacing. Try again next tick.
+          // Not shown to the person; logged, and tried again next tick.
+          Logger.warn('presence', 'Ping refused', { error: result.error })
           schedule(DEFAULT_INTERVAL_SECONDS)
           return
         }
@@ -185,7 +191,7 @@ export function usePresence(eventId: string | null | undefined): PresenceStatus 
       clear()
       subscription.remove()
     }
-  }, [eventId])
+  }, [eventId, checkInId])
 
   return status
 }

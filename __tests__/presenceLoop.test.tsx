@@ -12,7 +12,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react-native'
  */
 jest.mock('../lib/logger', () => ({ Logger: { debug: jest.fn(), warn: jest.fn(), error: jest.fn(), info: jest.fn() } }))
 jest.mock('../lib/apiClient', () => ({
-  apiClient: { getActiveCheckins: jest.fn(), getEvent: jest.fn(), sendPresencePing: jest.fn() },
+  apiClient: { getActiveCheckins: jest.fn(), sendPresencePing: jest.fn() },
 }))
 let mockOnCheckInChanged: (() => void) | null = null
 jest.mock('../lib/checkIn', () => ({
@@ -55,7 +55,7 @@ import { checkInChanged, checkOutOf } from '../lib/checkIn'
 import { ToastContext } from '../components/toastDock'
 /* eslint-enable import/first */
 
-const api = apiClient as unknown as Record<'getActiveCheckins' | 'getEvent' | 'sendPresencePing', jest.Mock>
+const api = apiClient as unknown as Record<'getActiveCheckins' | 'sendPresencePing', jest.Mock>
 const loc = Location as unknown as Record<'getForegroundPermissionsAsync' | 'getLastKnownPositionAsync' | 'getCurrentPositionAsync', jest.Mock>
 
 // The pilot's farmhouse: a pin, and a phone 2 km away whose fix is a 2 km blur (precise location off).
@@ -68,7 +68,7 @@ const FAR = { latitude: 13.0266, longitude: 77.3112 }
 
 const MIN = 60_000
 const ping = (status: string, extra: object = {}) => ({ success: true, data: { status, nextPingInSeconds: 300, ...extra } })
-const checkIns = (...list: Array<{ eventId: string; kind?: string }>) => ({
+const checkIns = (...list: Array<{ eventId: string; kind?: string; id?: string }>) => ({
   success: true,
   data: { checkIns: list.map((c) => ({ id: `c-${c.eventId}`, kind: 'event', event: { id: c.eventId }, ...c })) },
 })
@@ -105,8 +105,6 @@ beforeEach(() => {
   loc.getForegroundPermissionsAsync.mockResolvedValue({ status: 'granted', granted: true })
   loc.getLastKnownPositionAsync.mockResolvedValue(null)
   loc.getCurrentPositionAsync.mockImplementation(async () => fixAt(PIN, 20))
-  // An event with a pin, for the loop this replaces (it read the fence from the event).
-  api.getEvent.mockResolvedValue({ success: true, data: { ...PIN, checkInRadius: 85 } })
   api.getActiveCheckins.mockResolvedValue(checkIns({ eventId: 'e-unlisted' }))
   api.sendPresencePing.mockResolvedValue(ping('inside'))
   ;(checkOutOf as jest.Mock).mockResolvedValue({ success: true })
@@ -186,6 +184,35 @@ describe('the loop follows the active check-in, whatever event it is', () => {
     await advance(10 * MIN)
     expect(api.sendPresencePing).not.toHaveBeenCalled()
   })
+
+  it('launched offline (the active read fails): tried again a minute later, then the loop runs', async () => {
+    api.getActiveCheckins.mockResolvedValueOnce({ success: false, error: 'Network request failed' })
+    await render(<PresenceMonitor />)
+    await settle()
+    expect(api.sendPresencePing).not.toHaveBeenCalled()
+    await advance(60_000)
+    expect(pingedIds()).toEqual(['e-unlisted'])
+  })
+
+  it('offline mid-event (the read fails): the loop keeps the check-in it had', async () => {
+    await render(<PresenceMonitor />)
+    await settle()
+    api.getActiveCheckins.mockResolvedValue({ success: false, error: 'Network request failed' })
+    await setApp('background')
+    await setApp('active')
+    await advance(5 * MIN)
+    expect(api.sendPresencePing.mock.calls.length).toBeGreaterThanOrEqual(3)
+  })
+
+  it('checked out, then back in at the same event: a new check-in, a new loop', async () => {
+    api.sendPresencePing.mockResolvedValueOnce(ping('checked_out', { reason: 'left_area' })).mockResolvedValue(ping('inside'))
+    await render(<PresenceMonitor />)
+    await settle()
+    api.getActiveCheckins.mockResolvedValue(checkIns({ eventId: 'e-unlisted', id: 'c-second' }))
+    await act(async () => mockOnCheckInChanged?.())
+    await settle()
+    expect(api.sendPresencePing).toHaveBeenCalledTimes(2)
+  })
 })
 
 describe('the fix', () => {
@@ -212,6 +239,33 @@ describe('the fix', () => {
     await advance(30_000)
     expect(api.sendPresencePing).toHaveBeenCalledTimes(1)
     await advance(30_000)
+    expect(api.sendPresencePing).toHaveBeenCalledTimes(2)
+  })
+
+  it('a last-known read that fails falls back to the Balanced ask', async () => {
+    loc.getLastKnownPositionAsync.mockRejectedValue(new Error('unavailable'))
+    await render(<PresenceMonitor />)
+    await settle()
+    expect(loc.getCurrentPositionAsync).toHaveBeenCalledTimes(1)
+    expect(api.sendPresencePing).toHaveBeenCalledTimes(1)
+  })
+
+  it('no permission: nothing sent; granted in Settings, the return to the app pings', async () => {
+    loc.getForegroundPermissionsAsync.mockResolvedValue({ status: 'denied', granted: false })
+    await render(<PresenceMonitor />)
+    await settle()
+    expect(api.sendPresencePing).not.toHaveBeenCalled()
+    loc.getForegroundPermissionsAsync.mockResolvedValue({ status: 'granted', granted: true })
+    await setApp('background')
+    await setApp('active')
+    expect(api.sendPresencePing).toHaveBeenCalledTimes(1)
+  })
+
+  it('a refused ping (offline, 5xx) is tried again at the next interval', async () => {
+    api.sendPresencePing.mockResolvedValueOnce({ success: false, error: 'Network request failed' })
+    await render(<PresenceMonitor />)
+    await settle()
+    await advance(5 * MIN)
     expect(api.sendPresencePing).toHaveBeenCalledTimes(2)
   })
 })
@@ -267,6 +321,22 @@ describe('"Still at the event?" only on the server’s word, never a check-out w
     expect(checkOutOf).not.toHaveBeenCalled()
   })
 
+
+  it('"I’m still here" holds through a blurry reading; only a reading inside ends the departure', async () => {
+    api.sendPresencePing.mockResolvedValueOnce(ping('outside', { reason: 'grace_expired' }))
+    await render(<PresenceMonitor />)
+    await settle()
+    await fireEvent.press(screen.getByTestId('stay'))
+    api.sendPresencePing.mockResolvedValueOnce(ping('unknown', { reason: 'no_signal' })).mockResolvedValueOnce(ping('outside', { reason: 'grace_expired' }))
+    await advance(5 * MIN)
+    await advance(5 * MIN)
+    expect(screen.queryByTestId('ask')).toBeNull()
+    api.sendPresencePing.mockResolvedValueOnce(ping('inside', { reason: 'returned' })).mockResolvedValueOnce(ping('outside', { reason: 'grace_expired' }))
+    await advance(5 * MIN)
+    await advance(5 * MIN)
+    expect(screen.getByTestId('ask')).toBeTruthy()
+  })
+
   it('"Check me out" that fails keeps the question open and says so', async () => {
     api.sendPresencePing.mockResolvedValue(ping('outside', { reason: 'grace_expired' }))
     ;(checkOutOf as jest.Mock).mockResolvedValue({ success: false, error: 'Network request failed' })
@@ -291,6 +361,7 @@ describe('"Still at the event?" only on the server’s word, never a check-out w
     await settle()
     await fireEvent.press(screen.getByTestId('leave'))
     await settle()
+    expect(checkOutOf).toHaveBeenCalledWith('e-unlisted')
     expect(screen.queryByTestId('ask')).toBeNull()
     expect(screen.queryByTestId('notice')).toBeNull()
   })
@@ -314,6 +385,15 @@ describe('the loop ends', () => {
     expect(screen.queryByTestId('notice')).toBeNull()
     await advance(15 * MIN)
     expect(api.sendPresencePing).toHaveBeenCalledTimes(1)
+  })
+
+  it('the server says no check-in (ended elsewhere): no more pings', async () => {
+    api.sendPresencePing.mockResolvedValue(ping('not_checked_in'))
+    await render(<PresenceMonitor />)
+    await settle()
+    await advance(15 * MIN)
+    expect(api.sendPresencePing).toHaveBeenCalledTimes(1)
+    expect(screen.queryByTestId('notice')).toBeNull()
   })
 
   it('checked out elsewhere: the next read names no event and the pings stop', async () => {

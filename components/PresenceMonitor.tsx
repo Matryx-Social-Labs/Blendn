@@ -25,14 +25,19 @@ import { PresenceSheets } from './PresenceSheets'
  * Foreground only, mounted at the root while signed in: no background location (DECISIONS). Leaving with the app
  * closed is closed at the event's end.
  */
+/** A failed read of the active check-in is tried again after this. */
+const RESOLVE_RETRY_MS = 60_000
+
 export function PresenceMonitor() {
-  const [eventId, setEventId] = useState<string | null>(null)
-  const presence = usePresence(eventId)
-  // Answered for this departure; a reading inside (anything but `outside`) ends the departure, and the next one asks again.
-  const [answered, setAnswered] = useState(false)
-  const departing = presence.state === 'outside'
-  if (!departing && answered) setAnswered(false)
-  const asking = departing && presence.reason === 'grace_expired' && !answered
+  // The check-in, not only its event: checking out and back in to the same event starts a new loop.
+  const [active, setActive] = useState<{ eventId: string; id: string } | null>(null)
+  const eventId = active?.eventId ?? null
+  const presence = usePresence(eventId, active?.id)
+  // Answered for this departure, of this event (a late answer cannot carry over to the next one). Only a reading inside
+  // ends it: a blurry `unknown` in between is no news, so "I'm still here" is not asked again on the next outside one.
+  const [answeredFor, setAnsweredFor] = useState<string | null>(null)
+  if (answeredFor && presence.state === 'inside') setAnsweredFor(null)
+  const asking = presence.state === 'outside' && presence.reason === 'grace_expired' && answeredFor !== eventId
   // Checked out by the server for leaving: said once, and kept on screen after the loop has moved on (React's
   // "information from previous renders" pattern, so no effect sets state).
   const leftFor = presence.finished && presence.reason === 'left_area' ? eventId : null
@@ -46,16 +51,22 @@ export function PresenceMonitor() {
 
   useEffect(() => {
     let latest = 0
+    let retry: ReturnType<typeof setTimeout> | undefined
     const resolve = async () => {
       const mine = ++latest
+      clearTimeout(retry)
       try {
-        const active = await apiClient.getActiveCheckins({ force: true })
+        const read = await apiClient.getActiveCheckins({ force: true })
         if (mine !== latest) return
-        // A failed read keeps the event it had: offline at the venue must not stop the loop. The server says when it is over.
-        if (!active.success) return
-        setEventId(active.data?.checkIns?.find((c) => c.kind !== 'venue_day')?.eventId ?? null)
+        if (!read.success) throw new Error(read.error ?? 'active check-ins unavailable')
+        const checkIn = read.data?.checkIns?.find((c) => c.kind !== 'venue_day')
+        setActive(checkIn?.eventId ? { eventId: checkIn.eventId, id: checkIn.id } : null)
       } catch (e) {
-        Logger.warn('presence', 'could not read the active check-in', { error: e })
+        if (mine !== latest) return
+        // Keeps the check-in it had (offline at the venue must not stop the loop), and tries again: launched offline,
+        // there is none yet, and nothing else would ask before the next return to the app.
+        Logger.warn('presence', 'could not read the active check-in', { error: String(e) })
+        retry = setTimeout(() => void resolve(), RESOLVE_RETRY_MS)
       }
     }
     void resolve()
@@ -65,6 +76,7 @@ export function PresenceMonitor() {
     const off = subscribeCheckInChanged(() => void resolve())
     return () => {
       latest = -1
+      clearTimeout(retry)
       app.remove()
       off()
     }
@@ -77,10 +89,11 @@ export function PresenceMonitor() {
   return (
     <PresenceSheets
       asking={asking}
-      onStay={() => setAnswered(true)}
+      onStay={() => setAnsweredFor(eventId)}
       // Closed only once it worked: a refusal is toasted by `useCheckOut` and the question stays.
       onLeave={async () => {
-        if (await checkOut()) setAnswered(true)
+        const leaving = eventId
+        if (await checkOut()) setAnsweredFor(leaving)
       }}
       notice={notice}
       onNoticeDone={() => setNotice(false)}
