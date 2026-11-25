@@ -628,3 +628,30 @@ it('the feed keeps its rows attached, so an instant jump to the newest never lan
     Object.defineProperty(Platform, 'OS', { value: os, configurable: true })
   }
 })
+
+describe('socket messages take their place by (createdAt, id), not by arrival (SCRUM-1168)', () => {
+  // Moderation holds each message 0.3–1 s, so a fast second message can reach the socket before a slow first one.
+  const deliver = (id: string, createdAt: string) =>
+    mockMessage.forEach((cb) => cb({ message: { id, userId: 'u-c', userName: 'Cosmic Panda', content: `order ${id}`, type: 'text', createdAt } }))
+  const order = () => screen.getAllByText(/^order /).map((n) => [n.props.children].flat().join(''))
+
+  it('shows the earlier message above the later one when the later arrives first', async () => {
+    await open()
+    await act(async () => {
+      deliver('m3', '2026-10-15T19:06:02.000Z')
+      deliver('m2', '2026-10-15T19:06:01.000Z')
+    })
+    await flush()
+    expect(order()).toEqual(['order m2', 'order m3'])
+  })
+
+  it('orders two messages of the same instant by id', async () => {
+    await open()
+    await act(async () => {
+      deliver('mb', '2026-10-15T19:06:00.000Z')
+      deliver('ma', '2026-10-15T19:06:00.000Z')
+    })
+    await flush()
+    expect(order()).toEqual(['order ma', 'order mb'])
+  })
+})
