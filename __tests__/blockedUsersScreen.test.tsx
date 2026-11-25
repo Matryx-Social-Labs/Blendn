@@ -53,13 +53,15 @@ it('B-A: blocked crews go first; with people too, People gets its own heading', 
 it('each group owns its line: with both, the people’s is under People, after the crews (advisor 2026-11-25)', async () => {
   mockHiddenCrews.mockResolvedValue(crewsAnswer(1))
   mockFetch.mockResolvedValue(ok([user(1)]))
-  const view = await render(<BlockedUsers />)
+  await render(<BlockedUsers />)
   await screen.findByText('Crew 0')
-  const words = JSON.stringify(view.toJSON())
-  const at = (text: string) => words.indexOf(text)
-  expect(screen.getAllByText('They can’t see you or message you. They aren’t told.')).toHaveLength(1)
-  expect(at('They can’t see you')).toBeGreaterThan(at('"People"'))
-  expect(at('"People"')).toBeGreaterThan(at('You won’t see these crews'))
+  // In drawing order; exactly one of each.
+  const lines = screen.getAllByText(/^(They can’t see you|You won’t see these crews|People$)/).map((t) => String(t.props.children))
+  expect(lines).toEqual([
+    'You won’t see these crews in any room. They aren’t told.',
+    'People',
+    'They can’t see you or message you. They aren’t told.',
+  ])
 })
 
 it('people only: their line is on top, with no heading, as before', async () => {
