@@ -4,6 +4,7 @@ import { router } from 'expo-router'
 import React from 'react'
 
 import CrewLinkRoute from '../app/c/[token]'
+import { KEEP_ANONYMOUS_LABEL } from '../lib/crews'
 import { crewsApi } from '../lib/crewsApi'
 
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
@@ -50,6 +51,14 @@ it('the card: who asked, the crew, the friendship in the consent, the days left;
   expect(screen.getByText(/Joining also makes you and Arjun friends\.$/)).toBeTruthy()
   expect(screen.getByTestId('invite-note')).toHaveTextContent('Open for 5 more days')
   expect(api.joinByLink).not.toHaveBeenCalled()
+})
+
+it('a screen reader meets the keep-anonymous switch once: the switch carries the words, the text beside it is hidden', async () => {
+  await open()
+  await screen.findByText('Arjun asked you in')
+  expect(screen.getAllByLabelText(KEEP_ANONYMOUS_LABEL, { includeHiddenElements: false })).toHaveLength(1)
+  expect(screen.queryByText(KEEP_ANONYMOUS_LABEL, { includeHiddenElements: false })).toBeNull()
+  expect(screen.getByText(KEEP_ANONYMOUS_LABEL, { includeHiddenElements: true })).toBeTruthy()
 })
 
 it('Join sends the consent and opens the crew’s chat', async () => {

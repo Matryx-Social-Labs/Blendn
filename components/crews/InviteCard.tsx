@@ -92,7 +92,8 @@ export function InviteCard({
           <View style={[styles.consent, contrast && IC_HAIRLINE]}>
             <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: secondary }]}>{consentMore ? `${CONSENT_LINE} ${consentMore}` : CONSENT_LINE}</Text>
             <View style={styles.anon}>
-              <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('meta', bold, TYPE.bodyStrong.fontFamily), styles.ink, styles.fill]}>{KEEP_ANONYMOUS_LABEL}</Text>
+              {/* The Toggle carries these words; hidden so a screen reader stops here once, not twice. */}
+              <Text accessibilityElementsHidden importantForAccessibility="no" maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('meta', bold, TYPE.bodyStrong.fontFamily), styles.ink, styles.fill]}>{KEEP_ANONYMOUS_LABEL}</Text>
               <Toggle value={keepAnonymous} onValueChange={onKeepAnonymous} accessibilityLabel={KEEP_ANONYMOUS_LABEL} disabled={joining} />
             </View>
           </View>
