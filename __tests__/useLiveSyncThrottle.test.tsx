@@ -126,6 +126,33 @@ describe('dirty marks', () => {
     expect(onSync).toHaveBeenCalledTimes(1)
   })
 
+  it('marks while the socket is down read nothing; the reconnect reads once', async () => {
+    jest.spyOn(Math, 'random').mockReturnValue(0)
+    const { onSync } = await mounted()
+    await setSocket('disconnected')
+    for (let i = 0; i < 5; i++) await mark()
+    await advance(WINDOW_MS * 2)
+    expect(onSync).not.toHaveBeenCalled()
+    await setSocket('connected')
+    await advance(WINDOW_MS * 2)
+    expect(onSync).toHaveBeenCalledTimes(1)
+  })
+
+  it('a mark that lands while a sync is still reading gets its own sync at the window end', async () => {
+    let finish = () => {}
+    const onSync = jest.fn(() => new Promise<void>((resolve) => (finish = resolve)))
+    await renderHook(() => useLiveSync({ onSync, domains: ['chat'] }))
+    await act(async () => finish()) // the focus sync
+    onSync.mockClear()
+    await mark()
+    expect(onSync).toHaveBeenCalledTimes(1)
+    await advance(300)
+    await mark() // the first read is still in flight
+    await act(async () => finish())
+    await advance(WINDOW_MS)
+    expect(onSync).toHaveBeenCalledTimes(2)
+  })
+
   it('one mark naming several of its domains is one sync, not one now and one at the window end', async () => {
     const { onSync } = await mounted({ domains: ['events', 'match'] })
     await act(async () => markDomainsDirty(['events', 'match', 'chat']))

@@ -484,6 +484,15 @@ describe('the thread’s states', () => {
     expect(screen.getByText('This conversation has ended')).toBeTruthy()
   })
 
+  it('a refusal whose re-read still finds the thread leaves it open', async () => {
+    api.getConversationMessages.mockResolvedValue(page([]) as never)
+    await open()
+    api.sendPrivateMessage.mockResolvedValue({ success: false, errorCode: 'FORBIDDEN', error: 'Not yet' } as never)
+    await act(async () => fireEvent.press(screen.getByLabelText(/Say hi/)))
+    await flush()
+    expect(screen.queryByText('This conversation has ended')).toBeNull()
+  })
+
   it('a send refused for any other reason does not read the thread again', async () => {
     api.getConversationMessages.mockResolvedValueOnce(page([]) as never)
     await open()

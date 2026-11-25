@@ -197,7 +197,7 @@ export function useLiveSync(options: UseLiveSyncOptions): SocketConnectionStatus
     }
     const unsub = subscribeDirtyDomains((domain) => {
       if (domainsRef.current.length > 0 && !domainsRef.current.includes(domain)) return
-      // The same millisecond as the last sync is the same mark naming another domain: one mark, one sync.
+      // Same millisecond as the sync just started: its read leaves after this task, so it already covers this mark (often the same mark naming another domain).
       if (!live() || trailing || lastDirtySyncRef.current === Date.now()) return
       const wait = lastDirtySyncRef.current + DIRTY_SYNC_MIN_MS - Date.now()
       if (wait <= 0) sync()
