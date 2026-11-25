@@ -57,6 +57,8 @@ export interface AttendeeProfile {
   youWaved?: boolean
   /** They waved at you in this room, yours to answer (the deck's `wavedAtYou`). */
   wavedAtYou?: boolean
+  /** When they waved at you here (the deck's `wavedAtYouAt`, ISO), or null: the card's "· 4 min" after a restart. */
+  wavedAtYouAt?: string | null
   /** The conversation your mutual here opened (the deck's `conversationId`): Say hi after a restart. */
   conversationId?: string | null
   /** Matching v2's shared lines, sign chip and badges — as the server budgeted them. */

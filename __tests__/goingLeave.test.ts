@@ -5,12 +5,14 @@
 jest.mock('../lib/apiClient', () => ({ apiClient: { cancelRsvp: jest.fn() } }))
 jest.mock('../lib/sheet', () => ({ showSheet: jest.fn() }))
 jest.mock('../lib/toast', () => ({ toast: jest.fn() }))
+jest.mock('../lib/checkIn', () => ({ checkInChanged: jest.fn() }))
 const appState: { listener?: (s: string) => void } = {}
 
 /* eslint-disable import/first */
 import { apiClient } from '../lib/apiClient'
 import { showSheet } from '../lib/sheet'
 import { toast } from '../lib/toast'
+import { checkInChanged } from '../lib/checkIn'
 import { AppState } from 'react-native'
 import { deferLeave, flushLeave, leaveKind, leavePending, leaveSheet, leaveToast, sendLeave, swipeLabel, undoLeave } from '../lib/goingLeave'
 /* eslint-enable import/first */
@@ -113,6 +115,24 @@ describe('sendLeave', () => {
     expect(sheet.title).toBe('Can’t go?')
     expect(sheet.message).toMatch(/Your ticket stays yours until it’s refunded/)
     expect(sheet.actions.map((a: { label: string }) => a.label)).toEqual(['Keep my ticket'])
+  })
+
+  it('checked in here on another phone: the row comes back, the status is read again at once (⋯ offers Check out), and the server’s sentence shows (SCRUM-1092)', async () => {
+    cancel.mockResolvedValueOnce({ success: false, errorCode: 'CONFLICT', reasonCode: 'ALREADY_CHECKED_IN', error: 'You’re checked in here. Check out first.' })
+    const back = jest.fn()
+    await sendLeave('e10', 'Rooftop Sundowner', back)
+    expect(back).toHaveBeenCalled()
+    expect(checkInChanged).toHaveBeenCalledWith('e10')
+    expect(toast).toHaveBeenLastCalledWith('You’re checked in here. Check out first.', 'error')
+    // No retry: one DELETE, and nothing sent again.
+    expect(cancel).toHaveBeenCalledTimes(1)
+  })
+
+  it('negative control: any other refusal re-reads nothing and keeps its own words', async () => {
+    cancel.mockResolvedValueOnce({ success: false, errorCode: 'CONFLICT', reasonCode: 'SOMETHING_ELSE', error: 'Nope.' })
+    await sendLeave('e11', 'Rooftop Sundowner', jest.fn())
+    expect(checkInChanged).not.toHaveBeenCalled()
+    expect(toast).toHaveBeenLastCalledWith('Couldn’t take Rooftop Sundowner off your list. Try again.', 'error')
   })
 
   it('a refusal puts the row back and says so', async () => {

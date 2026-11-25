@@ -197,6 +197,15 @@ const subscribe = (fn: () => void) => {
 }
 const read = () => state
 
+/**
+ * When they waved at you, for "Waved at you · 4 min": heard live (the freshest), else the deck's own time (SCRUM-1092, so a
+ * restart keeps it), else the received list's (an older server's deck carries none).
+ */
+export function personWavedAt(heard: number | undefined, deck: string | null | undefined, listed: number | undefined): number | null {
+  const fromDeck = deck ? Date.parse(deck) : NaN
+  return heard ?? (Number.isFinite(fromDeck) ? fromDeck : undefined) ?? listed ?? null
+}
+
 export function useRoomWaves(): State {
   return useSyncExternalStore(subscribe, read, read)
 }
