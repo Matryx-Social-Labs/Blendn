@@ -1,5 +1,10 @@
 import { useRef } from 'react'
-import type { FlatList, ScrollView } from 'react-native'
+import type { FlatList, NativeScrollEvent, ScrollView } from 'react-native'
+
+/** Within this many points of the newest message counts as at the end. */
+const AT_END = 80
+export const atEndOf = ({ contentSize, contentOffset, layoutMeasurement }: NativeScrollEvent) =>
+  contentSize.height - contentOffset.y - layoutMeasurement.height < AT_END
 
 /**
  * Keep a chat list on its newest message while the reader is there.
@@ -34,13 +39,9 @@ export interface FollowEnd {
   /** The reader asked for the newest (the pill): follow until there, ending any gesture still coasting (SCRUM-1321). */
   toEnd: () => void
   /**
-   * The list's top (`onStartReached`) reached by the reader's own gesture: true once per drag or fling, then false until the
-   * next. A first page paints at offset 0, the top, before the jump to the newest lands, so the top asked for an older page
-   * that nobody scrolled to, and it landed under a list still following its end (SCRUM-1321). One per gesture: a list with
-   * no `maintainVisibleContentPosition` (the room) leaves the reader at the top after a page, and the top would ask again.
-   * ponytail: the list asks once per content length while it stays near its top, so an ask refused here is spent until the
-   * reader moves half a screen down and back; "Load older" above the feed covers it. Pass `onStartReached` only while a
-   * gesture is live if that ever reads as stuck.
+   * Whether the list's top (`onStartReached`) was reached by the reader's own gesture: once per drag or fling. A first page
+   * paints at the top before the jump to the newest lands, and that asked for older pages nobody scrolled to (SCRUM-1321).
+   * ponytail: an ask refused here is spent until the reader moves half a screen down and back ("Load older" covers it).
    */
   readerAsksOlder: () => boolean
 }

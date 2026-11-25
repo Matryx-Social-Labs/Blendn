@@ -80,7 +80,7 @@ import { clockTime } from '../../lib/time'
 import { withDaySeparators } from '../../lib/unreadDivider'
 import { useAuth } from '../../lib/useAuth'
 import { isReadOnlyLock, lockFor, lockFromDoor, saidWrite, useComposerLock, type ComposerLock } from '../../lib/useComposerLock'
-import { scrollListToEnd, useFollowEnd } from '../../lib/useFollowEnd'
+import { atEndOf, scrollListToEnd, useFollowEnd } from '../../lib/useFollowEnd'
 import { useReducedMotion } from '../../lib/motion'
 import type { PollRefusal } from '../../lib/chatPoll'
 import { useLatest } from '../../lib/useLatest'
@@ -95,8 +95,6 @@ const prevMessage = (i: ChatListItem | undefined) => (i?.kind === 'message' ? i 
 let _tempIdCounter = 0
 const MESSAGES_CACHE_TTL = 60 * 1000
 /** Read as "at the newest": the reader is within this of the end. */
-const AT_END = 80
-const atEndOf = ({ contentSize, contentOffset, layoutMeasurement }: NativeScrollEvent) => contentSize.height - contentOffset.y - layoutMeasurement.height < AT_END
 /** iOS dismisses the keyboard interactively with the drag; Android on the drag (R3-D5 5.3). */
 const KEYBOARD_DISMISS = Platform.OS === 'ios' ? 'interactive' : 'on-drag'
 const REACTION_INDEX = Object.fromEntries(CHAT_REACTIONS.map((e, i) => [e, i])) as Record<string, number>

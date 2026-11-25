@@ -80,7 +80,7 @@ import { withDaySeparators, withUnreadDivider, type UnreadDivider } from '../../
 import { useAuth } from '../../lib/useAuth'
 import { useFriendAsk } from '../../lib/useFriendAsk'
 import { useComposerLock } from '../../lib/useComposerLock'
-import { scrollListToEnd, useFollowEnd } from '../../lib/useFollowEnd'
+import { atEndOf, scrollListToEnd, useFollowEnd } from '../../lib/useFollowEnd'
 import { useReducedMotion } from '../../lib/motion'
 import { useLatest } from '../../lib/useLatest'
 import { useLiveSync } from '../../lib/useLiveSync'
@@ -90,7 +90,6 @@ import { userMessage } from '../../lib/userMessage'
 
 type ChatListItem = ({ kind: 'message' } & PrivateMessage) | { kind: 'separator'; id: string; label: string } | UnreadDivider
 
-const AT_END = 80
 const KEYBOARD_DISMISS = Platform.OS === 'ios' ? 'interactive' : 'on-drag'
 /** #23: the reveal resolves in with one M.settle-length crossfade. */
 const REVEAL_MS = 700
@@ -314,8 +313,6 @@ function PrivateChatInner() {
   const reduceMotion = useLatest(useReducedMotion())
   const scrollToBottom = (animated = true) => {
     ruleHeldRef.current = false
-    // Follow until it gets there: from far up the jump lands short of rows not yet measured (SCRUM-1321).
-    follow.toEnd()
     scrollListToEnd(flatListRef.current, animated && !reduceMotion.current)
   }
   const follow = useFollowEnd(() => scrollToBottom(false))
@@ -376,7 +373,6 @@ function PrivateChatInner() {
       })
       .finally(() => setLoading(false))
 
-  const atEndOf = ({ contentSize, contentOffset, layoutMeasurement }: NativeScrollEvent) => contentSize.height - contentOffset.y - layoutMeasurement.height < AT_END
   /* Where the list is, from onScroll and from where a drag or the pill's jump came to rest. */
   const noteOffset = (n: NativeScrollEvent) => {
     const atBottom = atEndOf(n)
@@ -932,6 +928,8 @@ function PrivateChatInner() {
                 bottom={dockHeight + dockBottom + SPACE.lg}
                 onPress={() => {
                   setNewWhileAway(0)
+                  // Follow until it gets there: from far up the jump lands short of rows not yet measured (SCRUM-1321).
+                  follow.toEnd()
                   scrollToBottom(true)
                 }}
               />
