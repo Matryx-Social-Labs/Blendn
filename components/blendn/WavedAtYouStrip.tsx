@@ -1,11 +1,11 @@
-import { StyleSheet, Text, View } from 'react-native'
+import { StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 
 import type { ReceivedWavesPage } from '../../lib/apiClient'
 import { COLOR, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { othersLine, waitingStrip, wavedAtYouLine, waveId, waveName, type AnyWave } from '../../lib/receivedWaves'
 import { Facepile } from '../ds/Facepile'
-import { CONTROL_FONT_CAP, font, IC_HAIRLINE, useBoldText, useIncreaseContrast, useSelection } from '../ds/shared'
+import { CONTROL_FONT_CAP, font, IC_HAIRLINE, TWO_LINE_NAMES_FROM, useBoldText, useIncreaseContrast, useSelection } from '../ds/shared'
 import ScalePress from '../motion/ScalePress'
 import { Icon } from '../ui/Icon'
 import { Button } from '../ds/Button'
@@ -43,6 +43,7 @@ export function WavedAtYouStrip({
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const sel = useSelection()
+  const twoLines = useWindowDimensions().fontScale >= TWO_LINE_NAMES_FROM
   const strip = waitingStrip(page)
   if (strip.kind === 'none') return null
   const lead = strip.kind === 'one' ? strip.wave : strip.lead
@@ -80,7 +81,7 @@ export function WavedAtYouStrip({
         )}
       </View>
       <View style={styles.text} accessibilityElementsHidden={several} importantForAccessibility={several ? 'no-hide-descendants' : 'auto'}>
-        <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold, FONT_FAMILY.brand[500]), styles.ink]}>
+        <Text numberOfLines={twoLines ? 2 : 1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold, FONT_FAMILY.brand[500]), styles.ink]}>
           {leadName}
         </Text>
         <Text numberOfLines={2} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('note', bold), { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>

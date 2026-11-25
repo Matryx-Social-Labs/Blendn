@@ -350,6 +350,19 @@ describe('long text (owner 2026-11-05: worst-case strings)', () => {
     expect(screen.getByText('and 12k others waved at you', { includeHiddenElements: true }).props.numberOfLines).toBe(2)
   })
 
+  it('the strip at a large text size: the name takes two lines before it is cut; control: one at the default', async () => {
+    const native = jest.requireActual<typeof import('react-native')>('react-native')
+    const lines: unknown[] = []
+    for (const fontScale of [1, 1.3]) {
+      const spy = jest.spyOn(native, 'useWindowDimensions').mockReturnValue({ width: 360, height: 800, scale: 3, fontScale })
+      await render(<WavedAtYouStrip page={page([wave(1, { displayName: LONG })])} now={NOW} onWaveBack={jest.fn()} onSeeAll={jest.fn()} onSafety={jest.fn()} />)
+      lines.push(screen.getByText(LONG).props.numberOfLines)
+      await screen.unmount()
+      spy.mockRestore()
+    }
+    expect(lines).toEqual([1, 2])
+  })
+
   it('one wave, a list row and the Banter row: the name is one line and the action stays', async () => {
     await render(<WavedAtYouStrip page={page([wave(1, { displayName: LONG })])} now={NOW} onWaveBack={jest.fn()} onSeeAll={jest.fn()} onSafety={jest.fn()} />)
     expect(screen.getByText(LONG).props.numberOfLines).toBe(1)
