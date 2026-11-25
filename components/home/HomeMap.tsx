@@ -510,9 +510,13 @@ export const HomeMap = memo(function HomeMap({
     reading,
   })
   // The dot going grey (or violet again) moves no camera: the names are placed again around the callout. So do a
-  // banner lifting the edge marker and the marker drawn somewhere new (SCRUM-1096).
+  // banner lifting the edge marker and the marker drawn somewhere new (SCRUM-1096). At once: a still map draws no
+  // frame to run the pass on (drive: the banner dismissed, the chips stayed off the strip it gave back).
   const isStale = you.kind === 'stale'
-  useEffect(() => relight(), [isStale, staleBelow, reading, lift, edgeRect?.left, edgeRect?.top, edgeRect?.width, edgeRect?.height]) // eslint-disable-line react-hooks/exhaustive-deps -- by value: the stale flip or its side, the fix turning precise, the lift, the marker as drawn
+  useEffect(() => {
+    relight()
+    onFrame()
+  }, [isStale, staleBelow, reading, lift, edgeRect?.left, edgeRect?.top, edgeRect?.width, edgeRect?.height]) // eslint-disable-line react-hooks/exhaustive-deps -- by value: the stale flip or its side, the fix turning precise, the lift, the marker as drawn
 
   // New pins re-cluster the numbers: a screen reader hears them afresh.
   useEffect(() => {

@@ -644,7 +644,9 @@ describe('"my location"', () => {
     expect(component).toMatch(/useAnimatedReaction\(\s*\(\) => locateLift\?\.get\(\) \?\? 0,/)
     // A banner landing after the map settled moves the marker with no camera move: the names are placed again (AX5 drive:
     // a chip stayed under the lifted marker).
-    expect(component).toMatch(/useEffect\(\(\) => relight\(\), \[isStale, staleBelow, reading, lift, edgeRect\?\.left, edgeRect\?\.top, edgeRect\?\.width, edgeRect\?\.height\]\)/)
+    // ...at once: none of these moves the camera, so a still map draws no frame to run the pass on (drive: the banner
+    // dismissed, the chips stayed off the strip it gave back).
+    expect(component).toMatch(/useEffect\(\(\) => \{\s*relight\(\)\s*onFrame\(\)\s*\}, \[isStale, staleBelow, reading, lift, edgeRect\?\.left, edgeRect\?\.top, edgeRect\?\.width, edgeRect\?\.height\]\)/)
   })
 
   it('keeps the names above a banner on the map, and gives them its strip back without one (SCRUM-1096, AX5: a chip stood under the banner)', () => {
