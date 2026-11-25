@@ -12,8 +12,8 @@ import { KindPill } from './BoardSections'
 import { apiClient } from '../../lib/apiClient'
 import { boardMarkSeed } from '../../lib/board'
 import { compactCount } from '../../lib/format'
-import { badgeCount, countLine, LOBBY_NEWS_PAGE, lobbyNews, postAge, previewReadOnlyLine, previewView, type LobbyPreview } from '../../lib/lobby'
-import { lobbySeenAt } from '../../lib/lobbySeen'
+import type { BoardPost } from '../../lib/board'
+import { badgeCount, countLine, LOBBY_NEWS_PAGE, newsAuthors, postAge, previewReadOnlyLine, previewView, type LobbyPreview } from '../../lib/lobby'
 import { Logger } from '../../lib/logger'
 import { COLOR, FONT_FAMILY, ICON, MAX_FONT_SCALE, RADIUS, SPACE } from '../../lib/design/tokens'
 import { OPACITY, tint } from '../../lib/theme'
@@ -205,26 +205,29 @@ function RoomOpenCard({ here, onPress }: { here: number | null; onPress: () => v
 }
 
 /**
- * Going's Next up: "New in the Lobby" with the three newest creatures and a badge capped at 9+, only when others posted
- * since you last opened it (`lobbyNews`). One page of the newest posts, read on every focus.
+ * Going's Next up: "New in the Lobby" with the newest creatures and a badge capped at 9+, when the server counts posts by
+ * others since you last opened it (`lobby.newCount` on the row, SCRUM-1115); the quiet line otherwise. One page of the
+ * newest posts puts faces to the count, read only when there is news.
  */
-export function NewInLobbyRow({ eventId, style }: { eventId: string; style?: StyleProp<ViewStyle> }) {
+export function NewInLobbyRow({ eventId, count, style }: { eventId: string; count: number | undefined; style?: StyleProp<ViewStyle> }) {
   const bold = useBoldText()
-  const [news, setNews] = useState<ReturnType<typeof lobbyNews> | null>(null)
+  const news = count && count > 0 ? count : 0
+  const [authors, setAuthors] = useState<BoardPost[]>([])
   useFocusEffect(
     useCallback(() => {
+      if (!news) return
       let gone = false
-      Promise.all([apiClient.getBoard(eventId, { limit: String(LOBBY_NEWS_PAGE) }), lobbySeenAt(eventId)])
-        .then(([board, seen]) => !gone && setNews(board.success && board.data ? lobbyNews(board.data.posts, seen) : null))
-        .catch((error) => Logger.warn('board', 'news failed', { eventId, error }))
+      apiClient
+        .getBoard(eventId, { limit: String(LOBBY_NEWS_PAGE) })
+        .then((board) => !gone && setAuthors(board.success && board.data ? newsAuthors(board.data.posts, news) : []))
+        .catch((error) => Logger.warn('board', 'news faces failed', { eventId, error }))
       return () => {
         gone = true
       }
-    }, [eventId])
+    }, [eventId, news])
   )
-  if (!news) return null
   // Nothing new: the line stays, quiet, so the Lobby is always reachable from Next up while it is open (L2, owner 2026-11-17).
-  if (news.count === 0) {
+  if (!news) {
     return (
       <Pressable
         testID="going-lobby-quiet"
@@ -247,18 +250,18 @@ export function NewInLobbyRow({ eventId, style }: { eventId: string; style?: Sty
       </Pressable>
     )
   }
-  const badge = badgeCount(news.count)
+  const badge = badgeCount(news)
   return (
     <Pressable
       testID="going-lobby-new"
       onPress={() => openLobby(eventId)}
       accessibilityRole="button"
-      accessibilityLabel={`New in the Lobby, ${badge} new ${news.count === 1 ? 'post' : 'posts'}`}
+      accessibilityLabel={`New in the Lobby, ${exact(news)} new ${news === 1 ? 'post' : 'posts'}`}
       style={({ pressed }) => [styles.news, style, pressed && styles.pressed]}
     >
       <View style={styles.stack} importantForAccessibility="no-hide-descendants">
-        {news.authors.map((a, i) => (
-          <View key={a.id} style={[styles.stackRing, i > 0 && styles.stackOverlap]}>
+        {authors.map((a, i) => (
+          <View key={a.id} testID={`going-lobby-face-${a.id}`} style={[styles.stackRing, i > 0 && styles.stackOverlap]}>
             <Avatar kind="creature" pseudonym={boardMarkSeed(a.author, eventId, a.id)} size={STACK_MARK} />
           </View>
         ))}

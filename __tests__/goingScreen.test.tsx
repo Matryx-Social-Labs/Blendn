@@ -44,6 +44,8 @@ jest.mock('../lib/apiClient', () => ({
   },
 }))
 jest.mock('../lib/sheet', () => ({ showSheet: jest.fn() }))
+const mockOrder: string[] = []
+jest.mock('../lib/lobbySeen', () => ({ postPhoneLobbyMarkers: jest.fn(() => (mockOrder.push('markers'), Promise.resolve())) }))
 jest.mock('../lib/shareRow', () => ({ shareEvent: jest.fn() }))
 let mockLiveEventId: string | null = null
 jest.mock('../lib/blendnOverlay', () => ({ openBlendn: jest.fn(), openPass: jest.fn(), useLiveEventId: () => mockLiveEventId }))
@@ -291,6 +293,15 @@ describe('leaving Going (SCRUM-1074: ⋯ "Can’t go" on every card, the swipe, 
     await open()
     await fireEvent.press((await screen.findAllByTestId('going-next-more')).at(-1)!)
     expect((showSheet as jest.Mock).mock.calls.at(-1)[0].actions.map((a: { label: string }) => a.label)).toContain('Can’t make it')
+  })
+
+  it('the phone’s old Lobby markers go up before the count is read, so a Lobby read before the upgrade is not new (SCRUM-1115)', async () => {
+    mockOrder.length = 0
+    api.getMyRsvps.mockImplementation(() => (mockOrder.push('rsvps'), Promise.resolve({ success: true, data: { events: [], pagination: page(1, 0, false) } })) as never)
+    await open()
+    await waitFor(() => expect(mockOrder).toContain('rsvps'))
+    expect(mockOrder.indexOf('markers')).toBeGreaterThan(-1)
+    expect(mockOrder.indexOf('markers')).toBeLessThan(mockOrder.indexOf('rsvps'))
   })
 
   it('"Lobby · N new" under a row only when the server sends the count (control: none without it)', async () => {

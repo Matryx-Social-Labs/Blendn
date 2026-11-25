@@ -32,7 +32,6 @@ import {
 } from '../../lib/board'
 import { openBlendn } from '../../lib/blendnOverlay'
 import { Logger } from '../../lib/logger'
-import { rememberLobbySeen } from '../../lib/lobbySeen'
 import { subscribeToBoardPostRemoved } from '../../lib/socketClient'
 import { useLatest } from '../../lib/useLatest'
 import { useLiveSync } from '../../lib/useLiveSync'
@@ -254,10 +253,11 @@ export function BoardScreen() {
       const firstMeta = metaOf(board.data)
       setMeta((prev) => ({ ...prev, ...firstMeta }))
       setClosed(false)
-      // What you have seen, for Going's "New in the Lobby": the newest post on All (a filter shows only part of it), and only
-      // from a read that shows it (a background read holds the new ones behind the pill, unseen).
+      // What you have seen, for Going's "New in the Lobby", on the server so it follows you across phones: the newest post
+      // on All (a filter shows only part of it), and only from a read that shows it (a background read holds the new ones
+      // behind the pill, unseen).
       const newest = mode === 'show' && chip === 'all' ? newestPostAt(listed) : null
-      if (newest) void rememberLobbySeen(eventId, newest)
+      if (newest) void apiClient.markBoardSeen(eventId, newest)
       if (composeOnce.current) {
         composeOnce.current = false
         if (composerSlot({ state: firstMeta.state ?? 'open', compose: firstMeta.compose }).kind === 'composer') {

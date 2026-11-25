@@ -4114,6 +4114,19 @@ class ApiClientClass {
     return this.queuedRequest(`/api/mobile/events/${encodeURIComponent(eventId)}/board${qs ? `?${qs}` : ''}`)
   }
 
+  /**
+   * The Lobby seen up to `at`, the newest post on the page shown (SCRUM-1115): the server's marker, so Going's count
+   * (`lobby.newCount` on /me/rsvps) follows the account across phones. It only moves forward; readers only.
+   */
+  async markBoardSeen(eventId: string, at: string): Promise<ApiResponse<{ seenAt: string }>> {
+    return this.queuedRequest(
+      `/api/mobile/events/${encodeURIComponent(eventId)}/board/seen`,
+      { method: 'POST', body: JSON.stringify({ at }) },
+      true,
+      2
+    )
+  }
+
   /** One post, for a post link: the Lobby's own gate. */
   async getBoardPost(eventId: string, postId: string): Promise<ApiResponse<{ state: LobbyState; phase: LobbyPhase; closesAt: string; post: BoardPost }>> {
     return this.queuedRequest(`/api/mobile/events/${encodeURIComponent(eventId)}/board/${encodeURIComponent(postId)}`)
