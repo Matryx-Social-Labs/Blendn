@@ -343,6 +343,12 @@ describe('Wave back is the DS positive (buttons board C: the hand-rolled WaveBac
 
 describe('long text (owner 2026-11-05: worst-case strings)', () => {
   const LONG = 'Thiruvananthapuram Wandering Peacock'
+  // Jest's window is at fontScale 2; these are the default size.
+  let size: jest.SpyInstance
+  beforeEach(() => {
+    size = jest.spyOn(jest.requireActual<typeof import('react-native')>('react-native'), 'useWindowDimensions').mockReturnValue({ width: 393, height: 852, scale: 3, fontScale: 1 })
+  })
+  afterEach(() => size.mockRestore())
   it('the strip: a long name ellipsizes on one line, "and N others" is never cut', async () => {
     const waves = [wave(1, { displayName: LONG }), wave(2), wave(3)]
     await render(<WavedAtYouStrip page={page(waves, { total: 12_480 })} now={NOW} onWaveBack={jest.fn()} onSeeAll={jest.fn()} onSafety={jest.fn()} />)
