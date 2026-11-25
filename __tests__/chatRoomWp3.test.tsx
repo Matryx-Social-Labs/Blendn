@@ -691,4 +691,39 @@ describe('a long room, opened: older pages wait for the reader (SCRUM-1321)', ()
     await flush()
     expect(older()).toEqual(['551'])
   })
+
+  /* No `maintainVisibleContentPosition` here: an older page leaves the reader at the top, and the top asking again would read every page. */
+  it('reads one older page per gesture of the reader, never a run of them', async () => {
+    await render(<GroupChat />)
+    await flush()
+    await firstFrame()
+    const list = screen.getByTestId('room-feed')
+    await act(async () => fireEvent.scroll(list, scrolled(CONTENT - VIEW)))
+    await act(async () => fireEvent(list, 'scrollBeginDrag', scrolled(CONTENT - VIEW)))
+    await act(async () => fireEvent.scroll(list, scrolled(0)))
+    await flush()
+    // The page lands above the reader, still at the top.
+    await act(async () => fireEvent(list, 'contentSizeChange', 393, CONTENT + 2000))
+    await act(async () => fireEvent.scroll(list, { nativeEvent: { ...scrolled(0).nativeEvent, contentSize: { width: 393, height: CONTENT + 2000 } } }))
+    await flush()
+    expect(older()).toEqual(['551'])
+    // Their next pull is a new ask.
+    await act(async () => fireEvent(list, 'scrollBeginDrag', scrolled(0)))
+    await act(async () => fireEvent.scroll(list, { nativeEvent: { ...scrolled(10).nativeEvent, contentSize: { width: 393, height: CONTENT + 2400 } } }))
+    await flush()
+    expect(older()).toEqual(['551', '501'])
+  })
+
+  /* Android, driven: a fling's last scroll event came 144 px short of the top; the one at 0 was throttled away. */
+  it('asks from near the top, not only at its very first pixel', async () => {
+    await render(<GroupChat />)
+    await flush()
+    await firstFrame()
+    const list = screen.getByTestId('room-feed')
+    await act(async () => fireEvent.scroll(list, scrolled(CONTENT - VIEW)))
+    await act(async () => fireEvent(list, 'scrollBeginDrag', scrolled(CONTENT - VIEW)))
+    await act(async () => fireEvent.scroll(list, scrolled(144)))
+    await flush()
+    expect(older()).toEqual(['551'])
+  })
 })

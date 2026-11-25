@@ -129,6 +129,18 @@ describe('a long DM, opened with nothing cached (SCRUM-1321)', () => {
     expect(reads()).toEqual(['newest', '551'])
   })
 
+  /* Android, driven: a fling's last scroll event came 144 px short of the top; the one at 0 was throttled away. */
+  it('reads the next older page from near the top, not only at its very first pixel', async () => {
+    await render(<PrivateChat />)
+    await flush()
+    await firstFrame()
+    await act(async () => fireEvent.scroll(feed(), scrolled(CONTENT - VIEW)))
+    await act(async () => fireEvent(feed(), 'scrollBeginDrag', scrolled(CONTENT - VIEW)))
+    await act(async () => fireEvent.scroll(feed(), scrolled(144)))
+    await flush()
+    expect(reads()).toEqual(['newest', '551'])
+  })
+
   /*
    * A drag that starts at the newest message reports "at the end" for its first events. Taken as the reader being back at the
    * end, the list followed again mid-drag, and every row laid out under the thumb pulled it back to the newest: it would not
