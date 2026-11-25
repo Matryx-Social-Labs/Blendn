@@ -430,6 +430,8 @@ export function crewMessage(result: Refusal, surface: CrewSurface, fallback: str
   if (code === 'RATE_LIMITED' && result?.retryAfter) return 'Slow down — try again in a moment.'
   if (code === 'SERVER_ERROR' || !said) return fallback
   if (/^(HTTP \d|Invalid JSON)/.test(said)) return fallback
+  // ponytail: the wave routes still answer with the like's sentence (admin lib/crews/like.ts); drop this once they say wave.
+  if (said === 'Check in before liking anyone here.') return 'Check in before you wave here.'
   return said
 }
 

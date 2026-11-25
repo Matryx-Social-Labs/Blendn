@@ -61,6 +61,13 @@ describe('Wave back from the chat', () => {
     api.likePersonAsCrew.mockResolvedValue({ success: false, errorCode: 'NOT_FOUND', error: 'x' } as never)
     expect(await waveBackFromChat({ eventId: 'e1', fromUserId: 'rh_1' }, 'mine')).toEqual({ kind: 'gone' })
   })
+  it('checked out: the server’s “liking” is said as a wave, the only gesture left', async () => {
+    api.waveCrew.mockResolvedValue({ success: false, errorCode: 'FORBIDDEN', error: 'Check in before liking anyone here.' } as never)
+    expect(await waveBackFromChat({ eventId: 'e1', fromCrewId: 'c9' }, 'mine')).toEqual({ kind: 'error', text: 'Check in before you wave here.' })
+    // Control: any other refusal keeps the server's own sentence.
+    api.waveCrew.mockResolvedValue({ success: false, errorCode: 'FORBIDDEN', error: 'Your crew isn’t here yet.' } as never)
+    expect(await waveBackFromChat({ eventId: 'e1', fromCrewId: 'c9' }, 'mine')).toEqual({ kind: 'error', text: 'Your crew isn’t here yet.' })
+  })
   it('anything else is an error with the sentence', async () => {
     api.waveCrew.mockResolvedValue({ success: false, errorCode: 'SERVER_ERROR', error: 'HTTP 500' } as never)
     expect(await waveBackFromChat({ eventId: 'e1', fromCrewId: 'c9' }, 'mine')).toEqual({ kind: 'error', text: 'Couldn’t wave back. Try again.' })
