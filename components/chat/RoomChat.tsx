@@ -80,7 +80,7 @@ import { clockTime } from '../../lib/time'
 import { withDaySeparators } from '../../lib/unreadDivider'
 import { useAuth } from '../../lib/useAuth'
 import { isReadOnlyLock, lockFor, lockFromDoor, saidWrite, useComposerLock, type ComposerLock } from '../../lib/useComposerLock'
-import { scrollListToEnd, useFollowEnd } from '../../lib/useFollowEnd'
+import { atEndOf, scrollListToEnd, useFollowEnd } from '../../lib/useFollowEnd'
 import { useReducedMotion } from '../../lib/motion'
 import type { PollRefusal } from '../../lib/chatPoll'
 import { useLatest } from '../../lib/useLatest'
@@ -95,8 +95,6 @@ const prevMessage = (i: ChatListItem | undefined) => (i?.kind === 'message' ? i 
 let _tempIdCounter = 0
 const MESSAGES_CACHE_TTL = 60 * 1000
 /** Read as "at the newest": the reader is within this of the end. */
-const AT_END = 80
-const atEndOf = ({ contentSize, contentOffset, layoutMeasurement }: NativeScrollEvent) => contentSize.height - contentOffset.y - layoutMeasurement.height < AT_END
 /** iOS dismisses the keyboard interactively with the drag; Android on the drag (R3-D5 5.3). */
 const KEYBOARD_DISMISS = Platform.OS === 'ios' ? 'interactive' : 'on-drag'
 const REACTION_INDEX = Object.fromEntries(CHAT_REACTIONS.map((e, i) => [e, i])) as Record<string, number>
@@ -1080,7 +1078,9 @@ function RoomChatInner({ params, embedded }: { params: RoomChatParams; embedded?
               windowSize={10}
               initialNumToRender={25}
               // "Load older" on pull at the top (Flow 5 room annotation); the button below is its accessible twin.
-              onStartReached={() => void loadOlderMessages()}
+              onStartReached={() => follow.readerAsksOlder() && void loadOlderMessages()}
+              // From half a screen short of the top: a fling's last scroll event lands short of it (Android, SCRUM-1321).
+              onStartReachedThreshold={0.5}
               ListHeaderComponent={
                 <View style={styles.listHead}>
                   {/* Event rooms are anonymous; a crew's people are named, so the notice would not be true there. */}
@@ -1144,14 +1144,15 @@ function RoomChatInner({ params, embedded }: { params: RoomChatParams; embedded?
               }}
               // A reader's own gesture decides where it came to rest; its first events near the end must not re-arm the follow.
               onScrollEndDrag={(e) => {
-                follow.onGestureEnd(atEndOf(e.nativeEvent))
+                follow.onScrollEndDrag(atEndOf(e.nativeEvent), e.nativeEvent.velocity?.y)
                 noteOffset(e.nativeEvent)
               }}
-              onMomentumScrollBegin={follow.onScrollBeginDrag}
               onMomentumScrollEnd={(e) => {
-                follow.onGestureEnd(atEndOf(e.nativeEvent))
+                follow.onMomentumScrollEnd(atEndOf(e.nativeEvent))
                 noteOffset(e.nativeEvent)
               }}
+              onTouchStart={follow.onTouchStart}
+              onTouchEnd={() => follow.onTouchEnd(isAtBottomRef.current)}
               onScroll={(e) => noteOffset(e.nativeEvent)}
               scrollEventThrottle={80}
             />
@@ -1164,6 +1165,8 @@ function RoomChatInner({ params, embedded }: { params: RoomChatParams; embedded?
                 bottom={dockHeight + dockBottom + SPACE.xl}
                 onPress={() => {
                   setNewWhileAway(0)
+                  // Follow until it gets there: from far up the jump lands short of rows not yet measured (SCRUM-1321).
+                  follow.toEnd()
                   scrollToBottom(true)
                 }}
               />

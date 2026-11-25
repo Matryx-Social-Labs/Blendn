@@ -62,6 +62,16 @@ describe('followEnd', () => {
     expect(toEnd).toHaveBeenCalledTimes(1)
   })
 
+  // Android reports momentum for the app's own animated jump to the newest too: a jump that lands a row short must not
+  // read as the reader letting go short of the end (SCRUM-1321).
+  it('an end with no gesture of the reader ends nothing: following is kept', () => {
+    const toEnd = jest.fn()
+    const f = followEnd(toEnd)
+    f.onGestureEnd(false)
+    f.onContentSizeChange()
+    expect(toEnd).toHaveBeenCalledTimes(1)
+  })
+
   it('can be told to stop, for a thread opened at its first unread', () => {
     const toEnd = jest.fn()
     const f = followEnd(toEnd)
@@ -94,12 +104,16 @@ describe('a thread opened at its first unread (SCRUM-958)', () => {
     expect(toEnd).not.toHaveBeenCalled()
   })
 
-  it('follows again once the reader has dragged back to the end', () => {
+  it('follows again once the reader has dragged back to the end and let go there', () => {
     const toEnd = jest.fn()
     const f = followEnd(toEnd)
     f.stop()
     f.onScrollBeginDrag()
+    // Mid-drag "at the end" is the drag's own first events, not the reader arriving (SCRUM-1321).
     f.noteScroll(true)
+    f.onContentSizeChange()
+    expect(toEnd).not.toHaveBeenCalled()
+    f.onGestureEnd(true)
     f.onContentSizeChange()
     expect(toEnd).toHaveBeenCalledTimes(1)
   })
