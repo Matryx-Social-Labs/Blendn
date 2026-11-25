@@ -104,8 +104,9 @@ beforeEach(() => {
 
 describe('a long DM, opened with nothing cached (SCRUM-1321)', () => {
   let responder: jest.SpyInstance
+  const scrollToEnd = jest.fn()
   beforeEach(() => {
-    responder = jest.spyOn(FlatList.prototype, 'getScrollResponder').mockReturnValue({ scrollToEnd: jest.fn() } as never)
+    responder = jest.spyOn(FlatList.prototype, 'getScrollResponder').mockReturnValue({ scrollToEnd } as never)
   })
   afterEach(() => responder.mockRestore())
 
@@ -126,5 +127,35 @@ describe('a long DM, opened with nothing cached (SCRUM-1321)', () => {
     await act(async () => fireEvent.scroll(feed(), scrolled(0)))
     await flush()
     expect(reads()).toEqual(['newest', '551'])
+  })
+
+  /*
+   * A drag that starts at the newest message reports "at the end" for its first events. Taken as the reader being back at the
+   * end, the list followed again mid-drag, and every row laid out under the thumb pulled it back to the newest: it would not
+   * scroll (driven on the Android emulator, SCRUM-1321). The room fixed this for itself on 2026-11-10.
+   */
+  it('a drag from the newest message is the reader’s: rows laid out under it do not pull it back', async () => {
+    await render(<PrivateChat />)
+    await flush()
+    await firstFrame()
+    await act(async () => fireEvent.scroll(feed(), scrolled(CONTENT - VIEW)))
+    scrollToEnd.mockClear()
+    await act(async () => fireEvent(feed(), 'scrollBeginDrag', scrolled(CONTENT - VIEW)))
+    await act(async () => fireEvent.scroll(feed(), scrolled(CONTENT - VIEW - 30)))
+    await act(async () => fireEvent(feed(), 'contentSizeChange', 393, CONTENT + 400))
+    expect(scrollToEnd).not.toHaveBeenCalled()
+  })
+
+  it('a drag that comes to rest at the newest message follows it again: the next arrival is kept in view', async () => {
+    await render(<PrivateChat />)
+    await flush()
+    await firstFrame()
+    await act(async () => fireEvent(feed(), 'scrollBeginDrag', scrolled(CONTENT - VIEW)))
+    await act(async () => fireEvent.scroll(feed(), scrolled(1000)))
+    await act(async () => fireEvent(feed(), 'scrollEndDrag', scrolled(CONTENT - VIEW)))
+    await act(async () => fireEvent(feed(), 'momentumScrollEnd', scrolled(CONTENT - VIEW)))
+    scrollToEnd.mockClear()
+    await act(async () => fireEvent(feed(), 'contentSizeChange', 393, CONTENT + 120))
+    expect(scrollToEnd).toHaveBeenCalled()
   })
 })
