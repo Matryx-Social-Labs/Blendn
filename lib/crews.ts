@@ -788,7 +788,7 @@ export function crewsThatMayLikePeople(
  * Who a like of a crew is sent as. With no crew of yours here it is you
  * (crew ↔ person, which needs "Open to joining a crew tonight"); with one,
  * that crew; with several, the person chooses — the app never picks a crew
- * for somebody, because the crew chat says who liked on its behalf.
+ * for somebody, because the crew chat says who waved on its behalf.
  */
 export function likeAs(myCrews: CrewsAtEvent['myCrews']): { as: 'me' } | { as: 'crew'; crewId: string } | { as: 'choose' } {
   if (myCrews.length === 0) return { as: 'me' }

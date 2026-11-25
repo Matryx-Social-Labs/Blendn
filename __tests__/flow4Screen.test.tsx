@@ -454,6 +454,8 @@ describe('Liking as a crew: what the button says is what it sends (R2-D1)', () =
     expect(api.wavePersonAsCrew).not.toHaveBeenCalled()
     const { showSheet } = jest.requireMock('../lib/sheet') as { showSheet: jest.Mock }
     const actions = showSheet.mock.calls[0][0].actions.map((a: { label: string }) => a.label)
+    // No line goes to the crew chat for a wave at a person, so it isn't said to.
+    expect(showSheet.mock.calls[0][0].message).toBe('They see your crew, never you.')
     // Which crew, never "Just me": a person's own gesture is Wave, on the card.
     expect(actions).toEqual(['Nebula', 'Orbit', 'Cancel'])
   })

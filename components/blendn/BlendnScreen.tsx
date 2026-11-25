@@ -127,7 +127,8 @@ function chooseAs(crews: CrewsAtEvent['myCrews'], title: string, justMe = true):
       kind: 'actions',
       hue: 'rose',
       title,
-      message: 'Your crew chat says who liked on its behalf.',
+      // A wave at a crew is said in your crew's chat; one at a person is not (admin #1007), and shows them the crew alone.
+      message: justMe ? 'Your crew chat says who waved on its behalf.' : 'They see your crew, never you.',
       onDismiss: () => resolve(undefined),
       actions: [
         ...crews.map((c) => ({ label: c.name, then: () => resolve(c.crewId) })),
