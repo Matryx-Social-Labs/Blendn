@@ -3,7 +3,7 @@
  * for what may be linked at all.
  */
 import { redirectSystemPath } from '../app/+native-intent'
-import { eventLink, inviteLink, nativeIntentPath, parseLink, routeFor, SHARE_ORIGIN, shareability, venueLink, venueTextOnly, WEB_PAGES_LIVE } from '../lib/shareLinks'
+import { eventLink, inviteLink, nativeIntentPath, parseLink, routeFor, SITE_ORIGIN, shareability, venueLink, venueTextOnly, WEB_PAGES_LIVE } from '../lib/shareLinks'
 
 const ID = '7f3a2c4e-91d0-4b8a-a1c2-0d5e6f7a8b9c'
 const TOKEN = 'abcdefghijklmnopqrstuv'
@@ -28,15 +28,15 @@ describe('building a link', () => {
 describe('reading a link', () => {
   it('reads back what it built', () => {
     expect(parseLink(eventLink(ID))).toEqual({ kind: 'event', id: ID })
-    expect(parseLink(`${SHARE_ORIGIN}/v/${ID}`)).toEqual({ kind: 'venue', id: ID })
-    expect(parseLink(`${SHARE_ORIGIN}/e/${ID}`)).toEqual({ kind: 'event', id: ID })
+    expect(parseLink(`${SITE_ORIGIN}/v/${ID}`)).toEqual({ kind: 'venue', id: ID })
+    expect(parseLink(`${SITE_ORIGIN}/e/${ID}`)).toEqual({ kind: 'event', id: ID })
     expect(parseLink(inviteLink(TOKEN))).toEqual({ kind: 'invite', id: TOKEN })
   })
 
   it('a crew link (S7): the universal link and the app scheme open /c/; control: /c/ deeper or with a bad token is nothing of ours', () => {
-    expect(parseLink(`${SHARE_ORIGIN}/c/${TOKEN}`)).toEqual({ kind: 'crew', id: TOKEN })
+    expect(parseLink(`${SITE_ORIGIN}/c/${TOKEN}`)).toEqual({ kind: 'crew', id: TOKEN })
     expect(nativeIntentPath(`blendn://c/${TOKEN}?x=1`)).toBe(`/c/${TOKEN}`)
-    expect(parseLink(`${SHARE_ORIGIN}/c/${TOKEN}/x`)).toBeNull()
+    expect(parseLink(`${SITE_ORIGIN}/c/${TOKEN}/x`)).toBeNull()
     expect(parseLink('/c/..')).toBeNull()
   })
 

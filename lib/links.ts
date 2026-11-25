@@ -5,6 +5,7 @@ import { COLOR } from './design/tokens'
 import { Logger } from './logger'
 import { hostOf } from './urlHost'
 import { holdTurnWhile } from './modalTurn'
+import { OUR_HOSTS, SITE_ORIGIN } from './shareLinks'
 
 /**
  * The web pages the app links out to.
@@ -14,12 +15,12 @@ import { holdTurnWhile } from './modalTurn'
  * drift, and the sentence on the first screen anyone sees linked to nothing.
  */
 export const BLENDN_LINKS = {
-  safety: 'https://blendn.app/safety',
+  safety: `${SITE_ORIGIN}/safety`,
   guidelines: COMMUNITY_GUIDELINES_URL,
-  help: 'https://blendn.app/help',
-  terms: 'https://blendn.app/terms',
-  privacy: 'https://blendn.app/privacy',
-  deleteAccount: 'https://www.blendn.app/delete-account',
+  help: `${SITE_ORIGIN}/help`,
+  terms: `${SITE_ORIGIN}/terms`,
+  privacy: `${SITE_ORIGIN}/privacy`,
+  deleteAccount: `${SITE_ORIGIN}/delete-account`,
 } as const
 
 /**
@@ -28,7 +29,7 @@ export const BLENDN_LINKS = {
  * screen that asked. Store pages and system settings are not ours and stay with
  * `Linking`: the store's own app should open for them.
  *
- * Only https pages on our own hosts open (`OUR_HOSTS`): anything else is logged
+ * Only https pages on this build's own site open (`OUR_HOSTS`, `lib/shareLinks`): anything else is logged
  * and refused, so a link that arrives from data can never put another site in
  * front of someone inside our app. Rejects when it was refused or no browser
  * could open it, so a caller keeps its "That page didn't open" toast or log line.
@@ -61,7 +62,6 @@ export async function openInApp(url: string): Promise<void> {
 export const DASHBOARD_HOST = 'dashboard.blendn.app'
 export const DASHBOARD_URL = `https://${DASHBOARD_HOST}`
 
-const OUR_HOSTS: ReadonlySet<string> = new Set(['blendn.app', 'www.blendn.app'])
 
 export function isOurPage(url: string): boolean {
   try {

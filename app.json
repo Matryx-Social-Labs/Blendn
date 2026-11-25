@@ -12,7 +12,7 @@
       "supportsTablet": false,
       "bundleIdentifier": "com.matryxsociallabs.blendn",
       "usesAppleSignIn": true,
-      "associatedDomains": ["applinks:www.blendn.app"],
+      "associatedDomains": ["applinks:www.blendn.app", "applinks:staging.blendn.app"],
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "LSApplicationQueriesSchemes": ["whatsapp"],
@@ -77,6 +77,26 @@
             {
               "scheme": "https",
               "host": "www.blendn.app",
+              "pathPrefix": "/v/"
+            },
+            {
+              "scheme": "https",
+              "host": "staging.blendn.app",
+              "pathPrefix": "/f/"
+            },
+            {
+              "scheme": "https",
+              "host": "staging.blendn.app",
+              "pathPrefix": "/event/"
+            },
+            {
+              "scheme": "https",
+              "host": "staging.blendn.app",
+              "pathPrefix": "/e/"
+            },
+            {
+              "scheme": "https",
+              "host": "staging.blendn.app",
               "pathPrefix": "/v/"
             }
           ],
