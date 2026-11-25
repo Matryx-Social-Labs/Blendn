@@ -56,8 +56,13 @@ export function resetShareTray(): void {
  * share sheet" on the board). Says how it ended so the caller can speak only to a failure.
  */
 export async function shareNatively(target: ShareTarget): Promise<'shared' | 'dismissed' | 'failed'> {
+  return shareMessage(shareText(target))
+}
+
+/** The system share sheet with these words. */
+export async function shareMessage(message: string): Promise<'shared' | 'dismissed' | 'failed'> {
   try {
-    const result = await Share.share({ message: shareText(target) })
+    const result = await Share.share({ message })
     return result.action === Share.sharedAction ? 'shared' : 'dismissed'
   } catch {
     return 'failed'

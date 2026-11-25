@@ -3,14 +3,18 @@ import { useState } from 'react'
 import { CREW_MAX_MEMBERS } from '../../lib/crews'
 import type { Friend } from '../../lib/friends'
 import { Sheet } from '../ds/Sheet'
+import { SettingsRow } from '../ds/SettingsRow'
+import { RowsCard } from './RowsCard'
 import { FriendsStep, type FriendsStepProps } from './MakeSteps'
 
 const NONE_TO_ASK = 'Every friend of yours is in this crew, or you have none to ask yet.'
 
+const LINK_HINT = 'For a friend not on Blend’n yet. Joining also makes you friends. Works once, for 7 days.'
+
 /**
  * Ask more friends into the crew (the friends step of Make a crew, reused):
  * friends who are not already in it, a count of how many, never who was
- * skipped. `room` is how many more the crew can take.
+ * skipped. Or share a link (S7). `room` is how many more the crew can take.
  */
 export function InviteFriendsSheet({
   visible,
@@ -21,6 +25,8 @@ export function InviteFriendsSheet({
   asking,
   onRetry,
   onAsk,
+  onShareLink,
+  sharing,
   onClose,
 }: {
   visible: boolean
@@ -33,6 +39,9 @@ export function InviteFriendsSheet({
   asking: boolean
   onRetry: () => void
   onAsk: (userIds: string[]) => void
+  onShareLink: () => void
+  /** A link is being made. */
+  sharing: boolean
   onClose: () => void
 }) {
   const [picked, setPicked] = useState<string[]>([])
@@ -57,6 +66,10 @@ export function InviteFriendsSheet({
       ]}
       testID="crew-invite-sheet"
     >
+      {/* Y-A (advisor 2026-11-25): above the friends, so it is there with none to ask too. */}
+      <RowsCard testID="crew-link">
+        <SettingsRow icon="link" title="Share a crew link" hint={LINK_HINT} trail="chevron" disabled={sharing} onPress={onShareLink} testID="crew-link-row" />
+      </RowsCard>
       <FriendsStep friends={friends} picked={picked} onToggle={toggle} onRetry={onRetry} none={NONE_TO_ASK} limit={Math.min(room, CREW_MAX_MEMBERS - 1)} paging={paging} search={search} />
     </Sheet>
   )

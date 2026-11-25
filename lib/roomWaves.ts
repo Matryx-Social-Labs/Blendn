@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react'
 
-import { subscribeToRoomWave } from './socketClient'
+import { subscribeToRoomCrewWave, subscribeToRoomWave } from './socketClient'
 
 /**
  * Waves to you, heard while you are checked in — overlay open or not
@@ -21,7 +21,14 @@ import { subscribeToRoomWave } from './socketClient'
  * No haptic here: the surface that shows a wave plays `H.arrive`, once.
  */
 
-export type RoomWave = { eventId: string; fromUserId: string; fromName: string; at: number }
+export type PersonWave = { eventId: string; fromUserId: string; fromName: string; at: number }
+/** A crew's wave: toast, fold and the strip, never a person's card (`received`). */
+export type CrewsWave = { eventId: string; fromCrewId: string; fromName: string; at: number }
+export type RoomWave = PersonWave | CrewsWave
+
+/** Who waved, as one key: a person's handle, or their crew's. */
+export const waveKey = (w: RoomWave): string => ('fromCrewId' in w ? crewKey(w.fromCrewId) : w.fromUserId)
+const crewKey = (crewId: string): string => `crew:${crewId}`
 
 /** What the toast or the tabs banner shows: one wave (L-A, Wave back inline), or a fold of several (L-B), newest first. */
 export type WaveToastItem = { waves: readonly RoomWave[] }
@@ -35,7 +42,7 @@ type State = {
   /** The toast not yet shown, for the Room or the tabs banner. */
   toast: WaveToastItem | null
   /** Who waved at you in this room, and when: newest per person. */
-  received: Readonly<Record<string, RoomWave>>
+  received: Readonly<Record<string, PersonWave>>
   /** When each person on the received list's first page waved (ms): the card's "Waved at you · 4 min" after a restart. */
   listedAt: Readonly<Record<string, number>>
   /** Bumped by every wave heard, answered or blocked: the strip and the Banter row read the server again. */
@@ -47,7 +54,7 @@ type State = {
 const EMPTY: State = { toast: null, received: {}, listedAt: {}, version: 0, blocked: {} }
 let state: State = EMPTY
 let listeningFor: string | null = null
-/** People blocked or reported in this room: their waves are never shown, and the ones already here go. */
+/** People and crews blocked or reported in this room (`waveKey`): their waves are never shown, and the ones already here go. */
 let ignored = new Set<string>()
 let unsubscribe: (() => void) | null = null
 const listeners = new Set<() => void>()
@@ -84,7 +91,7 @@ function scheduleFlush() {
 }
 
 function heardWave(wave: RoomWave) {
-  const received = { ...state.received, [wave.fromUserId]: wave }
+  const received = 'fromCrewId' in wave ? state.received : { ...state.received, [wave.fromUserId]: wave }
   const version = state.version + 1
   const quiet = lastToastAt === null || wave.at - lastToastAt >= FOLD_MS
   if (quiet && !state.toast && !held.length) {
@@ -92,7 +99,7 @@ function heardWave(wave: RoomWave) {
     set({ ...state, toast: { waves: [wave] }, received, version })
     return
   }
-  held = [wave, ...held.filter((w) => w.fromUserId !== wave.fromUserId)]
+  held = [wave, ...held.filter((w) => waveKey(w) !== waveKey(wave))]
   set({ ...state, received, version })
   scheduleFlush()
 }
@@ -110,10 +117,15 @@ export function listenForWaves(eventId: string | null): void {
   clearFold()
   set(EMPTY)
   if (!eventId) return
-  unsubscribe = subscribeToRoomWave((data) => {
-    if (data.eventId !== listeningFor || ignored.has(data.fromUserId)) return
-    heardWave({ eventId: data.eventId, fromUserId: data.fromUserId, fromName: data.fromName, at: Date.now() })
-  })
+  const heard = (wave: RoomWave) => {
+    if (wave.eventId === listeningFor && !ignored.has(waveKey(wave))) heardWave(wave)
+  }
+  const offPeople = subscribeToRoomWave((d) => heard({ eventId: d.eventId, fromUserId: d.fromUserId, fromName: d.fromName, at: Date.now() }))
+  const offCrews = subscribeToRoomCrewWave((d) => heard({ eventId: d.eventId, fromCrewId: d.fromCrewId, fromName: d.fromName, at: Date.now() }))
+  unsubscribe = () => {
+    offPeople()
+    offCrews()
+  }
 }
 
 /**
@@ -123,11 +135,20 @@ export function listenForWaves(eventId: string | null): void {
  */
 export function ignoreWavesFrom(userId: string): void {
   ignored.add(userId)
-  held = held.filter((w) => w.fromUserId !== userId)
+  held = held.filter((w) => waveKey(w) !== userId)
   const received = { ...state.received }
   delete received[userId]
-  const waves = state.toast?.waves.filter((w) => w.fromUserId !== userId) ?? []
+  const waves = state.toast?.waves.filter((w) => waveKey(w) !== userId) ?? []
   set({ ...state, toast: waves.length ? { waves } : null, received, version: state.version + 1, blocked: { ...state.blocked, [userId]: true } })
+}
+
+/** A crew blocked or reported: its waves go from the toast and the fold, and the strip reads the server again. */
+export function ignoreCrewWaves(crewId: string): void {
+  const key = crewKey(crewId)
+  ignored.add(key)
+  held = held.filter((w) => waveKey(w) !== key)
+  const waves = state.toast?.waves.filter((w) => waveKey(w) !== key) ?? []
+  set({ ...state, toast: waves.length ? { waves } : null, version: state.version + 1 })
 }
 
 /** The toast or banner has shown it. A fold waiting behind it comes once the window allows. */

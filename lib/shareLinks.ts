@@ -8,7 +8,7 @@
  * redirects, and a redirect hands the tap to the browser instead of the app. The id is the event's id, never its slug:
  * a link is a frozen snapshot forwarded to strangers, and a slug names the thing.
  *
- * Inbound: `/e/`, `/v/` and `/f/` AND `/event/` / `/venue/`, whatever `WEB_PAGES_LIVE` says (links already sent, the Android
+ * Inbound: `/e/`, `/v/`, `/f/` and `/c/` (a crew's link, S7: the server mints its whole URL) AND `/event/` / `/venue/`, whatever `WEB_PAGES_LIVE` says (links already sent, the Android
  * intent filters and an organiser's QR code all use them). The
  * file routes are `app/event/[id]`, `app/venue/[id]` and `app/f/[token]`, so `/e/` and `/v/` are rewritten to them by
  * `app/+native-intent.tsx` before the router sees them.
@@ -23,7 +23,7 @@ const OUR_HOSTS: ReadonlySet<string> = new Set([SHARE_HOST, 'blendn.app'])
 /** An id or token as it may appear in a path: what the server mints, nothing that could climb out of one segment. */
 const SEGMENT = /^[A-Za-z0-9_-]{1,64}$/
 
-export type LinkKind = 'event' | 'venue' | 'invite'
+export type LinkKind = 'event' | 'venue' | 'invite' | 'crew'
 export type LinkTarget = { kind: LinkKind; id: string }
 
 /**
@@ -51,10 +51,11 @@ export const inviteLink = (token: string): string => `${SHARE_ORIGIN}/f/${token}
 export function routeFor({ kind, id }: LinkTarget): string {
   if (kind === 'event') return `/event/${id}`
   if (kind === 'venue') return `/venue/${id}`
+  if (kind === 'crew') return `/c/${id}`
   return `/f/${id}`
 }
 
-const KIND_OF_PREFIX: Record<string, LinkKind> = { e: 'event', event: 'event', v: 'venue', venue: 'venue', f: 'invite' }
+const KIND_OF_PREFIX: Record<string, LinkKind> = { e: 'event', event: 'event', v: 'venue', venue: 'venue', f: 'invite', c: 'crew' }
 
 /**
  * Reduces a URL or path to what could name a route, and does it in ONE place: both `parseLink` (what is this link?) and

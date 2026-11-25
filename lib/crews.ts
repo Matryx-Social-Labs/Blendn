@@ -178,6 +178,23 @@ export interface CrewInvite {
   expiresAt?: string
 }
 
+/** Who shared a crew link, and the crew, before anybody signs in (`GET /crews/links/:token/preview`). */
+export interface CrewLinkPreview {
+  name: string
+  emblemSeed: string
+  size: number
+  invitedBy: { name: string; photoUrl: string | null }
+}
+
+/** The card behind a crew link (S7). `member`: the holder is in the crew already. */
+export interface CrewLink extends CrewLinkPreview {
+  crewId: string
+  bio: string | null
+  tags: CrewTag[]
+  expiresAt: string
+  member: boolean
+}
+
 /** A crew here now, as a card. Counts only — never a person. */
 export interface CrewCard {
   crewId: string

@@ -26,7 +26,7 @@ import { getRoomSignal, subscribeRoomSignal } from '../../lib/roomSignal'
 import { useRoomSignalSource } from '../../lib/useRoomSignalSource'
 import { watchRoomUnread } from '../../lib/roomUnread'
 import { toastTitle } from '../../lib/receivedWaves'
-import { listenForWaves, useRoomWaves, waveShown } from '../../lib/roomWaves'
+import { listenForWaves, useRoomWaves, waveKey, waveShown } from '../../lib/roomWaves'
 import { useKeyboardShown } from '../../lib/keyboard'
 import { expandTabBar, TAB_BAR_PROGRESS, TAB_BAR_SETTLE } from '../../lib/tabBarSettle'
 
@@ -288,18 +288,19 @@ function WaveFromTheTabs({ room }: { room: string | null }) {
   const { toast } = useRoomWaves()
   if (blendnOpen || !toast) return null
   const first = toast.waves[0]
-  const one = toast.waves.length === 1
+  // A crew's wave opens the room, where the strip answers it; only a person has a card.
+  const person = toast.waves.length === 1 && !('fromCrewId' in first) ? first.fromUserId : undefined
   return (
     <InAppBanner
-      key={`${first.fromUserId}:${first.at}`}
+      key={`${waveKey(first)}:${first.at}`}
       kind="wave"
-      visual={{ type: 'creature', pseudonym: first.fromName }}
+      visual={'fromCrewId' in first ? { type: 'glyph', icon: 'users' } : { type: 'creature', pseudonym: first.fromName }}
       title={toastTitle(toast)}
       context={room ? `${room} · now` : 'now'}
       onPress={() => {
         // Shown here: the Room must not toast it again as the overlay opens (on their card for one wave; L-B, the room).
         waveShown(toast)
-        openBlendn(one ? first.fromUserId : undefined)
+        openBlendn(person)
       }}
       onDismiss={() => waveShown(toast)}
       testID="wave-banner"

@@ -1,16 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { FlatList, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 
-import { apiClient, type ReceivedWave } from '../../lib/apiClient'
+import { apiClient, type CrewWave, type ReceivedWave } from '../../lib/apiClient'
 import { COLOR, FONT_FAMILY, ICON, MAX_FONT_SCALE, SPACE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { Logger } from '../../lib/logger'
-import { isWavesPage, wavedAgoLine, wavedAtYouLine } from '../../lib/receivedWaves'
-import { Avatar } from '../ds/Avatar'
+import { isCrewWave, isWavesPage, listRows, wavedAgoLine, wavedAtYouLine, waveId, waveName, type AnyWave } from '../../lib/receivedWaves'
 import { Title } from '../ds/Title'
 import { CONTROL_FONT_CAP, font, minTarget, useBoldText, useIncreaseContrast } from '../ds/shared'
 import { PagedFooter } from '../friends/PagedFooter'
 import { Button } from '../ds/Button'
+import { WaveFace } from '../ds/WaveFace'
 import { WavingHand } from '../ds/PersonCard'
 
 /** A row: the 32 face, the name and "Waved at you · 4 min" (board 03 See all). */
@@ -19,13 +19,20 @@ const FACE = 32
 /** The list's share of the screen inside the tall sheet; past that it scrolls (as the crew friend picker does). */
 const LIST_SHARE = 0.62
 const FIRST_ROWS = 12
+/** A crew that left before you waved back (404): said, never an error. */
+const GONE = 'They’ve left the room'
 
-type Loaded = { open: boolean; total: number; waves: ReceivedWave[]; nextCursor: string | null }
+/** Crews come on the first page only; `answeredBefore` is who you had answered when it was read (`listRows`). */
+type Loaded = { open: boolean; total: number; waves: ReceivedWave[]; nextCursor: string | null; crewWaves: CrewWave[]; crewTotal: number; answeredBefore: ReadonlySet<string> }
+
+/** How a Wave back went: stored, gone (a crew that left: "They’ve left the room"), or nothing changed. */
+export type WaveBackResult = 'done' | 'gone' | 'none'
 
 /**
  * See all (board 03 S-A): every wave to you in a room, newest first, 20 a page from the server, in a windowed list with
  * the exact count in the header. Each row answers in place: Wave back, the hand while it goes, then ✓ Waved (a wave back
- * is always a mutual, so the moment follows). Holding a row offers Block and Report; a block takes the row off. A closed
+ * at a person is always a mutual, so the moment follows). Crews are in it too (advisor U-A 2026-11-25, `listRows`): "Crew · 2 min
+ * ago"; one that left keeps its row, says so and offers nothing. Holding a row offers Block and Report; a block takes the row off. A closed
  * room's list offers nothing to answer. A failed page keeps the rows and says so with Try again.
  */
 export function WavedAtYouList({
@@ -36,10 +43,9 @@ export function WavedAtYouList({
 }: {
   eventId: string
   now: number
-  /** Resolves true once the server stored it. */
-  onWaveBack: (wave: ReceivedWave) => Promise<boolean>
+  onWaveBack: (wave: AnyWave) => Promise<WaveBackResult>
   /** Block or Report; `removed` takes the row off the list. */
-  onSafety: (wave: ReceivedWave, removed: () => void) => void
+  onSafety: (wave: AnyWave, removed: () => void) => void
 }) {
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
@@ -54,7 +60,11 @@ export function WavedAtYouList({
   const fetchFirst = useCallback(() => {
     apiClient
       .getReceivedWaves(eventId, null)
-      .then((r) => setList(r.success && isWavesPage(r.data) ? r.data : 'failed'))
+      .then((r) => {
+        if (!r.success || !isWavesPage(r.data)) return setList('failed')
+        const crewWaves = r.data.crewWaves ?? []
+        setList({ ...r.data, crewWaves, crewTotal: r.data.crewTotal ?? crewWaves.length, answeredBefore: new Set(crewWaves.filter((c) => c.wavedBack).map((c) => c.crewId)) })
+      })
       .catch((e) => {
         Logger.warn('match', 'waved-at-you list failed', { error: e })
         setList('failed')
@@ -75,7 +85,7 @@ export function WavedAtYouList({
       const r = await apiClient.getReceivedWaves(eventId, list.nextCursor)
       if (!r.success || !isWavesPage(r.data)) throw new Error(r.error ?? 'page failed')
       const next = r.data
-      setList((prev) => (prev && prev !== 'failed' ? { ...next, waves: [...prev.waves, ...next.waves.filter((w) => !prev.waves.some((p) => p.userId === w.userId))] } : prev))
+      setList((prev) => (prev && prev !== 'failed' ? { ...prev, open: next.open, total: next.total, nextCursor: next.nextCursor, waves: [...prev.waves, ...next.waves.filter((w) => !prev.waves.some((p) => p.userId === w.userId))] } : prev))
     } catch (e) {
       Logger.warn('match', 'waved-at-you page failed', { error: e })
       setMoreFailed(true)
@@ -85,14 +95,23 @@ export function WavedAtYouList({
     }
   }, [eventId, list])
 
-  const answer = async (w: ReceivedWave) => {
-    setSending(w.userId)
-    const ok = await onWaveBack(w)
+  const [gone, setGone] = useState<ReadonlySet<string>>(new Set())
+  const answer = async (w: AnyWave) => {
+    setSending(waveId(w))
+    const result = await onWaveBack(w)
     setSending(null)
-    if (ok) setList((prev) => (prev && prev !== 'failed' ? { ...prev, waves: prev.waves.map((x) => (x.userId === w.userId ? { ...x, wavedBack: true } : x)) } : prev))
+    if (result === 'gone') return setGone((prev) => new Set([...prev, waveId(w)]))
+    if (result !== 'done') return
+    const back = <T extends AnyWave>(x: T): T => (waveId(x) === waveId(w) ? { ...x, wavedBack: true } : x)
+    setList((prev) => (prev && prev !== 'failed' ? { ...prev, waves: prev.waves.map(back), crewWaves: prev.crewWaves.map(back) } : prev))
   }
-  const remove = (w: ReceivedWave) =>
-    setList((prev) => (prev && prev !== 'failed' ? { ...prev, total: Math.max(0, prev.total - 1), waves: prev.waves.filter((x) => x.userId !== w.userId) } : prev))
+  const remove = (w: AnyWave) =>
+    setList((prev) => {
+      if (!prev || prev === 'failed') return prev
+      const without = <T extends AnyWave>(xs: T[]) => xs.filter((x) => waveId(x) !== waveId(w))
+      if (isCrewWave(w)) return { ...prev, crewTotal: Math.max(0, prev.crewTotal - 1), crewWaves: without(prev.crewWaves) }
+      return { ...prev, total: Math.max(0, prev.total - 1), waves: without(prev.waves) }
+    })
 
   const line = (text: string) => <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.centre, { color: secondary }]}>{text}</Text>
   if (list === null) return line('Loading…')
@@ -102,25 +121,27 @@ export function WavedAtYouList({
         {line('Who waved didn’t load — try again')}
       </Pressable>
     )
-  const listHeight = Math.min(Math.max(list.waves.length, 1) * ROW + (loadingMore || moreFailed ? ROW : 0), Math.round(windowHeight * LIST_SHARE))
+  const rows = listRows(list, list.answeredBefore)
+  const total = list.total + list.crewTotal
+  const listHeight = Math.min(Math.max(rows.length, 1) * ROW + (loadingMore || moreFailed ? ROW : 0), Math.round(windowHeight * LIST_SHARE))
   return (
     <View style={styles.wrap}>
-      <View style={styles.head} accessible accessibilityRole="header" accessibilityLabel={`Waved at you, ${list.total}`}>
+      <View style={styles.head} accessible accessibilityRole="header" accessibilityLabel={`Waved at you, ${total}`}>
         <Title family={FONT_FAMILY.brand[700]} maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={styles.ink}>
           Waved at you
         </Title>
         <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold, FONT_FAMILY.mono[500]), { color: secondary }]}>
-          {list.total}
+          {total}
         </Text>
       </View>
-      {list.waves.length === 0 ? (
+      {rows.length === 0 ? (
         line('No waves waiting.')
       ) : (
         <FlatList
           testID="waved-list"
-          data={list.waves}
-          extraData={sending}
-          keyExtractor={(w) => w.userId}
+          data={rows}
+          extraData={[sending, gone]}
+          keyExtractor={waveId}
           style={{ height: listHeight }}
           nestedScrollEnabled
           getItemLayout={(_d, index) => ({ length: ROW, offset: ROW * index, index })}
@@ -132,50 +153,55 @@ export function WavedAtYouList({
           ListFooterComponent={<PagedFooter loading={loadingMore} failed={moreFailed} onRetry={() => void loadMore()} testID="waved-list-more" />}
           ListFooterComponentStyle={styles.foot}
           renderItem={({ item: w }) => {
-            const answerable = list.open && !w.wavedBack
+            const id = waveId(w)
+            const name = waveName(w)
+            const left = gone.has(id)
+            const answerable = list.open && !w.wavedBack && !left
+            const ago = isCrewWave(w) ? `Crew · ${wavedAgoLine(w.wavedAt, now)}` : wavedAgoLine(w.wavedAt, now)
+            const spoken = left ? GONE : `${isCrewWave(w) ? 'a crew, ' : ''}${wavedAtYouLine(w.wavedAt, now)}${w.wavedBack ? ', waved back' : ''}`
             const safety = () => {
               H.longPress()
               onSafety(w, () => remove(w))
             }
             return (
               <Pressable
-                testID={`waved-row-${w.userId}`}
+                testID={`waved-row-${id}`}
                 onLongPress={safety}
                 accessible
-                accessibilityLabel={`${w.displayName}, ${wavedAtYouLine(w.wavedAt, now)}${w.wavedBack ? ', waved back' : ''}`}
-                accessibilityActions={[...(answerable ? [{ name: 'waveBack', label: 'Wave back' }] : []), { name: 'block', label: `Block or report ${w.displayName}` }]}
+                accessibilityLabel={`${name}, ${spoken}`}
+                accessibilityActions={[...(answerable ? [{ name: 'waveBack', label: 'Wave back' }] : []), { name: 'block', label: `Block or report ${name}` }]}
                 onAccessibilityAction={(e) => {
                   if (e.nativeEvent.actionName === 'block') return safety()
-                  if (e.nativeEvent.actionName === 'waveBack' && sending !== w.userId) void answer(w)
+                  if (e.nativeEvent.actionName === 'waveBack' && sending !== id) void answer(w)
                 }}
                 style={styles.row}
               >
-                <Avatar size={FACE} kind="creature" pseudonym={w.displayName} />
+                <WaveFace size={FACE} wave={w} />
                 <View style={styles.text}>
                   <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold, FONT_FAMILY.brand[500]), styles.ink]}>
-                    {w.displayName}
+                    {name}
                   </Text>
                   <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('note', bold), { color: secondary }]}>
-                    {wavedAgoLine(w.wavedAt, now)}
+                    {left ? GONE : ago}
                   </Text>
                 </View>
-                {answerable || sending === w.userId ? (
+                {answerable || sending === id ? (
                   <Button
                     kind="lit"
                     size="pill"
                     icon="hand"
                     label="Wave back"
-                    leading={sending === w.userId ? <WavingHand size={ICON.inline} /> : undefined}
-                    pressHaptic={sending === w.userId ? false : H.select}
+                    leading={sending === id ? <WavingHand size={ICON.inline} /> : undefined}
+                    pressHaptic={sending === id ? false : H.select}
                     onPress={() => {
-                      if (sending !== w.userId) void answer(w)
+                      if (sending !== id) void answer(w)
                     }}
-                    accessibilityLabel={`Wave back at ${w.displayName}`}
-                    testID={`waved-row-${w.userId}-wave`}
+                    accessibilityLabel={`Wave back at ${name}`}
+                    testID={`waved-row-${id}-wave`}
                   />
                 ) : w.wavedBack ? (
                   // ✓ Waved is still: the neutral, disabled (no Wave again), as the person page's.
-                  <Button kind="secondary" size="pill" icon="check" label="Waved" disabled accessibilityLabel={`Waved at ${w.displayName}`} />
+                  <Button kind="secondary" size="pill" icon="check" label="Waved" disabled accessibilityLabel={`Waved at ${name}`} />
                 ) : null}
               </Pressable>
             )
