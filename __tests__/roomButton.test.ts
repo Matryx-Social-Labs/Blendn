@@ -427,7 +427,9 @@ describe('the callers hand the centre button the precise fix (SCRUM-744)', () =>
     expect(pulse).not.toMatch(/setUserLocation\(\{/)
     expect(pulse.match(/setUserLocation\(/g)?.length).toBeGreaterThan(2)
     expect(pulse).not.toMatch(/getLastKnownPositionAsync\(\)/)
-    expect(pulse.match(/getLastKnownPositionAsync\(\{ maxAge: FIX_MAX_AGE_MS \}\)/g)).toHaveLength(2)
+    // Once, at mount. A return to the app asks a new fix (useFixRefresh): a recent last-known one kept its old time (SCRUM-1324).
+    expect(pulse.match(/getLastKnownPositionAsync\(\{ maxAge: FIX_MAX_AGE_MS \}\)/g)).toHaveLength(1)
+    expect(pulse).toMatch(/fix: setUserLocation/)
   })
 
   it('publishRoomSignal judges inside from the fix it is given', () => {
