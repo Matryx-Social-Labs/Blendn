@@ -126,6 +126,13 @@ describe('dirty marks', () => {
     expect(onSync).toHaveBeenCalledTimes(1)
   })
 
+  it('one mark naming several of its domains is one sync, not one now and one at the window end', async () => {
+    const { onSync } = await mounted({ domains: ['events', 'match'] })
+    await act(async () => markDomainsDirty(['events', 'match', 'chat']))
+    await advance(WINDOW_MS * 2)
+    expect(onSync).toHaveBeenCalledTimes(1)
+  })
+
   it('syncOnDirty: false reads nothing on marks, and still syncs on focus and on reconnect', async () => {
     jest.spyOn(Math, 'random').mockReturnValue(0)
     const onSync = jest.fn()

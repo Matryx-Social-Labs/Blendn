@@ -10,9 +10,9 @@ import { useLatest } from './useLatest'
  * (SCRUM-1173). Every `chat:message` marks `chat` and every check-in marks `events` and `match`: unthrottled, a room of
  * N phones was N re-reads of the page per message.
  */
-export const DIRTY_SYNC_MIN_MS = 10_000
+const DIRTY_SYNC_MIN_MS = 10_000
 /** A reconnect re-reads after a random wait of up to this long: a deploy drops every phone at once. */
-export const RECONNECT_SYNC_JITTER_MS = 5_000
+const RECONNECT_SYNC_JITTER_MS = 5_000
 
 interface UseLiveSyncOptions {
   enabled?: boolean
@@ -197,7 +197,8 @@ export function useLiveSync(options: UseLiveSyncOptions): SocketConnectionStatus
     }
     const unsub = subscribeDirtyDomains((domain) => {
       if (domainsRef.current.length > 0 && !domainsRef.current.includes(domain)) return
-      if (!live() || trailing) return
+      // The same millisecond as the last sync is the same mark naming another domain: one mark, one sync.
+      if (!live() || trailing || lastDirtySyncRef.current === Date.now()) return
       const wait = lastDirtySyncRef.current + DIRTY_SYNC_MIN_MS - Date.now()
       if (wait <= 0) sync()
       else trailing = setTimeout(sync, wait)
