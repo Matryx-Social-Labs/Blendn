@@ -410,6 +410,22 @@ describe('a crew’s wave at you (S5 b2, advisor T-A / U-A / W-A / X-A 2026-11-2
     for (const name of ['Wave back at Crew 4', 'Waved at Person 21']) expect(aligned(screen.getByRole('button', { name }) as never)).toBe(true)
   })
 
+  it('a long crew name wraps in its row, and the row grows with the text so nothing is cut; control: 60 at the default size', async () => {
+    const heights: number[] = []
+    for (const fontScale of [1, 1.3]) {
+      const spy = jest.spyOn(require('react-native'), 'useWindowDimensions').mockReturnValue({ width: 360, height: 800, scale: 3, fontScale })
+      mockGetReceivedWaves.mockResolvedValueOnce({ success: true, data: page([], { crewWaves: [crew(4, { name: 'Saint-Jean-sur-Richelieu Runners' })], crewTotal: 1 }) })
+      await render(<WavedAtYouList eventId="e1" now={NOW} onWaveBack={jest.fn()} onSafety={jest.fn()} />)
+      const name = await screen.findByText('Saint-Jean-sur-Richelieu Runners', { includeHiddenElements: true })
+      expect(name.props.numberOfLines).toBe(2)
+      heights.push(StyleSheet.flatten(screen.getByTestId('waved-row-crew:c4').props.style).height)
+      await screen.unmount()
+      spy.mockRestore()
+    }
+    expect(heights[0]).toBe(60)
+    expect(heights[1]).toBeGreaterThanOrEqual(76)
+  })
+
   it('a crew that left: the row stays, says so and offers nothing; control: a refusal keeps Wave back', async () => {
     mockGetReceivedWaves.mockResolvedValueOnce({ success: true, data: page([], { crewWaves: [crew(4), crew(5)], crewTotal: 2 }) })
     const answers = ['gone', 'none']

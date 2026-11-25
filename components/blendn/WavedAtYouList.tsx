@@ -15,6 +15,8 @@ import { WavingHand } from '../ds/PersonCard'
 
 /** A row: the 32 face, the name and "Waved at you · 4 min" (board 03 See all). */
 const ROW = 60
+/** At a larger text size the name and the line each take two lines: the row's height, per unit of text scale. */
+const ROW_LARGE = 76
 const FACE = 32
 /** The list's share of the screen inside the tall sheet; past that it scrolls (as the crew friend picker does). */
 const LIST_SHARE = 0.62
@@ -50,7 +52,11 @@ export function WavedAtYouList({
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const secondary = contrast ? COLOR.textPrimary : COLOR.textSecondary
-  const windowHeight = useWindowDimensions().height
+  const { height: windowHeight, fontScale } = useWindowDimensions()
+  // Fixed per text size, so the list still windows by `getItemLayout`.
+  const scale = Math.min(fontScale, CONTROL_FONT_CAP)
+  const large = scale > 1
+  const rowHeight = large ? Math.round(ROW_LARGE * scale) : ROW
   const [list, setList] = useState<Loaded | null | 'failed'>(null)
   const [loadingMore, setLoadingMore] = useState(false)
   const [moreFailed, setMoreFailed] = useState(false)
@@ -123,7 +129,7 @@ export function WavedAtYouList({
     )
   const rows = listRows(list, list.answeredBefore)
   const total = list.total + list.crewTotal
-  const listHeight = Math.min(Math.max(rows.length, 1) * ROW + (loadingMore || moreFailed ? ROW : 0), Math.round(windowHeight * LIST_SHARE))
+  const listHeight = Math.min(Math.max(rows.length, 1) * rowHeight + (loadingMore || moreFailed ? ROW : 0), Math.round(windowHeight * LIST_SHARE))
   return (
     <View style={styles.wrap}>
       <View style={styles.head} accessible accessibilityRole="header" accessibilityLabel={`Waved at you, ${total}`}>
@@ -144,7 +150,7 @@ export function WavedAtYouList({
           keyExtractor={waveId}
           style={{ height: listHeight }}
           nestedScrollEnabled
-          getItemLayout={(_d, index) => ({ length: ROW, offset: ROW * index, index })}
+          getItemLayout={(_d, index) => ({ length: rowHeight, offset: rowHeight * index, index })}
           initialNumToRender={FIRST_ROWS}
           windowSize={7}
           removeClippedSubviews
@@ -174,14 +180,14 @@ export function WavedAtYouList({
                   if (e.nativeEvent.actionName === 'block') return safety()
                   if (e.nativeEvent.actionName === 'waveBack' && sending !== id) void answer(w)
                 }}
-                style={styles.row}
+                style={[styles.row, { height: rowHeight }]}
               >
                 <WaveFace size={FACE} wave={w} />
                 <View style={styles.text}>
-                  <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold, FONT_FAMILY.brand[500]), styles.ink]}>
+                  <Text numberOfLines={2} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold, FONT_FAMILY.brand[500]), styles.ink]}>
                     {name}
                   </Text>
-                  <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('note', bold), { color: secondary }]}>
+                  <Text numberOfLines={large ? 2 : 1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('note', bold), { color: secondary }]}>
                     {left ? GONE : ago}
                   </Text>
                 </View>
@@ -219,7 +225,7 @@ const styles = StyleSheet.create({
   head: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
   ink: { color: COLOR.textPrimary },
   centre: { textAlign: 'center' },
-  row: { height: ROW, flexDirection: 'row', alignItems: 'center', gap: SPACE.md },
+  row: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md },
   text: { flex: 1, minWidth: 0, gap: SPACE.xxs },
   // A pill starts at its row's top by default; the row is taller than it.
   pill: { alignSelf: 'center' },
