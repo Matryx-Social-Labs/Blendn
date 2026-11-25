@@ -64,6 +64,8 @@ export interface ServerToClientEvents {
     interestCount: number
     userId: string
   }) => void
+  /** After every RSVP and withdrawal (admin #1005): the going count, nothing about who. */
+  "event:rsvpUpdate": (data: { eventId: string; rsvpCount: number }) => void
   "chat:message": (data: {
     chatGroupId: string
     message: {
@@ -225,6 +227,7 @@ type EventCheckInCallback = (data: ServerToClientEvents["event:checkin"] extends
 type EventRoomCheckInCallback = (data: ServerToClientEvents["event:room:checkin"] extends (data: infer D) => void ? D : never) => void
 type EventCheckOutCallback = (data: ServerToClientEvents["event:checkout"] extends (data: infer D) => void ? D : never) => void
 type EventInterestCallback = (data: ServerToClientEvents["event:interestUpdate"] extends (data: infer D) => void ? D : never) => void
+type EventRsvpCallback = (data: ServerToClientEvents["event:rsvpUpdate"] extends (data: infer D) => void ? D : never) => void
 type ChatMessageCallback = (data: ServerToClientEvents["chat:message"] extends (data: infer D) => void ? D : never) => void
 type ChatTypingCallback = (data: ServerToClientEvents["chat:typing"] extends (data: infer D) => void ? D : never) => void
 type ChatReactionCallback = (data: ServerToClientEvents["chat:reaction"] extends (data: infer D) => void ? D : never) => void
@@ -305,6 +308,7 @@ const eventRoomCheckInSubscriptions = new Map<string, Set<EventRoomCheckInCallba
 const eventCheckOutSubscriptions = new Map<string, Set<EventCheckOutCallback>>()
 const eventCancelledSubscriptions = new Map<string, Set<EventCancelledCallback>>()
 const eventInterestSubscriptions = new Map<string, Set<EventInterestCallback>>()
+const eventRsvpSubscriptions = new Map<string, Set<EventRsvpCallback>>()
 const chatMessageSubscriptions = new Map<string, Set<ChatMessageCallback>>()
 const chatTypingSubscriptions = new Map<string, Set<ChatTypingCallback>>()
 const chatReactionSubscriptions = new Map<string, Set<ChatReactionCallback>>()
@@ -569,6 +573,7 @@ export function disconnect(): void {
   eventCheckOutSubscriptions.clear()
   eventCancelledSubscriptions.clear()
   eventInterestSubscriptions.clear()
+  eventRsvpSubscriptions.clear()
   chatMessageSubscriptions.clear()
   chatTypingSubscriptions.clear()
   chatReactionSubscriptions.clear()
@@ -595,6 +600,7 @@ function rejoinAllRooms(): void {
     ...eventCheckOutSubscriptions.keys(),
     ...eventCancelledSubscriptions.keys(),
     ...eventInterestSubscriptions.keys(),
+    ...eventRsvpSubscriptions.keys(),
   ])
   eventIds.forEach((id) => socket?.emit("join:event", id))
   // The roster room is a separate join: it requires a check-in, where the room
@@ -712,6 +718,11 @@ function setupSocketHandlers(sock: TypedSocket): void {
     markDomainsDirty(["events", "match"])
     const callbacks = eventInterestSubscriptions.get(data.eventId)
     callbacks?.forEach((cb) => cb(data))
+  })
+
+  sock.on("event:rsvpUpdate", (data) => {
+    markDomainsDirty(["events"])
+    eventRsvpSubscriptions.get(data.eventId)?.forEach((cb) => cb(data))
   })
 
   // Chat updates
@@ -877,6 +888,7 @@ function subscribeToEventMap<TCallback>(
           || eventCheckOutSubscriptions.has(eventId)
           || eventCancelledSubscriptions.has(eventId)
           || eventInterestSubscriptions.has(eventId)
+          || eventRsvpSubscriptions.has(eventId)
         if (!hasAnyEventSubs) {
           socket?.emit("leave:event", eventId)
         }
@@ -957,6 +969,11 @@ export function subscribeToEventInterest(
   callback: EventInterestCallback
 ): () => void {
   return subscribeToEventMap(eventId, callback, eventInterestSubscriptions)
+}
+
+/** The going count, live, after every RSVP and withdrawal (`event:rsvpUpdate`, SCRUM-1115). */
+export function subscribeToEventRsvp(eventId: string, callback: EventRsvpCallback): () => void {
+  return subscribeToEventMap(eventId, callback, eventRsvpSubscriptions)
 }
 
 // === Chat Subscriptions ===
@@ -1334,6 +1351,7 @@ export type {
   EventRoomCheckInCallback,
   EventCheckOutCallback,
   EventInterestCallback,
+  EventRsvpCallback,
   ChatMessageCallback,
   ChatTypingCallback,
   ChatReactionCallback,
