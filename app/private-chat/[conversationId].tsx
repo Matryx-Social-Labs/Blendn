@@ -864,7 +864,9 @@ function PrivateChatInner() {
               // From half a screen short of the top: a fling's last scroll event lands short of it (Android, SCRUM-1321).
               onStartReachedThreshold={0.5}
               // Older pages go in above the reader: the row in view stays in view, so the unread rule stays under the thumb (SCRUM-958).
-              maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
+              // From row 1, the first message: row 0 is a day pill whose key an older page of the same day keeps, and held by it
+              // the reader sat at the top of each new page with nothing above to scroll into (SCRUM-1321).
+              maintainVisibleContentPosition={{ minIndexForVisible: 1 }}
               ListHeaderComponent={
                 <View>
                   {/* Permanent, not an empty state: seen by both, whoever types first. */}
