@@ -228,4 +228,20 @@ describe('a long DM, opened with nothing cached (SCRUM-1321)', () => {
     // FlatList moves the index past its header: row 1 of the data.
     expect(feed().props.maintainVisibleContentPosition).toEqual({ minIndexForVisible: 2 })
   })
+
+  /* Android, driven: the pill tapped while a fling still coasts; the jump's own momentum end landed short and stopped the follow. */
+  it('the pill tapped mid-fling still follows the end until it gets there', async () => {
+    await render(<PrivateChat />)
+    await flush()
+    await firstFrame()
+    const fling = (y: number) => ({ nativeEvent: { ...scrolled(y).nativeEvent, velocity: { x: 0, y: 2.4 } } })
+    await act(async () => fireEvent(feed(), 'scrollBeginDrag', scrolled(CONTENT - VIEW)))
+    await act(async () => fireEvent.scroll(feed(), scrolled(600)))
+    await act(async () => fireEvent(feed(), 'scrollEndDrag', fling(400)))
+    await act(async () => fireEvent.press(screen.getByTestId('chat-newest')))
+    await act(async () => fireEvent(feed(), 'momentumScrollEnd', scrolled(CONTENT - VIEW - 900)))
+    scrollToEnd.mockClear()
+    await act(async () => fireEvent(feed(), 'contentSizeChange', 393, CONTENT + 900))
+    expect(scrollToEnd).toHaveBeenCalled()
+  })
 })
