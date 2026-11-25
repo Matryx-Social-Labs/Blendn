@@ -3,25 +3,28 @@
  */
 import { byLine, hereNowCount, roomHost, roomInfoLine } from '../lib/roomInfo'
 
+/** What the server sends: an id rides along, and the rules must not read it. */
+const org = (o: { id?: string | null; name?: string | null; kind?: 'org' | 'venue' | 'platform' | 'person' }) => o
+
 describe('roomHost: the org, never a person, never the platform or a venue standing in (C6 D2 A)', () => {
   it('names the organisation the server sends (kind "org")', () => {
-    expect(roomHost({ id: 'u-org', name: 'Nightshift Collective', kind: 'org' })).toEqual({ name: 'Nightshift Collective' })
+    expect(roomHost(org({ id: 'u-org', name: 'Nightshift Collective', kind: 'org' }))).toEqual({ name: 'Nightshift Collective' })
   })
 
   // The server's other kinds carry a name, and a person's is somebody's own: none of them is a host to name.
   it.each(['person', 'venue', 'platform'] as const)('no host for kind "%s", even with an id and a name', (kind) => {
-    expect(roomHost({ id: 'u-1', name: 'Priya Raman', kind })).toBeNull()
+    expect(roomHost(org({ id: 'u-1', name: 'Priya Raman', kind }))).toBeNull()
   })
 
   // Control: the id is not the rule any more. A person's event has an id (the creator), and that was drawn as Host.
   it('no host without a kind, even with an id (an older server)', () => {
-    expect(roomHost({ id: 'u-org', name: 'Nightshift Collective' })).toBeNull()
+    expect(roomHost(org({ id: 'u-org', name: 'Nightshift Collective' }))).toBeNull()
   })
 
   it('no host when there is no organizer or no name', () => {
     expect(roomHost(null)).toBeNull()
     expect(roomHost(undefined)).toBeNull()
-    expect(roomHost({ id: 'u-org', name: '   ', kind: 'org' })).toBeNull()
+    expect(roomHost(org({ id: 'u-org', name: '   ', kind: 'org' }))).toBeNull()
   })
 
   it('carries only the name: nothing a person-shaped row could draw (no photo, no id)', () => {
