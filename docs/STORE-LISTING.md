@@ -140,7 +140,7 @@ Bring Your Crew
 Make a crew with your friends and see which of them are in the room with you.
 
 Report and Block
-Report or block anyone from their profile, and reports go to our team. Room messages are checked automatically before others see them.
+Report or block anyone from their profile, and reports go to our team. Room messages are checked automatically as they are sent.
 
 Starting in Bengaluru.
 Hosting an event or running a venue? Blend’n for organizers is at organizers.blendn.app.
@@ -149,7 +149,7 @@ Questions: support@blendn.app
 
 ```
 $ node -e 'const s=require("fs").readFileSync("docs/STORE-LISTING.md","utf8").match(/```text description\n([\s\S]*?)\n```/)[1];console.log([...s].length,"/ 4000")'
-1169 / 4000
+1163 / 4000
 ```
 
 **Where each claim comes from.**
@@ -165,7 +165,7 @@ $ node -e 'const s=require("fs").readFileSync("docs/STORE-LISTING.md","utf8").ma
 | Wave; talk one to one if they wave back; choose when to show who you are | `lib/waves.ts:102`, `app/user/[id].tsx:796`, `lib/roomState.ts:36-40` (`revealed`) |
 | Crew; which friends are in the room with you | `app/crews/new.tsx`, `lib/crews.ts:247` (`myCrews`, "Your crews here now") |
 | Report or block from a profile; reports reach the team | `app/user/[id].tsx:773` ("Report or block"), `app/blocked-users.tsx` |
-| Room messages checked before others see them (room photos too: `research/r-store-razorpay.md` open question 6) | admin `chat/route.ts:39-46` (`moderateMessage`, `preSaveCheck`), admin `lib/moderation/held-row.ts` (held while the check runs, never emitted) |
+| Room messages checked automatically as they are sent | admin `chat/route.ts:39-46` (`moderateMessage`, `preSaveCheck`). Not "before others see them": admin `lib/moderation/degraded-room.ts:57-60` (the big-room hold starts after the 1 s race, so a line is readable for up to about a second), `degraded-room.ts:73` (`verdictForBigRoom`: on a timed-out check a room that is not big proceeds and delivers), `lib/moderation/actions.ts:176-179` (delivered either way when the model is unavailable; only the keyword, spam and contact-info checks cannot fail open). Same wording as the organizer site (seo 03) |
 | Starting in Bengaluru | FACTS.md fact 5 |
 | organizers.blendn.app | 200 on 2026-11-25, `<title>` "Blend'n for organizers – …"; the organizer site, which links no price (seo tasks 03, 04) |
 
