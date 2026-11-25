@@ -508,9 +508,10 @@ export const HomeMap = memo(function HomeMap({
     knownDistance: focus?.pin && typeof focus.km === 'number' ? { id: focus.pin.id, km: focus.km } : null,
     reading,
   })
-  // The dot going grey (or violet again) moves no camera: the names are placed again around the callout.
+  // The dot going grey (or violet again) moves no camera: the names are placed again around the callout. So does a
+  // banner lifting the edge marker (SCRUM-1096).
   const isStale = you.kind === 'stale'
-  useEffect(() => relight(), [isStale, staleBelow, reading]) // eslint-disable-line react-hooks/exhaustive-deps -- only the stale flip or its side, or the fix turning precise
+  useEffect(() => relight(), [isStale, staleBelow, reading, lift]) // eslint-disable-line react-hooks/exhaustive-deps -- only the stale flip or its side, the fix turning precise, or the lift
 
   // New pins re-cluster the numbers: a screen reader hears them afresh.
   useEffect(() => {

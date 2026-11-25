@@ -638,6 +638,9 @@ describe('"my location"', () => {
     // Wired: the screen hands the banner's lift to the box the marker and the names keep to.
     expect(component).toMatch(/const edgeBox = edgeBoxOf\(\{ width, height, padding, lift \}\)/)
     expect(component).toMatch(/useAnimatedReaction\(\s*\(\) => locateLift\?\.get\(\) \?\? 0,/)
+    // A banner landing after the map settled moves the marker with no camera move: the names are placed again (AX5 drive:
+    // a chip stayed under the lifted marker).
+    expect(component).toMatch(/useEffect\(\(\) => relight\(\), \[isStale, staleBelow, reading, lift\]\)/)
   })
 
   it('lands at its zoom on iOS when the ease also tilts the camera (review M2)', () => {
