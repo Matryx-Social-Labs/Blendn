@@ -14,7 +14,7 @@ import { useLatest } from './useLatest'
  */
 export const FIX_REFRESH_MS = 5 * 60_000
 export const FIX_REUSE = { maxAge: 120_000, requiredAccuracy: 150 } as const
-/** A return to the app this soon after a fix asks nothing (a notification shade pulled down and back). */
+/** A return to the app this soon after a fix asks no new one (a shade pulled down and back); the permission is still read. */
 export const FIX_RETURN_DEBOUNCE_MS = 10_000
 /** What the feed is keyed on moves only past this (m): a phone standing still never refetches, resets a page or scrolls. */
 export const PLACE_MOVE_M = 150
@@ -40,13 +40,14 @@ export const keepPlace = (current: PreciseFix | null, next: PreciseFix): Precise
 export function useFixRefresh(
   periodic: boolean,
   on: { permission: (status: string) => void; fix: (fix: PreciseFix) => void }
-): () => Promise<void> {
+): (skipIfFresh?: boolean) => Promise<void> {
   const onRef = useLatest(on)
   const pending = useRef(false)
   const lastAt = useRef(0)
   const mounted = useRef(true)
 
-  const ask = useCallback(async () => {
+  // `skipIfFresh`: a return or a tab switch re-reads the permission always, and asks the fix only if the last is ≥ 10 s old.
+  const ask = useCallback(async (skipIfFresh = false) => {
     if (pending.current) return
     pending.current = true
     try {
@@ -54,6 +55,7 @@ export function useFixRefresh(
       if (!mounted.current) return
       onRef.current.permission(status)
       if (status !== 'granted') return
+      if (skipIfFresh && Date.now() - lastAt.current < FIX_RETURN_DEBOUNCE_MS) return
       const last = await withDeadline(Location.getLastKnownPositionAsync(FIX_REUSE), LOCATION_FIX_TIMEOUT_MS).catch(() => null)
       const position =
         last ?? (await withDeadline(Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }), LOCATION_FIX_TIMEOUT_MS))
@@ -67,9 +69,7 @@ export function useFixRefresh(
     }
   }, [onRef])
 
-  const askUnlessFresh = useCallback(() => {
-    if (Date.now() - lastAt.current >= FIX_RETURN_DEBOUNCE_MS) void ask()
-  }, [ask])
+  const askUnlessFresh = useCallback(() => void ask(true), [ask])
 
   useEffect(() => {
     mounted.current = true

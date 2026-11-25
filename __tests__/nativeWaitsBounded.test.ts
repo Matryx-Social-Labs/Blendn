@@ -94,6 +94,11 @@ describe('the Events tab’s quiet fix', () => {
   it('bounds getCurrentPositionAsync: "my location" answers its wait (source pin)', () => {
     const source = readFileSync(join(__dirname, '../app/(tabs)/events.tsx'), 'utf8')
     const quiet = source.slice(source.indexOf('const getCurrentLocationQuietly'), source.indexOf('const requestLocationIfNeeded'))
-    expect(quiet).toMatch(/withDeadline\(\s*Location\.getCurrentPositionAsync/)
+    // Through the Pulse's one guarded ask (SCRUM-1324), which bounds every native read it makes.
+    expect(quiet).toMatch(/await askFix\(\)/)
+    expect(quiet).not.toMatch(/getCurrentPositionAsync/)
+    const hook = readFileSync(join(__dirname, '../lib/useFixRefresh.ts'), 'utf8')
+    expect(hook).toMatch(/withDeadline\(Location\.getCurrentPositionAsync\(/)
+    expect(hook).toMatch(/withDeadline\(Location\.getForegroundPermissionsAsync\(\)/)
   })
 })

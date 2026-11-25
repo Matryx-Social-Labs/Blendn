@@ -122,12 +122,14 @@ it('a recent last-known fix is reused (budget: ≤ 2 min, ≤ 150 m): no GPS wak
   expect(fixes.at(-1)?.timestamp).toBe(T0 - 30_000)
 })
 
-it('a return within 10 s of a fix asks nothing (a shade pulled down and back)', async () => {
-  await mount(false)
+it('a return within 10 s of a fix asks no new fix (a shade pulled down and back), but still reads the permission', async () => {
+  const { statuses } = await mount(false)
   await goTo('background')
   await later(5_000)
+  permission.mockResolvedValue({ status: 'denied' })
   await goTo('active')
   expect(current).toHaveBeenCalledTimes(1)
+  expect(statuses).toEqual(['granted', 'denied'])
 })
 
 it('one ask at a time: a return while an ask is pending asks nothing more, and a refusal read applies no fix', async () => {
