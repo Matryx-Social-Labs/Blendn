@@ -219,14 +219,6 @@ function PrivateChatInner() {
 
   const flatListRef = useRef<FlatList<ChatListItem>>(null)
   const isAtBottomRef = useRef(true)
-  /*
-   * The reader's finger is on the list (begin-drag to end-drag): Android sends the momentum end of the app's own animated
-   * scroll after a grab, and that is not where the reader let go. Coasting: their fling is still moving, and on iOS a tap
-   * that stops it sends no momentum end, so the tap ends it (SCRUM-1321 review).
-   */
-  const draggingRef = useRef(false)
-  const coastingRef = useRef(false)
-  const touchDraggedRef = useRef(false)
   /* Messages that rise into place as they mount: the one you just sent, and the first into an empty thread. */
   const arrivingRef = useRef(new Set<string>())
   const markArriving = useCallback((id: string) => {
@@ -853,22 +845,15 @@ function PrivateChatInner() {
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
               keyboardDismissMode={KEYBOARD_DISMISS}
-              onTouchStart={() => {
-                touchDraggedRef.current = false
-              }}
+              onTouchStart={follow.onTouchStart}
               onTouchEnd={() => {
                 foldPanel()
-                if (coastingRef.current && !touchDraggedRef.current) {
-                  coastingRef.current = false
-                  follow.onGestureEnd(isAtBottomRef.current)
-                }
+                follow.onTouchEnd(isAtBottomRef.current)
               }}
               // Where the reader's gesture comes to rest decides (SCRUM-1321): here, or at the end of the fling it started.
               onScrollEndDrag={(e) => {
                 foldPanel()
-                draggingRef.current = false
-                coastingRef.current = !!e.nativeEvent.velocity?.y
-                if (!coastingRef.current) follow.onGestureEnd(atEndOf(e.nativeEvent))
+                follow.onScrollEndDrag(atEndOf(e.nativeEvent), e.nativeEvent.velocity?.y)
               }}
               // Android clips off-screen rows by default; the jump to the newest under Reduce Motion lands before they are re-attached, a blank frame (SCRUM-1040).
               removeClippedSubviews={false}
@@ -931,15 +916,12 @@ function PrivateChatInner() {
               }}
               onScrollBeginDrag={() => {
                 ruleHeldRef.current = false
-                draggingRef.current = true
-                touchDraggedRef.current = true
                 follow.onScrollBeginDrag()
               }}
               onScroll={(e) => noteOffset(e.nativeEvent)}
               // Where a drag or the pill's jump came to rest: onScroll's last reading can be throttled away (driven 2026-11-11).
               onMomentumScrollEnd={(e) => {
-                coastingRef.current = false
-                if (!draggingRef.current) follow.onGestureEnd(atEndOf(e.nativeEvent))
+                follow.onMomentumScrollEnd(atEndOf(e.nativeEvent))
                 noteOffset(e.nativeEvent)
               }}
               scrollEventThrottle={80}

@@ -1144,14 +1144,15 @@ function RoomChatInner({ params, embedded }: { params: RoomChatParams; embedded?
               }}
               // A reader's own gesture decides where it came to rest; its first events near the end must not re-arm the follow.
               onScrollEndDrag={(e) => {
-                follow.onGestureEnd(atEndOf(e.nativeEvent))
+                follow.onScrollEndDrag(atEndOf(e.nativeEvent), e.nativeEvent.velocity?.y)
                 noteOffset(e.nativeEvent)
               }}
-              onMomentumScrollBegin={follow.onScrollBeginDrag}
               onMomentumScrollEnd={(e) => {
-                follow.onGestureEnd(atEndOf(e.nativeEvent))
+                follow.onMomentumScrollEnd(atEndOf(e.nativeEvent))
                 noteOffset(e.nativeEvent)
               }}
+              onTouchStart={follow.onTouchStart}
+              onTouchEnd={() => follow.onTouchEnd(isAtBottomRef.current)}
               onScroll={(e) => noteOffset(e.nativeEvent)}
               scrollEventThrottle={80}
             />
@@ -1164,6 +1165,8 @@ function RoomChatInner({ params, embedded }: { params: RoomChatParams; embedded?
                 bottom={dockHeight + dockBottom + SPACE.xl}
                 onPress={() => {
                   setNewWhileAway(0)
+                  // Follow until it gets there: from far up the jump lands short of rows not yet measured (SCRUM-1321).
+                  follow.toEnd()
                   scrollToBottom(true)
                 }}
               />

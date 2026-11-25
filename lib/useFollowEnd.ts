@@ -44,6 +44,16 @@ export interface FollowEnd {
    * ponytail: an ask refused here is spent until the reader moves half a screen down and back ("Load older" covers it).
    */
   readerAsksOlder: () => boolean
+  /**
+   * The list's own events, for where the reader's gesture comes to rest (SCRUM-1321 review). A drag lifted with velocity
+   * coasts until its momentum ends; a momentum end while the finger is still down is the app's own animated scroll (Android
+   * sends it after a grab), not the reader letting go; on iOS a tap that stops a fling sends no momentum end, so a touch
+   * that never became a drag ends it where the list stopped.
+   */
+  onScrollEndDrag: (atEnd: boolean, velocity: number | undefined) => void
+  onMomentumScrollEnd: (atEnd: boolean) => void
+  onTouchStart: () => void
+  onTouchEnd: (atEnd: boolean) => void
 }
 
 export function followEnd(scrollToEnd: () => void): FollowEnd {
@@ -51,6 +61,16 @@ export function followEnd(scrollToEnd: () => void): FollowEnd {
   let held = false
   let gesture = false
   let asked = false
+  let dragging = false
+  let coasting = false
+  let touchDragged = false
+  const end = (atEnd: boolean) => {
+    // Android reports momentum for the app's own animated jump too: with no gesture of the reader live, nothing ends.
+    if (!gesture) return
+    gesture = false
+    following = atEnd
+    held = false
+  }
   return {
     onContentSizeChange: () => {
       if (following) scrollToEnd()
@@ -60,13 +80,27 @@ export function followEnd(scrollToEnd: () => void): FollowEnd {
       held = false
       gesture = true
       asked = true
+      dragging = true
+      touchDragged = true
+      coasting = false
     },
-    onGestureEnd: (atEnd) => {
-      // Android reports momentum for the app's own animated jump too: with no gesture of the reader live, nothing ends.
-      if (!gesture) return
-      gesture = false
-      following = atEnd
-      held = false
+    onGestureEnd: end,
+    onScrollEndDrag: (atEnd, velocity) => {
+      dragging = false
+      coasting = !!velocity
+      if (!coasting) end(atEnd)
+    },
+    onMomentumScrollEnd: (atEnd) => {
+      coasting = false
+      if (!dragging) end(atEnd)
+    },
+    onTouchStart: () => {
+      touchDragged = false
+    },
+    onTouchEnd: (atEnd) => {
+      if (!coasting || touchDragged) return
+      coasting = false
+      end(atEnd)
     },
     noteAtEnd: (atEnd) => {
       if (!atEnd || gesture) return
@@ -84,6 +118,7 @@ export function followEnd(scrollToEnd: () => void): FollowEnd {
       following = true
       held = false
       gesture = false
+      coasting = false
     },
     readerAsksOlder: () => {
       const now = asked
