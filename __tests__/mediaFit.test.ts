@@ -103,6 +103,8 @@ describe('clipSource (which copy plays, per advisor 2026-11-25)', () => {
     expect(clipSource(clip, { frame: lead, density: 3, saver: false })).toBe(large.url)
     // 256 × 2 × 0.75 = 384 ≤ 540 → the 540.
     expect(clipSource(clip, { frame: lead, density: 2, saver: false })).toBe(small.url)
+    // 256 × 2.5 = 640 > 540, but × 0.75 = 480: the slack keeps the small copy.
+    expect(clipSource(clip, { frame: lead, density: 2.5, saver: false })).toBe(small.url)
   })
 })
 
