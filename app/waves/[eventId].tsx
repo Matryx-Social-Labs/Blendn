@@ -1,18 +1,23 @@
 import { router, useLocalSearchParams } from 'expo-router'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
-import { WavedAtYouList } from '../../components/blendn/WavedAtYouList'
+import { WavedAtYouList, type WaveBackResult } from '../../components/blendn/WavedAtYouList'
+import { openBlend } from '../../components/crews/CrewsView'
 import { StateScreen } from '../../components/ds/StateScreen'
 import { MomentMatch } from '../../components/ds/MomentMatch'
 import { Sheet } from '../../components/ds/Sheet'
 import { HueProvider } from '../../components/ds/shared'
 import { RouteModal } from '../../components/system/RouteModal'
 import { useToast } from '../../components/Toast'
-import { apiClient, type ReceivedWave } from '../../lib/apiClient'
+import { apiClient, type CrewWave } from '../../lib/apiClient'
+import { blendWith } from '../../lib/crews'
+import { showCrewSafetyActions } from '../../lib/crewSafety'
+import { askOpenToCrews, waveBackAtCrew } from '../../lib/crewWaveBack'
 import { Logger } from '../../lib/logger'
 import { useReducedMotion } from '../../lib/motion'
 import { useNow } from '../../lib/useNow'
-import { ignoreWavesFrom, wavesChanged, wavesListOpened } from '../../lib/roomWaves'
+import { isCrewWave, type AnyWave } from '../../lib/receivedWaves'
+import { ignoreCrewWaves, ignoreWavesFrom, wavesChanged, wavesListOpened } from '../../lib/roomWaves'
 import { showUserSafetyActions } from '../../lib/safetyUtils'
 import { isLinkId } from '../../lib/shareLinks'
 import { WAVE_SETTLE_MS, WAVE_SETTLE_REDUCED_MS, waveRefusal } from '../../lib/waves'
@@ -38,28 +43,67 @@ export default function WavedAtYouScreen() {
   const [sheetGone, setSheetGone] = useState(false)
   useEffect(() => wavesListOpened(), [])
 
+  /** What happens once the list has left: a crew's Mix, a sheet (the app's one SheetHost waits for this route's Modal), or nothing. */
+  const afterList = useRef<(() => void) | null>(null)
+  const leaveFor = useCallback((next: () => void) => {
+    afterList.current = next
+    setOpen(false)
+  }, [])
+
+  const waveBackCrew = useCallback(
+    async (crew: CrewWave): Promise<WaveBackResult> => {
+      if (!eventId) return 'none'
+      const outcome = await waveBackAtCrew(eventId, crew.crewId)
+      if (outcome.kind === 'notOpen') {
+        leaveFor(() =>
+          askOpenToCrews(eventId, crew, (answer) => {
+            wavesChanged()
+            if (answer.kind === 'gone') showToast('They’ve left the room', 'info')
+            else if (answer.kind === 'done' && answer.blend) openBlend(answer.blend, blendWith(crew.name))
+            else if (answer.kind === 'done') showToast(`Waved back at ${crew.name}`, 'success')
+          })
+        )
+        return 'none'
+      }
+      if (outcome.kind === 'error') {
+        showToast(outcome.text, 'error')
+        return 'none'
+      }
+      wavesChanged()
+      if (outcome.kind === 'gone') return 'gone'
+      const { blend } = outcome
+      if (blend) {
+        showToast("It’s a Mix", 'success')
+        leaveFor(() => openBlend(blend, blendWith(crew.name)))
+      }
+      return 'done'
+    },
+    [eventId, leaveFor, showToast]
+  )
+
   const waveBack = useCallback(
-    async (w: ReceivedWave): Promise<boolean> => {
+    async (w: AnyWave): Promise<WaveBackResult> => {
       try {
-        if (!eventId) return false
+        if (!eventId) return 'none'
+        if (isCrewWave(w)) return await waveBackCrew(w)
         const [result] = await Promise.all([apiClient.sendWave(eventId, w.userId), new Promise((r) => setTimeout(r, reduceMotion ? WAVE_SETTLE_REDUCED_MS : WAVE_SETTLE_MS))])
         wavesChanged()
         if (!result.success) {
           showToast(waveRefusal(result.errorCode, result.error).message, 'info')
-          return false
+          return 'none'
         }
         if (result.data?.mutual && result.data.conversationId) {
           setMoment({ conversationId: result.data.conversationId, you: result.data.pseudonyms?.you ?? null, them: result.data.pseudonyms?.them || w.displayName, themId: w.userId })
           setOpen(false)
         }
-        return true
+        return 'done'
       } catch (e) {
         Logger.error('match', 'wave back from the list failed', { error: e })
         showToast(waveRefusal(undefined, undefined).message, 'error')
-        return false
+        return 'none'
       }
     },
-    [eventId, reduceMotion, showToast]
+    [eventId, reduceMotion, showToast, waveBackCrew]
   )
 
   /*
@@ -67,17 +111,21 @@ export default function WavedAtYouScreen() {
    * route's Modal (it waits for the screen turn the route holds): the list leaves first, then it asks over the Room or
    * Banter. A block or report hides their waves there at once (`ignoreWavesFrom` re-reads the strip and the row).
    */
-  const [safetyFor, setSafetyFor] = useState<ReceivedWave | null>(null)
-  const safety = useCallback((w: ReceivedWave) => {
-    setSafetyFor(w)
-    setOpen(false)
-  }, [])
+  const safety = useCallback(
+    (w: AnyWave) =>
+      leaveFor(() => {
+        if (isCrewWave(w)) return showCrewSafetyActions(w, () => ignoreCrewWaves(w.crewId))
+        const done = () => ignoreWavesFrom(w.userId)
+        showUserSafetyActions(w.displayName, w.userId, done, done)
+      }),
+    [leaveFor]
+  )
   const sheetDismissed = () => {
     if (moment) return setSheetGone(true)
     router.back()
-    if (!safetyFor) return
-    const done = () => ignoreWavesFrom(safetyFor.userId)
-    showUserSafetyActions(safetyFor.displayName, safetyFor.userId, done, done)
+    const next = afterList.current
+    afterList.current = null
+    next?.()
   }
 
   return (

@@ -26,7 +26,9 @@ import { blendnClosed, getLeftNotice, isLiveHint, openPass, setDoor, setLeftNoti
 import type { RoomTab } from '../../lib/roomTab'
 import { useChatTabUnread } from '../../lib/useChatTabUnread'
 import { RoomChat } from '../chat/RoomChat'
-import { crewsThatMayLikePeople, crewMessage, crewWaveState, type BlendRef, type CrewsAtEvent } from '../../lib/crews'
+import { blendWith, crewsThatMayLikePeople, crewMessage, crewWaveState, type BlendRef, type CrewsAtEvent } from '../../lib/crews'
+import { showCrewSafetyActions } from '../../lib/crewSafety'
+import { askOpenToCrews, waveBackAtCrew, type WaveBackOutcome } from '../../lib/crewWaveBack'
 import { crewsApi } from '../../lib/crewsApi'
 import { COLOR, DURATION, EASING, MATERIAL, RADIUS, REDUCE_MOTION, SIZE, SPACE } from '../../lib/design/tokens'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
@@ -36,8 +38,8 @@ import { everyoneHead, meetNext } from '../../lib/roomMoments'
 import { eventRoomDoor } from '../../lib/eventRoomDoor'
 import { recapPeopleOpen, roomRecap, type RoomRecap as Recap } from '../../lib/roomRecap'
 import { bannerState } from '../../lib/roomVisibility'
-import { useReceivedWaves } from '../../lib/receivedWaves'
-import { useRoomWaves, waveShown, type RoomWave } from '../../lib/roomWaves'
+import { isCrewWave, useReceivedWaves } from '../../lib/receivedWaves'
+import { ignoreCrewWaves, useRoomWaves, waveKey, waveShown, type RoomWave } from '../../lib/roomWaves'
 import { wavedAgo, WAVE_SETTLE_MS, WAVE_SETTLE_REDUCED_MS } from '../../lib/waves'
 import { showUserSafetyActions } from '../../lib/safetyUtils'
 import { showSheet } from '../../lib/sheet'
@@ -125,7 +127,8 @@ function chooseAs(crews: CrewsAtEvent['myCrews'], title: string, justMe = true):
       kind: 'actions',
       hue: 'rose',
       title,
-      message: 'Your crew chat says who liked on its behalf.',
+      // A wave at a crew is said in your crew's chat; one at a person is not (admin #1007), and shows them the crew alone.
+      message: justMe ? 'Your crew chat says who waved on its behalf.' : 'They see your crew, never you.',
       onDismiss: () => resolve(undefined),
       actions: [
         ...crews.map((c) => ({ label: c.name, then: () => resolve(c.crewId) })),
@@ -753,12 +756,45 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
     },
     [room, reduceMotion, reloadReceived, say]
   )
+  /** A crew that waved at you, answered as yourself: a Mix when it was mutual; gone, off and errors each say so. */
+  const waveBackCrew = async (crew: { crewId: string; name: string; emblemSeed: string | null }) => {
+    if (!eventId || answering) return
+    const settled = (outcome: WaveBackOutcome) => {
+      reloadReceived()
+      if (outcome.kind === 'gone') return say('They’ve left the room')
+      if (outcome.kind === 'error') return say(outcome.text, 'error')
+      crews.markLiked(crew.crewId)
+      if (!outcome.blend) return
+      const here = crewCards(crews).find((c) => c.crewId === crew.crewId)
+      const seed = crew.emblemSeed ?? here?.emblemSeed
+      // The moment draws their emblem and how many are here; without both (not on the loaded page) the Mix opens itself.
+      if (!here || !seed) return openBlend(outcome.blend, blendWith(crew.name))
+      setBlend({
+        ref: outcome.blend,
+        title: blendWith(crew.name),
+        sides: { ours: { kind: 'person', pseudonym: myMarkSeed }, theirs: { kind: 'crew', name: crew.name, emblemSeed: seed, count: here.presentCount } },
+      })
+    }
+    setAnswering(`crew:${crew.crewId}`)
+    const outcome = await waveBackAtCrew(eventId, crew.crewId)
+    setAnswering(null)
+    if (outcome.kind === 'notOpen') return askOpenToCrews(eventId, crew, settled)
+    settled(outcome)
+  }
+  const crewSafety = (crewId: string, name: string) =>
+    showCrewSafetyActions({ crewId, name }, () => {
+      crews.drop(crewId)
+      ignoreCrewWaves(crewId)
+    })
+  /** A crew's emblem from the list or from its wave; the socket sends none. */
+  const crewSeed = (crewId: string): string | null =>
+    crewCards(crews).find((c) => c.crewId === crewId)?.emblemSeed ?? receivedPage?.crewWaves?.find((c) => c.crewId === crewId)?.emblemSeed ?? null
   const seeAllWaves = useCallback(() => {
     if (eventId) router.push({ pathname: '/waves/[eventId]', params: { eventId, title: room.event?.title ?? '' } } as never)
   }, [eventId, room.event?.title])
   /** Block or Report from a wave (anti-spam W7): either removes them, and every wave of theirs, from this room. */
   const waveSafety = useCallback((id: string, name: string) => showUserSafetyActions(name, id, () => room.remove(id), () => room.remove(id)), [room])
-  const toastWave = useCallback((w: RoomWave) => void waveBack(w.fromUserId, w.fromName), [waveBack])
+  const toastWave = (w: RoomWave) => void ('fromCrewId' in w ? waveBackCrew({ crewId: w.fromCrewId, name: w.fromName, emblemSeed: crewSeed(w.fromCrewId) }) : waveBack(w.fromUserId, w.fromName))
 
   const openProfile = useCallback(
     (p: OpenCard, seen?: RoomPerson) => {
@@ -806,17 +842,16 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
   /** Block and Report, once the card has left (`closeCardThen`). Either removes them, and their waves, from this room. */
   const safety = (p: OpenCard) => closeCardThen(() => showUserSafetyActions(p.name, p.id, () => room.remove(p.id), () => room.remove(p.id)))
   /*
-   * A like on your crew's behalf. The answer is `{ liked: true }` whatever the
-   * server learned about them, so all this may say is that the like went,
-   * unless it made a Blend.
+   * A wave at a person on your crew's behalf (admin #1007). A refusal about them answers as a wave that stood, so all this may
+   * say is that the wave went, unless it made a Mix.
    */
-  const likeForCrew = async (p: RoomPerson, crewId: string) => {
+  const waveForCrew = async (p: RoomPerson, crewId: string) => {
     if (!eventId || likingForCrew.current) return
     likingForCrew.current = true
     try {
-      const result = await crewsApi.likePersonAsCrew(eventId, p.id, crewId)
+      const result = await crewsApi.wavePersonAsCrew(eventId, p.id, crewId)
       if (!result.success || !result.data) {
-        say(crewMessage(result, 'card', 'Couldn’t send the like. Try again.'), 'error')
+        say(crewMessage(result, 'card', 'Couldn’t send the wave. Try again.'), 'error')
         return
       }
       const crew = myCrewsHere.find((c) => c.crewId === crewId)
@@ -840,15 +875,15 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
     if (personAs === 'ask') {
       closeCardThen(() => {
         void chooseLikingAs(soloCrews, 'Wave for which crew?', false).then((answer) => {
-          if (answer) void likeForCrew(p, answer)
+          if (answer) void waveForCrew(p, answer)
         })
       })
       return
     }
-    if (personAs) closeCardThen(() => void likeForCrew(p, personAs.crewId))
+    if (personAs) closeCardThen(() => void waveForCrew(p, personAs.crewId))
   }
   /** The grid's double tap is your crew's like, when one crew is the answer; a person is waved at from their card. */
-  const doubleTapLike = personAs && personAs !== 'ask' ? (p: RoomPerson) => void likeForCrew(p, personAs.crewId) : null
+  const doubleTapLike = personAs && personAs !== 'ask' ? (p: RoomPerson) => void waveForCrew(p, personAs.crewId) : null
   /*
    * "Check in" beside a lapsed check-in (R3-D4 4.3): back to the pass. This
    * room's event is docked as the door and the room re-read; once the server
@@ -1073,9 +1108,9 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
                 page={receivedPage}
                 now={now}
                 sending={answering}
-                onWaveBack={(w) => void waveBack(w.userId, w.displayName)}
+                onWaveBack={(w) => void (isCrewWave(w) ? waveBackCrew(w) : waveBack(w.userId, w.displayName))}
                 onSeeAll={seeAllWaves}
-                onSafety={(w) => waveSafety(w.userId, w.displayName)}
+                onSafety={(w) => (isCrewWave(w) ? crewSafety(w.crewId, w.name) : waveSafety(w.userId, w.displayName))}
               />
             }
             crewsHere={showSegments && crews.state.status === 'ready' ? crews.state.data.total : null}
@@ -1178,12 +1213,13 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
       {/* A wave while you're here: L-A, Wave back inline; L-B, a fold opens the list (board 03). */}
       {waves.toast ? (
         <WaveToast
-          key={`${waves.toast.waves[0].fromUserId}:${waves.toast.waves[0].at}`}
+          key={`${waveKey(waves.toast.waves[0])}:${waves.toast.waves[0].at}`}
           toast={waves.toast}
           onOpen={(w) => openCard({ id: w.fromUserId, name: w.fromName })}
           onWaveBack={toastWave}
           onSeeAll={seeAllWaves}
-          onSafety={(w) => waveSafety(w.fromUserId, w.fromName)}
+          onSafety={(w) => ('fromCrewId' in w ? crewSafety(w.fromCrewId, w.fromName) : waveSafety(w.fromUserId, w.fromName))}
+          emblemOf={crewSeed}
           onDone={() => waves.toast && waveShown(waves.toast)}
         />
       ) : null}

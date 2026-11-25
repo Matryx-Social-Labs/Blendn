@@ -6,7 +6,7 @@
 import { act, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react-native'
 
 jest.mock('expo-router', () => ({ useFocusEffect: (effect: () => void) => { const { useEffect } = require('react'); useEffect(effect, [effect]) } }))
-jest.mock('../lib/crewsApi', () => ({ crewsApi: { waveCrew: jest.fn(), likePersonAsCrew: jest.fn(), hiddenCrews: jest.fn() } }))
+jest.mock('../lib/crewsApi', () => ({ crewsApi: { waveCrew: jest.fn(), wavePersonAsCrew: jest.fn(), hiddenCrews: jest.fn() } }))
 
 import { CrewWavedNotice } from '../components/chat/CrewWavedNotice'
 import { crewLikeLine } from '../lib/crews'
@@ -51,14 +51,16 @@ describe('Wave back from the chat', () => {
     api.waveCrew.mockResolvedValue({ success: false, errorCode: 'NOT_FOUND', error: 'Not found' } as never)
     expect(await waveBackFromChat({ eventId: 'e1', fromCrewId: 'c9' }, 'mine')).toEqual({ kind: 'gone' })
   })
-  it('at a person: the crew like of them; a Mix opens', async () => {
+  it('at a person: the wave for this crew at their handle; a Mix opens', async () => {
     const blend = { blendId: 'b', chatGroupId: 'g' }
-    api.likePersonAsCrew.mockResolvedValue({ success: true, data: { liked: true, blend } })
+    api.wavePersonAsCrew.mockResolvedValue({ success: true, data: { sent: true, mutual: true, blend } })
     expect(await waveBackFromChat({ eventId: 'e1', fromUserId: 'rh_1' }, 'mine')).toEqual({ kind: 'done', blend })
-    expect(api.likePersonAsCrew).toHaveBeenCalledWith('e1', 'rh_1', 'mine')
+    expect(api.wavePersonAsCrew).toHaveBeenCalledWith('e1', 'rh_1', 'mine')
   })
-  it('at a person who left ({ blend: null } is not "gone"; 404 is)', async () => {
-    api.likePersonAsCrew.mockResolvedValue({ success: false, errorCode: 'NOT_FOUND', error: 'x' } as never)
+  it('at a person: a wave that stood with no Mix is done, not gone (a refusal about them says nothing); 404 is gone', async () => {
+    api.wavePersonAsCrew.mockResolvedValue({ success: true, data: { sent: true, mutual: false } })
+    expect(await waveBackFromChat({ eventId: 'e1', fromUserId: 'rh_1' }, 'mine')).toEqual({ kind: 'done', blend: null })
+    api.wavePersonAsCrew.mockResolvedValue({ success: false, errorCode: 'NOT_FOUND', error: 'x' } as never)
     expect(await waveBackFromChat({ eventId: 'e1', fromUserId: 'rh_1' }, 'mine')).toEqual({ kind: 'gone' })
   })
   it('checked out: the server’s “liking” is said as a wave, the only gesture left', async () => {
