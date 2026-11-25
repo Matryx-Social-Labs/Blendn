@@ -738,8 +738,8 @@ describe('Terms and Privacy open in the app', () => {
     await act(async () => { fireEvent.press(screen.getByRole('link', { name: 'Privacy' })) })
     // One macrotask after the tap (lib/links: a sheet closing in that tick is waited for, SCRUM-994).
     await act(async () => new Promise((resolve) => setTimeout(resolve, 0)))
-    expect(WebBrowser.openBrowserAsync).toHaveBeenNthCalledWith(1, 'https://blendn.app/terms', expect.any(Object))
-    expect(WebBrowser.openBrowserAsync).toHaveBeenNthCalledWith(2, 'https://blendn.app/privacy', expect.any(Object))
+    expect(WebBrowser.openBrowserAsync).toHaveBeenNthCalledWith(1, 'https://www.blendn.app/terms', expect.any(Object))
+    expect(WebBrowser.openBrowserAsync).toHaveBeenNthCalledWith(2, 'https://www.blendn.app/privacy', expect.any(Object))
     expect(linking).not.toHaveBeenCalled()
     linking.mockRestore()
   })
