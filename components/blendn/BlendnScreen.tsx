@@ -1078,7 +1078,7 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
                 onSafety={(w) => waveSafety(w.userId, w.displayName)}
               />
             }
-            crewsHere={showSegments && crews.state.status === 'ready' ? crews.state.data.crews.length : null}
+            crewsHere={showSegments && crews.state.status === 'ready' ? crews.state.data.total : null}
             view={gridView}
             onView={setGridView}
             crewStrip={<PeopleCrewStrip eventId={eventId ?? ''} myCrews={myCrewsHere} mine={crews.mine} eventTitle={eventTitle} />}

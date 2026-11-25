@@ -61,6 +61,8 @@ describe('the surfaces are wired', () => {
     const screen = src('components/blendn/BlendnScreen.tsx')
     expect(screen).toContain('<CrewsHead')
     expect(screen).toContain('crewCards={crewCards(crews)}')
+    // The row counts every crew here, as the Crews view's head does, never the pages read so far (44 here said "30 crews here").
+    expect(screen).toContain("crewsHere={showSegments && crews.state.status === 'ready' ? crews.state.data.total : null}")
     const room = src('components/blendn/RoomView.tsx')
     // One row in and out of the crews, in the friends row's shape; never a second People | Crews switch.
     expect(room).toContain('<RoomCrewsRow')
