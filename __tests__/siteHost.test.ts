@@ -60,6 +60,16 @@ describe('a production build (the variable unset)', () => {
     expect(share.parseLink(`https://staging.blendn.app/event/${ID}`)).toBeNull()
     expect(links.isOurPage('https://staging.blendn.app/terms')).toBe(false)
   })
+
+  it('a staging link that reaches it opens in the browser; the apex is its own and opens in the app', async () => {
+    const { intent, open } = b()
+    open.mockClear()
+    expect(await intent.redirectSystemPath({ path: `https://staging.blendn.app/event/${ID}`, initial: false })).toBe('')
+    expect(open).toHaveBeenCalledWith(`https://staging.blendn.app/event/${ID}`)
+    open.mockClear()
+    expect(await intent.redirectSystemPath({ path: `https://blendn.app/event/${ID}`, initial: true })).toBe(`/event/${ID}`)
+    expect(open).not.toHaveBeenCalled()
+  })
 })
 
 describe('a staging build (EXPO_PUBLIC_SITE_HOST=staging.blendn.app)', () => {
@@ -97,6 +107,21 @@ describe('a staging build (EXPO_PUBLIC_SITE_HOST=staging.blendn.app)', () => {
     open.mockClear()
     expect(await intent.redirectSystemPath({ path: `https://www.blendn.app/f/abc`, initial: true })).toBe('/')
     expect(open).toHaveBeenCalledWith('https://www.blendn.app/f/abc')
+  })
+
+  it('the apex is production’s too: it opens in the browser', async () => {
+    const { intent, open } = b()
+    open.mockClear()
+    expect(await intent.redirectSystemPath({ path: `https://blendn.app/e/${ID}`, initial: false })).toBe('')
+    expect(open).toHaveBeenCalledWith(`https://blendn.app/e/${ID}`)
+  })
+
+  it('a browser that will not open is logged by host, and the app still stays where it is', async () => {
+    const { intent, open, warn } = b()
+    open.mockRejectedValueOnce(new Error('no browser'))
+    expect(await intent.redirectSystemPath({ path: 'https://www.blendn.app/f/abc', initial: false })).toBe('')
+    await new Promise((resolve) => setImmediate(resolve))
+    expect(warn).toHaveBeenCalledWith('general', expect.any(String), expect.objectContaining({ host: 'www.blendn.app' }))
   })
 
   it('control: its own link opens in the app, and no browser', async () => {

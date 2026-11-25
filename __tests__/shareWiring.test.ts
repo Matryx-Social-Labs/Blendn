@@ -52,12 +52,16 @@ describe('one tray for every surface', () => {
 
   it('the site host is written in `lib/shareLinks.ts` alone (SCRUM-1364): no other code names www or the apex as a link', () => {
     // Comments may name the site; code may not. `//` only after whitespace, so a URL's own `//` is not taken for one.
-    const code = (f: string) => read(f).replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|\s)\/\/.*$/gm, '$1')
+    const strip = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|\s)\/\/.*$/gm, '$1')
+    const code = (f: string) => strip(read(f))
     const hardCoded = /['"`]https:\/\/([a-z0-9-]+\.)*blendn\.app\b|['"`](www\.)?blendn\.app['"`]/
     const offenders = [...walk('app'), ...walk('components'), ...walk('lib')].filter((f) => f !== 'lib/shareLinks.ts' && hardCoded.test(code(f)))
     expect(offenders).toEqual([])
-    // Control: the one module still holds the production default, and the pattern catches a literal.
+    // Controls: the one module still holds the production default; each form is caught, and a comment or a derived URL is not.
     expect(hardCoded.test(code('lib/shareLinks.ts'))).toBe(true)
+    for (const literal of ["'https://www.blendn.app/x'", '`https://blendn.app/x`', '"https://staging.blendn.app"', "'blendn.app'", "'www.blendn.app'"]) expect(hardCoded.test(literal)).toBe(true)
+    for (const fine of ['const a = `${SITE_ORIGIN}/terms`', "'dashboard.blendn.app'", "'support@blendn.app'"]) expect(hardCoded.test(fine)).toBe(false)
+    expect(strip('x(1) // https://www.blendn.app/x\n/* \'https://blendn.app\' */')).not.toMatch(hardCoded)
   })
 })
 
