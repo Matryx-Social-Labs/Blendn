@@ -24,6 +24,7 @@ import { useReducedMotion } from '../lib/motion'
 import { useSkeletonCrossfade } from '../components/motion/useSkeletonCrossfade'
 
 /** Empty pages with a cursor after them, followed on in one go before the foot waits for the next end-reach. */
+const PEOPLE_LINE = 'They can’t see you or message you. They aren’t told.'
 const MAX_EMPTY_HOPS = 5
 /** A search asks the server once typing pauses this long. */
 const SEARCH_DEBOUNCE_MS = 300
@@ -261,13 +262,12 @@ function BlockedUsersContent() {
           data={blockedUsers}
           ListHeaderComponent={
             <View style={styles.head}>
-              {total > 0 ? (
-                <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.lede]}>
-                  They can’t see you or message you. They aren’t told.
-                </Text>
+              {/* Each group owns its line (advisor 2026-11-25): over the crews, the people's line said something false of them. */}
+              {total > 0 && crewCount === 0 ? (
+                <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.lede]}>{PEOPLE_LINE}</Text>
               ) : null}
               {searched ? null : <BlockedCrews onCount={setCrewCount} />}
-              {crewCount > 0 && total > 0 ? <SectionHeader title="People" count={total} /> : null}
+              {crewCount > 0 && total > 0 ? <SectionHeader title="People" count={total} caption={PEOPLE_LINE} /> : null}
               {total > BLOCKED_SEARCH_FROM ? (
                 <SearchField
                   value={query}
