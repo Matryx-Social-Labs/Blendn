@@ -853,7 +853,7 @@ function PrivateChatInner() {
               maxToRenderPerBatch={12}
               windowSize={10}
               initialNumToRender={25}
-              onStartReached={() => void loadOlderMessages()}
+              onStartReached={() => follow.touched() && void loadOlderMessages()}
               // Older pages go in above the reader: the row in view stays in view, so the unread rule stays under the thumb (SCRUM-958).
               maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
               ListHeaderComponent={

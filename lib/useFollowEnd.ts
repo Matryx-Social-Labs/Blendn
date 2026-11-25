@@ -29,12 +29,19 @@ export interface FollowEnd {
   noteScroll: (atEnd: boolean) => void
   /** Stop following — the thread opened somewhere else, at its first unread. */
   stop: () => void
+  /**
+   * Whether the reader has scrolled the list by hand. The list's top (`onStartReached`) asks for older pages only then: a
+   * first page paints at offset 0, the top, before the jump to the newest lands, and a long chat opened with nothing cached
+   * read page after page above the reader and flickered until it had them all (SCRUM-1321).
+   */
+  touched: () => boolean
 }
 
 export function followEnd(scrollToEnd: () => void): FollowEnd {
   let following = true
   let held = false
   let gesture = false
+  let touched = false
   return {
     onContentSizeChange: () => {
       if (following) scrollToEnd()
@@ -43,6 +50,7 @@ export function followEnd(scrollToEnd: () => void): FollowEnd {
       following = false
       held = false
       gesture = true
+      touched = true
     },
     onGestureEnd: (atEnd) => {
       gesture = false
@@ -61,6 +69,7 @@ export function followEnd(scrollToEnd: () => void): FollowEnd {
       following = false
       held = true
     },
+    touched: () => touched,
   }
 }
 
