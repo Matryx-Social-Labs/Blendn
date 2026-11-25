@@ -61,6 +61,7 @@ import { Title } from '../ds/Title'
 import { PAGE_TITLE, useScreenReader } from '../ds/shared'
 import { toastDwell } from '../ds/Toast'
 import { dateStamp, eventDock, holdUnder, shortDistance, untilWords, whoLine, type DockDoes } from '../../lib/eventFacts'
+import { byLine } from '../../lib/roomInfo'
 import { readingOf } from '../../lib/mapPresence'
 import type { DistanceReading } from '../../lib/placesPane'
 import { SceneLightbox } from '../scene/SceneLightbox'
@@ -359,7 +360,7 @@ export default function EventDetail() {
       max_capacity: d.maxCapacity || d.max_capacity || 0,
       current_capacity: d.currentCapacity || d.current_capacity || 0,
       cover_image_url: d.coverImageUrl || d.cover_image_url || '',
-      organizer: d.organizer?.name || '',
+      organizer: byLine(d.organizer) ?? '',
       latitude: d.latitude ?? 0,
       longitude: d.longitude ?? 0,
       check_in_radius: d.checkInRadius || d.check_in_radius || 100,

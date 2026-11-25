@@ -596,6 +596,9 @@ export type PeerRatingIssue = 'none' | 'uncomfortable' | 'no_show' | 'misreprese
 
 export type RsvpStatus = 'going' | 'maybe' | 'not_going' | 'waitlisted'
 
+/** `organizer.kind` on an event (admin #1005): an org, a venue's own day, Blendn standing in, or a person's own event. */
+export type OrganizerKind = 'org' | 'venue' | 'platform' | 'person'
+
 export interface MatchCard {
   userId: string
   /** Pseudonym unless they revealed for this event. Never the real name otherwise. */
@@ -1020,10 +1023,12 @@ export interface EventApiItem {
   interested_preview?: Array<{ id: string; name: string | null; image: string | null }>
   interestedUsers?: Array<{ id: string; name?: string | null; avatar?: string | null }>
   organizer?: {
-    id?: string
+    id?: string | null
     name?: string | null
     image?: string | null
     email?: string
+    /** Whose event it is: only an org is a host (Room info); a person's own event signs nothing (`lib/roomInfo.ts`). */
+    kind?: OrganizerKind
   }
   /**
    * "Running this event? Claim it" — detail endpoint only. `{ url }` for a

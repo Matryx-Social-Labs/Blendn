@@ -96,7 +96,7 @@ const detail = (over: Record<string, unknown> = {}, status: Record<string, unkno
     maxCapacity: 0,
     latitude: 12.9,
     longitude: 77.6,
-    organizer: { id: 'org', name: 'Toit' },
+    organizer: { id: 'org', name: 'Toit', kind: 'org' },
     stats: { rsvpCount: 42, favoriteCount: 0, checkInCount: 0 },
     userStatus: { isFavorited: false, isCheckedIn: false, rsvpStatus: null, ...status },
     media: [],
@@ -697,6 +697,25 @@ describe('no people count under five is printed (the Pulse\'s rule)', () => {
     const row = screen.getByTestId('scene-guide-who')
     expect(within(row).getAllByText(/./)).toHaveLength(1)
     expect(StyleSheet.flatten(within(row).getByText('By Toit').props.style).color).toBe(COLOR.textPrimary)
+  })
+  // SCRUM-1115, decided per advisor: "By" is attribution, so a venue's day and Blendn standing in sign it, a person's own
+  // event (their own name) does not, and nor does a server that does not say whose event it is.
+  it.each([
+    ['venue', 'Toit', '42 going · 18+. By Toit'],
+    ['platform', 'Blendn', '42 going · 18+. By Blendn'],
+  ])('a %s event signs "By {name}"', async (kind, name, label) => {
+    api.getEvent.mockResolvedValue(detail({ organizer: { id: null, name, kind } }) as never)
+    await open()
+    expect(await who()).toBe(label)
+  })
+  it.each([
+    ['a person’s own event', { id: 'u-7', name: 'Priya Raman', kind: 'person' }],
+    ['no kind (an older server)', { id: 'org', name: 'Priya Raman' }],
+  ])('%s: no "By" line, the name nowhere on the page', async (_, organizer) => {
+    api.getEvent.mockResolvedValue(detail({ organizer }) as never)
+    await open()
+    expect(await who()).toBe('42 going · 18+')
+    expect(screen.queryByText(/Priya Raman/)).toBeNull()
   })
   it('live, not checked in, under five here: "Be one of the first" (control)', async () => {
     api.getEvent.mockResolvedValue(liveNoFacts(2, {}) as never)
