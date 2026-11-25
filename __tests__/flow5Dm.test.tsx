@@ -390,6 +390,17 @@ describe('the thread’s states', () => {
     }
   })
 
+  // SCRUM-1107: held, the empty state stayed where the header or the skeleton had been (top after a deep link, under the
+  // composer after a Lobby accept). An empty thread has no reader's place to keep; the first message brings the hold back.
+  it.each([
+    ['empty: holds nothing, so Say hi sits at the bottom by the composer', [], false],
+    ['with a message: keeps the reader’s place', [theirs], true],
+  ])('%s', async (_name, messages, held) => {
+    api.getConversationMessages.mockResolvedValue(page(messages) as never)
+    await open()
+    expect(!!screen.getByTestId('dm-feed').props.maintainVisibleContentPosition).toBe(held)
+  })
+
   /*
    * SCRUM-958: with 65 unread the first one is a page back, so the thread opens, loads that page, then scrolls to the rule.
    * Three things moved it off screen on Android: older pages put above it (the list's top asks for them), the jump landing

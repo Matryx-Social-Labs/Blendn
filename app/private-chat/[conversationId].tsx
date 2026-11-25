@@ -105,6 +105,8 @@ const revealOut = FadeOut.duration(DURATION.base)
  */
 /** One page of a thread, and the width of a full read. */
 const DM_PAGE = 50
+/** The list's hold on the reader's place: by row 1, the first message (row 0 is a day pill). */
+const KEEP_READERS_PLACE = { minIndexForVisible: 1 } as const
 /** Kept warm so a re-open paints the thread at once; the network read that follows replaces it. */
 const MESSAGES_CACHE_TTL = 5 * 60 * 1000
 
@@ -866,7 +868,9 @@ function PrivateChatInner() {
               // Older pages go in above the reader: the row in view stays in view, so the unread rule stays under the thumb (SCRUM-958).
               // From row 1, the first message: row 0 is a day pill whose key an older page of the same day keeps, and held by it
               // the reader sat at the top of each new page with nothing above to scroll into (SCRUM-1321).
-              maintainVisibleContentPosition={{ minIndexForVisible: 1 }}
+              // Only once there is a message: held, an empty thread's Say hi stayed where the header or the skeleton had been
+              // (top after a deep link, under the composer after a Lobby accept), not at the bottom by the composer (SCRUM-1107).
+              maintainVisibleContentPosition={feed.length ? KEEP_READERS_PLACE : undefined}
               ListHeaderComponent={
                 <View>
                   {/* Permanent, not an empty state: seen by both, whoever types first. */}
