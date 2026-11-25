@@ -654,4 +654,14 @@ describe('socket messages take their place by (createdAt, id), not by arrival (S
     await flush()
     expect(order()).toEqual(['order ma', 'order mb'])
   })
+
+  it('puts a message whose time does not parse last, as it arrived', async () => {
+    await open()
+    await act(async () => {
+      deliver('m2', '2026-10-15T19:06:01.000Z')
+      deliver('mx', 'not a time')
+    })
+    await flush()
+    expect(order()).toEqual(['order m2', 'order mx'])
+  })
 })

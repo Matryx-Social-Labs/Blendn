@@ -510,7 +510,7 @@ function RoomChatInner({ params, embedded }: { params: RoomChatParams; embedded?
               insertInOrder(
                 prev,
                 { ...incoming, replyTo: incoming.reply_to_message_id ? prev.find((m) => m.message_id === incoming.reply_to_message_id) : undefined },
-                stamp,
+                (m) => m.created_at,
                 (m) => m.message_id
               )
         )
