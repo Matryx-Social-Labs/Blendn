@@ -199,4 +199,18 @@ describe('a long DM, opened with nothing cached (SCRUM-1321)', () => {
     await act(async () => fireEvent(feed(), 'contentSizeChange', 393, CONTENT + 240))
     expect(scrollToEnd).not.toHaveBeenCalled()
   })
+
+  /* Android, driven: from 150 rows up the jump lands short of rows not yet measured, and nothing carried it the rest of the way. */
+  it('the jump to the newest follows the end until it gets there', async () => {
+    await render(<PrivateChat />)
+    await flush()
+    await firstFrame()
+    await act(async () => fireEvent(feed(), 'scrollBeginDrag', scrolled(CONTENT - VIEW)))
+    await act(async () => fireEvent(feed(), 'scrollEndDrag', scrolled(200)))
+    await act(async () => fireEvent.scroll(feed(), scrolled(200)))
+    await act(async () => fireEvent.press(screen.getByTestId('chat-newest')))
+    scrollToEnd.mockClear()
+    await act(async () => fireEvent(feed(), 'contentSizeChange', 393, CONTENT + 900))
+    expect(scrollToEnd).toHaveBeenCalled()
+  })
 })
