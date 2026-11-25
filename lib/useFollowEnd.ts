@@ -31,6 +31,8 @@ export interface FollowEnd {
   noteScroll: (atEnd: boolean) => void
   /** Stop following — the thread opened somewhere else, at its first unread. */
   stop: () => void
+  /** The reader asked for the newest (the pill): follow until there, ending any gesture still coasting (SCRUM-1321). */
+  toEnd: () => void
   /**
    * The list's top (`onStartReached`) reached by the reader's own gesture: true once per drag or fling, then false until the
    * next. A first page paints at offset 0, the top, before the jump to the newest lands, so the top asked for an older page
@@ -76,6 +78,11 @@ export function followEnd(scrollToEnd: () => void): FollowEnd {
     stop: () => {
       following = false
       held = true
+    },
+    toEnd: () => {
+      following = true
+      held = false
+      gesture = false
     },
     readerAsksOlder: () => {
       const now = asked
