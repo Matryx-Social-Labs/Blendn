@@ -35,10 +35,9 @@ export interface RoomButtonInput {
   /** The event you are checked into, if any. */
   activeEventId?: string | null
   /**
-   * An event whose geofence you are currently inside, per `lib/presence.ts`.
+   * An event whose geofence you are currently inside (`roomSignal`).
    *
-   * Must come from `presenceAction`'s hysteresis rather than a fresh distance
-   * check. A raw `isInside()` flickers on GPS noise, and this button flickering
+   * Must be a settled answer rather than a fresh distance check. A raw `isInside()` flickers on GPS noise, and this button flickering
    * between "check in" and "nothing on" while somebody stands still is worse
    * than it being slow to notice them arrive.
    */
