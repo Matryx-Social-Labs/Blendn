@@ -170,4 +170,33 @@ describe('a long DM, opened with nothing cached (SCRUM-1321)', () => {
     await act(async () => fireEvent(feed(), 'contentSizeChange', 393, CONTENT + 120))
     expect(scrollToEnd).toHaveBeenCalled()
   })
+
+  /* Android, driven: the app's own animated jump reports momentum too, and lands short while the new row lays out. */
+  it('the app’s own jump to the newest, landing short, keeps following: the row being laid out is brought into view', async () => {
+    await render(<PrivateChat />)
+    await flush()
+    await firstFrame()
+    await act(async () => fireEvent(feed(), 'momentumScrollBegin', scrolled(CONTENT - VIEW - 300)))
+    await act(async () => fireEvent(feed(), 'momentumScrollEnd', scrolled(CONTENT - VIEW - 300)))
+    scrollToEnd.mockClear()
+    await act(async () => fireEvent(feed(), 'contentSizeChange', 393, CONTENT + 120))
+    expect(scrollToEnd).toHaveBeenCalled()
+  })
+
+  it('a fling up from the newest message stays the reader’s through its momentum, and follows again only if it rests at the end', async () => {
+    await render(<PrivateChat />)
+    await flush()
+    await firstFrame()
+    const fling = (y: number) => ({ nativeEvent: { ...scrolled(y).nativeEvent, velocity: { x: 0, y: 2.4 } } })
+    await act(async () => fireEvent(feed(), 'scrollBeginDrag', scrolled(CONTENT - VIEW)))
+    // The finger lifts while still near the end; momentum carries the list up.
+    await act(async () => fireEvent(feed(), 'scrollEndDrag', fling(CONTENT - VIEW - 20)))
+    await act(async () => fireEvent(feed(), 'momentumScrollBegin', scrolled(CONTENT - VIEW - 40)))
+    scrollToEnd.mockClear()
+    await act(async () => fireEvent(feed(), 'contentSizeChange', 393, CONTENT + 120))
+    expect(scrollToEnd).not.toHaveBeenCalled()
+    await act(async () => fireEvent(feed(), 'momentumScrollEnd', scrolled(900)))
+    await act(async () => fireEvent(feed(), 'contentSizeChange', 393, CONTENT + 240))
+    expect(scrollToEnd).not.toHaveBeenCalled()
+  })
 })
