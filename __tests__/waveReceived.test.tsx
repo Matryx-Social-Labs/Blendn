@@ -14,16 +14,21 @@ import { BanterWavesRow } from '../components/banter/BanterWavesRow'
 import { WaveToast } from '../components/blendn/WaveToast'
 import { WavedAtYouList } from '../components/blendn/WavedAtYouList'
 import { WavedAtYouStrip } from '../components/blendn/WavedAtYouStrip'
-import type { ReceivedWave, ReceivedWavesPage } from '../lib/apiClient'
+import type { CrewWave, ReceivedWave, ReceivedWavesPage } from '../lib/apiClient'
 import { COLOR } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
-import { othersLine, toastTitle, waitingStrip, wavedAtYouLine } from '../lib/receivedWaves'
-import { FOLD_MS, ignoreWavesFrom, listenForWaves, useRoomWaves, waveShown } from '../lib/roomWaves'
+import { othersLine, toastTitle, waitingRows, waitingStrip, wavedAtYouLine, listRows, waveId, type AnyWave } from '../lib/receivedWaves'
+import { FOLD_MS, ignoreCrewWaves, ignoreWavesFrom, listenForWaves, useRoomWaves, waveShown } from '../lib/roomWaves'
 import { isLitControl } from './helpers/lit'
 
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
 const mockWaveListeners = new Set<(d: { eventId: string; fromUserId: string; fromName: string }) => void>()
+const mockCrewWaveListeners = new Set<(d: { eventId: string; fromCrewId: string; fromName: string }) => void>()
 jest.mock('../lib/socketClient', () => ({
+  subscribeToRoomCrewWave: (fn: (d: { eventId: string; fromCrewId: string; fromName: string }) => void) => {
+    mockCrewWaveListeners.add(fn)
+    return () => mockCrewWaveListeners.delete(fn)
+  },
   subscribeToRoomWave: (fn: (d: { eventId: string; fromUserId: string; fromName: string }) => void) => {
     mockWaveListeners.add(fn)
     return () => mockWaveListeners.delete(fn)
@@ -159,7 +164,7 @@ describe('S-A: the strip', () => {
     const s = waitingStrip(page(waves, { total: 12_480, nextCursor: 'c1' }))
     expect(s.kind).toBe('several')
     if (s.kind !== 'several') return
-    expect(s.faces.map((w) => w.userId)).toEqual(['rh_1', 'rh_2', 'rh_3'])
+    expect(s.faces.map(waveId)).toEqual(['rh_1', 'rh_2', 'rh_3'])
     expect(s.others).toBe(12_479)
     expect(othersLine(s.others)).toBe('and 12k others waved at you')
     expect(othersLine(1)).toBe('and 1 other waved at you')
@@ -232,7 +237,7 @@ describe('See all: paged 20 from the server', () => {
     const first = Array.from({ length: 20 }, (_, i) => wave(i + 1))
     mockGetReceivedWaves.mockResolvedValueOnce({ success: true, data: page(first, { total: 21, nextCursor: 'c1' }) })
     mockGetReceivedWaves.mockResolvedValueOnce({ success: true, data: page([wave(21, { wavedBack: true })], { total: 21 }) })
-    const onWaveBack = jest.fn().mockResolvedValue(true)
+    const onWaveBack = jest.fn().mockResolvedValue('done')
     await render(<WavedAtYouList eventId="e1" now={NOW} onWaveBack={onWaveBack} onSafety={jest.fn()} />)
     await waitFor(() => expect(screen.getByText('Person 1')).toBeTruthy())
     expect(screen.getByText('21')).toBeTruthy()
@@ -257,7 +262,7 @@ describe('See all: paged 20 from the server', () => {
   it('Block from a row takes it off the list; control: a cancelled sheet keeps it', async () => {
     mockGetReceivedWaves.mockResolvedValueOnce({ success: true, data: page([wave(1), wave(2)]) })
     let done: (() => void) | undefined
-    const onSafety = jest.fn((_w: ReceivedWave, removed: () => void) => {
+    const onSafety = jest.fn((_w: AnyWave, removed: () => void) => {
       done = removed
     })
     await render(<WavedAtYouList eventId="e1" now={NOW} onWaveBack={jest.fn()} onSafety={onSafety} />)
@@ -281,7 +286,7 @@ describe('See all: paged 20 from the server', () => {
 describe('B-A: one Banter row per room', () => {
   it('"{n} waved at you" with the latest face; it opens the list; holding it offers Block and Report for that face', async () => {
     const onSafety = jest.fn()
-    const room = { eventId: 'e1', waiting: 12_480, latest: wave(1, { displayName: 'Harbour Heron' }) }
+    const [room] = waitingRows([{ eventId: 'e1', waiting: 12_480, latest: wave(1, { displayName: 'Harbour Heron' }) }], [])
     await render(<BanterWavesRow room={room} title="Toit" onSafety={onSafety} />)
     expect(screen.getAllByTestId(/^banter-waves-/)).toHaveLength(1)
     expect(screen.getByText('12k waved at you')).toBeTruthy()
@@ -289,14 +294,14 @@ describe('B-A: one Banter row per room', () => {
     await fireEvent.press(screen.getByRole('button', { name: '12480 waved at you. In the room · Toit' }))
     expect(mockPush).toHaveBeenCalledWith({ pathname: '/waves/[eventId]', params: { eventId: 'e1', title: 'Toit' } })
     await fireEvent(screen.getByTestId('banter-waves-e1'), 'longPress')
-    expect(onSafety).toHaveBeenCalledWith(room.latest)
+    expect(onSafety).toHaveBeenCalledWith(room.people!.latest)
   })
 })
 
 describe('B-A: the pile (owner 2026-11-13: the board’s three faces)', () => {
   const face = (n: number) => ({ userId: `rh_${n}`, displayName: `Person ${n}` })
   it('draws the latest three faces, newest first, with no "+N"', async () => {
-    const room = { eventId: 'e1', waiting: 12_480, latest: wave(1), latestFaces: [face(1), face(2), face(3)] }
+    const [room] = waitingRows([{ eventId: 'e1', waiting: 12_480, latest: wave(1), latestFaces: [face(1), face(2), face(3)] }], [])
     await render(<BanterWavesRow room={room} title="Toit" onSafety={jest.fn()} />)
     const pile = screen.getByTestId('banter-waves-e1-pile', { includeHiddenElements: true })
     expect(pile).toBeTruthy()
@@ -306,13 +311,13 @@ describe('B-A: the pile (owner 2026-11-13: the board’s three faces)', () => {
   })
 
   it('control: one face is the single latest face', async () => {
-    await render(<BanterWavesRow room={{ eventId: 'e1', waiting: 1, latest: wave(1), latestFaces: [face(1)] }} title="Toit" onSafety={jest.fn()} />)
+    await render(<BanterWavesRow room={waitingRows([{ eventId: 'e1', waiting: 1, latest: wave(1), latestFaces: [face(1)] }], [])[0]} title="Toit" onSafety={jest.fn()} />)
     expect(screen.queryByTestId('banter-waves-e1-pile', { includeHiddenElements: true })).toBeNull()
     expect(screen.getByTestId('banter-waves-e1-face', { includeHiddenElements: true })).toBeTruthy()
   })
 
   it('control: a server from before latestFaces draws the latest face', async () => {
-    await render(<BanterWavesRow room={{ eventId: 'e1', waiting: 4, latest: wave(1) }} title="Toit" onSafety={jest.fn()} />)
+    await render(<BanterWavesRow room={waitingRows([{ eventId: 'e1', waiting: 4, latest: wave(1) }], [])[0]} title="Toit" onSafety={jest.fn()} />)
     expect(screen.queryByTestId('banter-waves-e1-pile', { includeHiddenElements: true })).toBeNull()
     expect(screen.getByTestId('banter-waves-e1-face', { includeHiddenElements: true })).toBeTruthy()
   })
@@ -349,9 +354,126 @@ describe('long text (owner 2026-11-05: worst-case strings)', () => {
     await render(<WavedAtYouStrip page={page([wave(1, { displayName: LONG })])} now={NOW} onWaveBack={jest.fn()} onSeeAll={jest.fn()} onSafety={jest.fn()} />)
     expect(screen.getByText(LONG).props.numberOfLines).toBe(1)
     expect(screen.getByRole('button', { name: `Wave back at ${LONG}` })).toBeTruthy()
-    screen.unmount()
-    await render(<BanterWavesRow room={{ eventId: 'e1', waiting: 12_480, latest: wave(1, { displayName: LONG }) }} title="Bengaluru Design Festival 2026 · Bangalore Palace Grounds" onSafety={jest.fn()} />)
+    await screen.unmount()
+    await render(<BanterWavesRow room={waitingRows([{ eventId: 'e1', waiting: 12_480, latest: wave(1, { displayName: LONG }) }], [])[0]} title="Bengaluru Design Festival 2026 · Bangalore Palace Grounds" onSafety={jest.fn()} />)
     expect(screen.getByText('In the room · Bengaluru Design Festival 2026 · Bangalore Palace Grounds').props.numberOfLines).toBe(1)
   })
 })
 
+
+describe('a crew’s wave at you (S5 b2, advisor T-A / U-A / W-A / X-A 2026-11-25)', () => {
+  const crew = (n: number, over: Partial<CrewWave> = {}): CrewWave => ({ crewId: `c${n}`, name: `Crew ${n}`, emblemSeed: `seed-${n}`, wavedAt: new Date(NOW - n * 60_000).toISOString(), wavedBack: false, ...over })
+  const sendCrew = (d: { eventId: string; fromCrewId: string; fromName: string }) => act(async () => mockCrewWaveListeners.forEach((fn) => fn(d)))
+
+  it('the strip: unanswered crews first, counted with the people; an answered crew is not waiting', () => {
+    const s = waitingStrip(page([wave(1), wave(2)], { crewWaves: [crew(5), crew(6, { wavedBack: true })], crewTotal: 2 }))
+    expect(s.kind === 'several' && s.faces.map(waveId)).toEqual(['crew:c5', 'rh_1', 'rh_2'])
+    expect(s.kind === 'several' && s.others).toBe(2)
+    expect(waitingStrip(page([], { crewWaves: [crew(1)] }))).toEqual({ kind: 'one', wave: crew(1) })
+    // Control: a server from before crews is the people alone.
+    expect(waitingStrip(page([wave(1)]))).toEqual({ kind: 'one', wave: wave(1) })
+  })
+
+  it('the strip answers one crew in place, by its name, and holding it names the crew', async () => {
+    const onWaveBack = jest.fn()
+    const onSafety = jest.fn()
+    await render(<WavedAtYouStrip page={page([], { crewWaves: [crew(4)] })} now={NOW} onWaveBack={onWaveBack} onSeeAll={jest.fn()} onSafety={onSafety} />)
+    await fireEvent.press(screen.getByRole('button', { name: 'Wave back at Crew 4' }))
+    expect(onWaveBack).toHaveBeenCalledWith(crew(4))
+    await fireEvent(screen.getByTestId('waved-strip'), 'longPress')
+    expect(onSafety).toHaveBeenCalledWith(crew(4))
+  })
+
+  it('the list: unanswered crews, the people, then the crews answered before, only past the last page', () => {
+    const list = { waves: [wave(1), wave(2)], crewWaves: [crew(1, { wavedBack: true }), crew(2)], nextCursor: null }
+    expect(listRows(list, new Set(['c1'])).map(waveId)).toEqual(['crew:c2', 'rh_1', 'rh_2', 'crew:c1'])
+    expect(listRows({ ...list, nextCursor: 'more' }, new Set(['c1'])).map(waveId)).toEqual(['crew:c2', 'rh_1', 'rh_2'])
+    // Answered just now (not before): the row stays where it was.
+    expect(listRows(list, new Set()).map(waveId)).toEqual(['crew:c1', 'crew:c2', 'rh_1', 'rh_2'])
+  })
+
+  it('a crew’s row says "Crew · 4 min ago", counts in the header, and a wave back turns it ✓ Waved', async () => {
+    mockGetReceivedWaves.mockResolvedValueOnce({ success: true, data: page([wave(1)], { crewWaves: [crew(4)], crewTotal: 1 }) })
+    await render(<WavedAtYouList eventId="e1" now={NOW} onWaveBack={jest.fn().mockResolvedValue('done')} onSafety={jest.fn()} />)
+    await screen.findByText('Crew · 4 min ago', { includeHiddenElements: true })
+    expect(screen.getByLabelText('Waved at you, 2')).toBeTruthy()
+    expect(screen.getByLabelText('Crew 4, a crew, Waved at you · 4 min')).toBeTruthy()
+    await act(async () => fireEvent.press(screen.getByRole('button', { name: 'Wave back at Crew 4' })))
+    expect(screen.getByRole('button', { name: 'Waved at Crew 4' })).toBeTruthy()
+  })
+
+  it('a crew that left: the row stays, says so and offers nothing; control: a refusal keeps Wave back', async () => {
+    mockGetReceivedWaves.mockResolvedValueOnce({ success: true, data: page([], { crewWaves: [crew(4), crew(5)], crewTotal: 2 }) })
+    const answers = ['gone', 'none']
+    await render(<WavedAtYouList eventId="e1" now={NOW} onWaveBack={jest.fn(async () => answers.shift() as 'gone' | 'none')} onSafety={jest.fn()} />)
+    await screen.findByRole('button', { name: 'Wave back at Crew 4' })
+    await act(async () => fireEvent.press(screen.getByRole('button', { name: 'Wave back at Crew 4' })))
+    expect(screen.getByText('They’ve left the room', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Wave back at Crew 4' })).toBeNull()
+    await act(async () => fireEvent.press(screen.getByRole('button', { name: 'Wave back at Crew 5' })))
+    expect(screen.getByRole('button', { name: 'Wave back at Crew 5' })).toBeTruthy()
+  })
+
+  it('Banter: one row per room, people and crews counted together; a room only crews waved in has its own', () => {
+    const rows = waitingRows([{ eventId: 'e1', waiting: 2, latest: wave(1) }], [{ eventId: 'e1', waiting: 1, latest: crew(1) }, { eventId: 'e2', waiting: 3, latest: crew(2) }])
+    expect(rows.map((r) => [r.eventId, r.waiting, !!r.people, !!r.crews])).toEqual([['e1', 3, true, true], ['e2', 3, false, true]])
+  })
+
+  it('Banter: the newest crew’s emblem leads the pile, and holding the row is about the crew', async () => {
+    const onSafety = jest.fn()
+    const [both] = waitingRows([{ eventId: 'e1', waiting: 2, latest: wave(1), latestFaces: [{ userId: 'rh_1', displayName: 'Person 1' }, { userId: 'rh_2', displayName: 'Person 2' }] }], [{ eventId: 'e1', waiting: 1, latest: crew(1) }])
+    await render(<BanterWavesRow room={both} title="Toit" onSafety={onSafety} />)
+    expect(screen.getByText('3 waved at you')).toBeTruthy()
+    expect(screen.getAllByTestId(/^banter-waves-e1-pile-face-\d$/, { includeHiddenElements: true })).toHaveLength(3)
+    await fireEvent(screen.getByTestId('banter-waves-e1'), 'longPress')
+    expect(onSafety).toHaveBeenCalledWith(crew(1))
+  })
+
+  it('live: a crew’s wave toasts and folds with people’s ("3 waved at you", never "people"), and lights nobody’s card', async () => {
+    jest.useFakeTimers({ now: NOW })
+    await render(<Probe />)
+    listenForWaves('e1')
+    await sendCrew({ eventId: 'e1', fromCrewId: 'c1', fromName: 'Orbit' })
+    expect(toastTitle(seen.store!.toast!)).toBe('Orbit waved at you')
+    expect(seen.store!.received).toEqual({})
+    await act(async () => waveShown(seen.store!.toast!))
+    await send({ eventId: 'e1', fromUserId: 'a', fromName: 'Night Cat' })
+    await sendCrew({ eventId: 'e1', fromCrewId: 'c2', fromName: 'Nebula' })
+    await act(async () => jest.advanceTimersByTime(FOLD_MS))
+    expect(toastTitle(seen.store!.toast!)).toBe('2 waved at you')
+    // Another room's is not heard.
+    const before = seen.store!.version
+    await sendCrew({ eventId: 'e2', fromCrewId: 'c3', fromName: 'Far' })
+    expect(seen.store!.version).toBe(before)
+  })
+
+  it('a blocked crew leaves the toast and the fold, and is not heard again', async () => {
+    jest.useFakeTimers({ now: NOW })
+    await render(<Probe />)
+    listenForWaves('e1')
+    await sendCrew({ eventId: 'e1', fromCrewId: 'c1', fromName: 'Orbit' })
+    await act(async () => ignoreCrewWaves('c1'))
+    expect(seen.store!.toast).toBeNull()
+    await act(async () => jest.advanceTimersByTime(FOLD_MS))
+    await sendCrew({ eventId: 'e1', fromCrewId: 'c1', fromName: 'Orbit' })
+    expect(seen.store!.toast).toBeNull()
+  })
+
+  it('the toast: the emblem when the room knows it, else the crew glyph; its body opens the list, never a card', async () => {
+    jest.useFakeTimers({ now: NOW })
+    const onOpen = jest.fn()
+    const onSeeAll = jest.fn()
+    const onWaveBack = jest.fn()
+    const toast = { waves: [{ eventId: 'e1', fromCrewId: 'c1', fromName: 'Orbit', at: NOW }] }
+    await render(<WaveToast toast={toast} onOpen={onOpen} onWaveBack={onWaveBack} onSeeAll={onSeeAll} onSafety={jest.fn()} onDone={jest.fn()} />)
+    expect(screen.getByTestId('wave-toast-emblem-glyph', { includeHiddenElements: true })).toBeTruthy()
+    await fireEvent.press(screen.getByTestId('wave-toast-press'))
+    expect(onSeeAll).toHaveBeenCalled()
+    expect(onOpen).not.toHaveBeenCalled()
+    await screen.unmount()
+    await render(<WaveToast toast={toast} emblemOf={() => 'seed-1'} onOpen={onOpen} onWaveBack={onWaveBack} onSeeAll={onSeeAll} onSafety={jest.fn()} onDone={jest.fn()} />)
+    expect(screen.queryByTestId('wave-toast-emblem-glyph', { includeHiddenElements: true })).toBeNull()
+    await fireEvent.press(screen.getByRole('button', { name: 'Wave back at Orbit' }))
+    expect(onWaveBack).toHaveBeenCalledWith(toast.waves[0])
+  })
+})

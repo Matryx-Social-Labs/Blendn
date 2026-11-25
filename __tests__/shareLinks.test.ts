@@ -21,6 +21,7 @@ describe('building a link', () => {
     expect(routeFor({ kind: 'event', id: ID })).toBe(`/event/${ID}`)
     expect(routeFor({ kind: 'venue', id: ID })).toBe(`/venue/${ID}`)
     expect(routeFor({ kind: 'invite', id: TOKEN })).toBe(`/f/${TOKEN}`)
+    expect(routeFor({ kind: 'crew', id: TOKEN })).toBe(`/c/${TOKEN}`)
   })
 })
 
@@ -30,6 +31,13 @@ describe('reading a link', () => {
     expect(parseLink(`${SHARE_ORIGIN}/v/${ID}`)).toEqual({ kind: 'venue', id: ID })
     expect(parseLink(`${SHARE_ORIGIN}/e/${ID}`)).toEqual({ kind: 'event', id: ID })
     expect(parseLink(inviteLink(TOKEN))).toEqual({ kind: 'invite', id: TOKEN })
+  })
+
+  it('a crew link (S7): the universal link and the app scheme open /c/; control: /c/ deeper or with a bad token is nothing of ours', () => {
+    expect(parseLink(`${SHARE_ORIGIN}/c/${TOKEN}`)).toEqual({ kind: 'crew', id: TOKEN })
+    expect(nativeIntentPath(`blendn://c/${TOKEN}?x=1`)).toBe(`/c/${TOKEN}`)
+    expect(parseLink(`${SHARE_ORIGIN}/c/${TOKEN}/x`)).toBeNull()
+    expect(parseLink('/c/..')).toBeNull()
   })
 
   it('takes the bare domain, the app scheme, a bare path, the organizer QR path and a query string', () => {

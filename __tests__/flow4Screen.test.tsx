@@ -57,6 +57,7 @@ jest.mock('../lib/socketClient', () => ({
   },
   subscribeToRoomFriends: () => () => {},
   subscribeConnectionStatus: () => () => {},
+  subscribeToRoomCrewWave: () => () => {},
   subscribeToRoomWave: (fn: (d: unknown) => void) => {
     mockWaveListeners.add(fn)
     return () => mockWaveListeners.delete(fn)
@@ -64,7 +65,7 @@ jest.mock('../lib/socketClient', () => ({
 }))
 jest.mock('../lib/networkStatus', () => ({ getNetworkState: () => 'online', subscribeNetworkState: () => () => {} }))
 jest.mock('../lib/crewsApi', () => ({
-  crewsApi: { crewsAt: jest.fn(), myCrews: jest.fn(), openToCrews: jest.fn(), here: jest.fn(), likeCrew: jest.fn(), likePersonAsCrew: jest.fn(), report: jest.fn() },
+  crewsApi: { crewsAt: jest.fn(), myCrews: jest.fn(), openToCrews: jest.fn(), here: jest.fn(), likeCrew: jest.fn(), wavePersonAsCrew: jest.fn(), report: jest.fn() },
 }))
 const mockScrollY = jest.requireActual('react-native-reanimated').makeMutable(0)
 jest.mock('../components/blendn/RoomStage', () => {
@@ -423,12 +424,12 @@ describe('Liking as a crew: what the button says is what it sends (R2-D1)', () =
   it('one crew here that may like people: "Wave for Nebula" waves as Nebula', async () => {
     api.crewsAt.mockResolvedValue({ success: true, data: { crewsEnabled: true, crews: [], myCrews: [nebula], total: 0, hasMore: false } })
     api.myCrews.mockResolvedValue({ success: true, data: { crews: [crew('nebula', { name: 'Nebula' })], invites: [] } } as never)
-    api.likePersonAsCrew.mockResolvedValue({ success: true, data: { liked: true, blend: null } })
+    api.wavePersonAsCrew.mockResolvedValue({ success: true, data: { sent: true, mutual: false } })
     await drawRoom()
     await openFromGrid(1)
     await fireEvent.press(screen.getByRole('button', { name: 'Wave for Nebula' }))
     await cardGone()
-    expect(api.likePersonAsCrew).toHaveBeenCalledWith('e1', 'p1', 'nebula')
+    expect(api.wavePersonAsCrew).toHaveBeenCalledWith('e1', 'p1', 'nebula')
     expect(mockRoom.wave).not.toHaveBeenCalled()
   })
 
@@ -450,7 +451,7 @@ describe('Liking as a crew: what the button says is what it sends (R2-D1)', () =
     await openFromGrid(1)
     await fireEvent.press(screen.getByRole('button', { name: 'Wave for your crew' }))
     await cardGone()
-    expect(api.likePersonAsCrew).not.toHaveBeenCalled()
+    expect(api.wavePersonAsCrew).not.toHaveBeenCalled()
     const { showSheet } = jest.requireMock('../lib/sheet') as { showSheet: jest.Mock }
     const actions = showSheet.mock.calls[0][0].actions.map((a: { label: string }) => a.label)
     // Which crew, never "Just me": a person's own gesture is Wave, on the card.
