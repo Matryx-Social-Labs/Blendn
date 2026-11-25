@@ -61,11 +61,22 @@ describe('the surfaces are wired', () => {
     const screen = src('components/blendn/BlendnScreen.tsx')
     expect(screen).toContain('<CrewsHead')
     expect(screen).toContain('crewCards={crewCards(crews)}')
+    // The row counts every crew here, as the Crews view's head does, never the pages read so far (44 here said "30 crews here").
+    expect(screen).toContain("crewsHere={showSegments && crews.state.status === 'ready' ? crews.state.data.total : null}")
     const room = src('components/blendn/RoomView.tsx')
     // One row in and out of the crews, in the friends row's shape; never a second People | Crews switch.
     expect(room).toContain('<RoomCrewsRow')
     expect(room).not.toContain('SegmentedControl')
     // M12: the cards are rows of the Room's own list, not a mapped column.
     expect(room).toContain('data={crewsView ? props.crewCards : people}')
+  })
+})
+
+describe('a blocked crew’s wave never reaches the crew chat (task 17 b1)', () => {
+  const chat = require('fs').readFileSync(require('path').join(__dirname, '../components/chat/RoomChat.tsx'), 'utf8') as string
+  it('the feed is filtered whatever the link says the room is, and a live wave line reads the history for who it was', () => {
+    expect(chat).toContain('withoutBlockedCrews(messages.filter((m) => !blocked.has(m.sender_id)), hiddenCrews)')
+    expect(chat).toContain('useHiddenCrewIds(messages.some(isCrewsWave))')
+    expect(chat).toContain('if (fresh && isCrewWavedLine(incoming)) void loadMessagesRef.current(true)')
   })
 })

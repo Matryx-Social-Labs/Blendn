@@ -26,7 +26,7 @@ import { blendnClosed, getLeftNotice, isLiveHint, openPass, setDoor, setLeftNoti
 import type { RoomTab } from '../../lib/roomTab'
 import { useChatTabUnread } from '../../lib/useChatTabUnread'
 import { RoomChat } from '../chat/RoomChat'
-import { crewsThatMayLikePeople, crewMessage, type BlendRef, type CrewsAtEvent } from '../../lib/crews'
+import { crewsThatMayLikePeople, crewMessage, crewWaveState, type BlendRef, type CrewsAtEvent } from '../../lib/crews'
 import { crewsApi } from '../../lib/crewsApi'
 import { COLOR, DURATION, EASING, MATERIAL, RADIUS, REDUCE_MOTION, SIZE, SPACE } from '../../lib/design/tokens'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
@@ -54,6 +54,7 @@ import { markSeed } from '../../lib/creatureSeed'
 import { myRoomFace, roomSettingsRoute } from '../../lib/roomState'
 import { useTonight, type TonightEvent } from '../../lib/useTonight'
 import { isNightRated, markNightRated, useRatedNights } from '../../lib/ratedNights'
+import { CrewSheet } from '../crews/CrewSheet'
 import { crewCards, openBlend, useCrewActions, useCrewsHere } from '../crews/CrewsView'
 import type { Visibility } from '../ds/Banner'
 import type { Face } from '../ds/Facepile'
@@ -553,7 +554,7 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
    * null for "Just me", undefined before they make one. The app never picks a
    * crew for somebody (lib/crews.ts): with one crew here that crew is the
    * answer, with several the like asks, and the answer becomes the choice.
-   * Every label (the chip, "Like for {crew}", "Liked for {crew}") and every
+   * Every label (the chip, "Wave for {crew}", "Waved for your crew") and every
    * request reads these same values.
    */
   const [likingAs, setLikingAs] = useState<string | null | undefined>(undefined)
@@ -587,6 +588,23 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
       })
     },
   })
+  /** The crew whose sheet is open (board crews/05-room A), read live from the list so a wave or a block shows at once. */
+  const [sheetCrewId, setSheetCrewId] = useState<string | null>(null)
+  const sheetCrew = crewCards(crews).find((c) => c.crewId === sheetCrewId) ?? null
+  /** Each row closes the sheet first; its next step (a confirm, the report, the Mix) waits for it to have left, as the card's does. */
+  const afterCrewSheet = useRef<(() => void) | null>(null)
+  const fromCrewSheet = (then: (card: NonNullable<typeof sheetCrew>) => void) => {
+    if (!sheetCrew) return
+    afterCrewSheet.current = () => then(sheetCrew)
+    setSheetCrewId(null)
+  }
+  /** Gone: the next step, if a row asked for one. The id goes too, so a crew that left the room and came back never reopens it. */
+  const crewSheetGone = () => {
+    setSheetCrewId(null)
+    const next = afterCrewSheet.current
+    afterCrewSheet.current = null
+    next?.()
+  }
   /** The chip's menu: your crews here and "Just me". Cancel changes nothing. */
   const chooseLikingAs = async (among = myCrewsHere, title = 'Sending as…', justMe = true) => {
     const answer = await chooseAs(among, title, justMe)
@@ -808,7 +826,7 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
           title: `Mix with ${p.name}`,
           sides: { ours: { kind: 'crew', name: crew.name, emblemSeed: emblemOf(crew.crewId), count: crew.presentCount }, theirs: { kind: 'person', pseudonym: p.name } },
         })
-      } else say('Liked for your crew', 'success')
+      } else say('Waved for your crew', 'success')
     } finally {
       likingForCrew.current = false
     }
@@ -821,7 +839,7 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
   const cardCrewLike = (p: RoomPerson) => {
     if (personAs === 'ask') {
       closeCardThen(() => {
-        void chooseLikingAs(soloCrews, 'Like for which crew?', false).then((answer) => {
+        void chooseLikingAs(soloCrews, 'Wave for which crew?', false).then((answer) => {
           if (answer) void likeForCrew(p, answer)
         })
       })
@@ -1060,7 +1078,7 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
                 onSafety={(w) => waveSafety(w.userId, w.displayName)}
               />
             }
-            crewsHere={showSegments && crews.state.status === 'ready' ? crews.state.data.crews.length : null}
+            crewsHere={showSegments && crews.state.status === 'ready' ? crews.state.data.total : null}
             view={gridView}
             onView={setGridView}
             crewStrip={<PeopleCrewStrip eventId={eventId ?? ''} myCrews={myCrewsHere} mine={crews.mine} eventTitle={eventTitle} />}
@@ -1086,7 +1104,13 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
             }
             crewCards={crewCards(crews)}
             renderCrew={(crewCard, index) => (
-              <RoomCrewCard card={crewCard} actions={crewActions} as={crewCardAs && crewCardAs !== 'ask' ? crewCardAs.name : null} index={index} />
+              <RoomCrewCard
+                card={crewCard}
+                actions={crewActions}
+                as={crewCardAs && crewCardAs !== 'ask' ? crewCardAs.name : null}
+                index={index}
+                onOpen={() => setSheetCrewId(crewCard.crewId)}
+              />
             )}
             crewsFoot={<CrewsFoot crews={crews} />}
             picks={heldPicks}
@@ -1163,6 +1187,18 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
           onDone={() => waves.toast && waveShown(waves.toast)}
         />
       ) : null}
+
+      <CrewSheet
+        visible={sheetCrew !== null}
+        card={sheetCrew}
+        wave={{ state: sheetCrew ? crewWaveState(sheetCrew) : 'idle', as: crewCardAs && crewCardAs !== 'ask' ? crewCardAs.name : null }}
+        onClose={() => setSheetCrewId(null)}
+        onDismissed={crewSheetGone}
+        onWave={() => fromCrewSheet((c) => void crewActions.wave(c))}
+        onHideTonight={() => fromCrewSheet((c) => crews.hideTonight(c.crewId))}
+        onBlock={() => fromCrewSheet(crewActions.block)}
+        onReport={() => fromCrewSheet(crewActions.report)}
+      />
 
       <PersonCard
         visible={open !== null}

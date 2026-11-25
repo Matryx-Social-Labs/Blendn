@@ -40,6 +40,8 @@ import { subscribeCheckInChanged } from '../../lib/checkIn'
 import { notOpenYetAt, opensInSpoken } from '../../lib/preEventRoom'
 import { useOpensAt, usePreEventRoom } from '../../lib/usePreEventRoom'
 import { newClientId } from '../../lib/clientId'
+import { isCrewsWave, isCrewWavedLine, useHiddenCrewIds, waveBackFromChat, withoutBlockedCrews, type WaveBackOutcome } from '../../lib/crewWaveBack'
+import { openBlend } from '../crews/CrewsView'
 import { BLEND_CLOSED_LINE, defaultRoomName, roomClosedLine, roomKindParam, UNKNOWN_ROOM_NAME } from '../../lib/crews'
 import { crewsApi } from '../../lib/crewsApi'
 import { COLOR, SIZE, SPACE } from '../../lib/design/tokens'
@@ -490,6 +492,7 @@ function RoomChatInner({ params, embedded }: { params: RoomChatParams; embedded?
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [photoKind])
 
+  const loadMessagesRef = useLatest(loadMessages)
   const subscribeToMessages = () => {
     if (!chatRoomId) return () => {}
     const unsubscribe = [
@@ -499,6 +502,8 @@ function RoomChatInner({ params, embedded }: { params: RoomChatParams; embedded?
         // At the bottom, somebody else's message rises as it arrives (#13); read back, the list never moves (the chip counts it).
         if (fresh && isAtBottomRef.current && data.message.userId !== currentUser?.id) markArriving(incoming.message_id)
         seenIds.current.add(incoming.message_id)
+        // The socket names no crew on a wave: the history does (who waved, and what Wave back answers).
+        if (fresh && isCrewWavedLine(incoming)) void loadMessagesRef.current(true)
         setMessages((prev) =>
           prev.some((m) => m.message_id === incoming.message_id)
             ? prev
@@ -739,7 +744,6 @@ function RoomChatInner({ params, embedded }: { params: RoomChatParams; embedded?
   }
 
   /* A Go Live ended: only this room's re-reads, and answers NOT_LIVE (L2). */
-  const loadMessagesRef = useLatest(loadMessages)
   /**
    * Refused as not in the room: an event's room asks its own door once, which joins someone entitled inside the window,
    * says when it opens before it (NOT_OPEN_YET), or refuses as before (an older server's bare 403 included).
@@ -841,7 +845,11 @@ function RoomChatInner({ params, embedded }: { params: RoomChatParams; embedded?
     else router.push(`/venue/${venueId}` as never)
   }
 
-  const visible = useMemo(() => messages.filter((m) => !blocked.has(m.sender_id)), [messages, blocked])
+  const hiddenCrews = useHiddenCrewIds(messages.some(isCrewsWave))
+  const visible = useMemo(
+    () => withoutBlockedCrews(messages.filter((m) => !blocked.has(m.sender_id)), hiddenCrews),
+    [messages, blocked, hiddenCrews]
+  )
   const chatItems: ChatListItem[] = useMemo(() => withDaySeparators(visible, (m) => m.created_at), [visible])
   /* The skeleton is the list's empty slot, so the first messages fade in as cells; later ones arrive as they do (the hook's window). */
   const arrive = useSkeletonCrossfade(loading && !chatItems.length)
@@ -934,7 +942,14 @@ function RoomChatInner({ params, embedded }: { params: RoomChatParams; embedded?
     else if (reason === 'NOT_IN_ROOM') setOutOfRoom(true)
     else composer.setLock({ state: 'closed' })
   }
-  const handlersRef = useLatest({ openMenu, retrySend, react, pollRefusal, openSender })
+  /** A `crew_waved` line's Wave back, as this chat's crew (advisor L-A); a Mix it makes opens. */
+  const crewWaveBack = async (m: Message): Promise<WaveBackOutcome> => {
+    if (!m.crewWave || !crewIdParam) return { kind: 'error', text: 'Couldn’t wave back. Try again.' }
+    const outcome = await waveBackFromChat(m.crewWave, crewIdParam)
+    if (outcome.kind === 'done' && outcome.blend) openBlend(outcome.blend, defaultRoomName('blend'))
+    return outcome
+  }
+  const handlersRef = useLatest({ openMenu, retrySend, react, pollRefusal, openSender, crewWaveBack })
   const handlers = useMemo<RowHandlers>(
     () => ({
       menu: (m, a) => handlersRef.current.openMenu(m, a),
@@ -944,6 +959,7 @@ function RoomChatInner({ params, embedded }: { params: RoomChatParams; embedded?
       sender: (m) => handlersRef.current.openSender({ id: m.sender_id, name: m.sender_name }),
       link: (url) => showSheet(linkSheet(url, 'room')),
       pollRefusal: (reason) => handlersRef.current.pollRefusal(reason),
+      crewWaveBack: (m) => handlersRef.current.crewWaveBack(m),
     }),
     [handlersRef]
   )

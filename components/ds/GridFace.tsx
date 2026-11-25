@@ -108,7 +108,7 @@ export function GridFace({
           onLongPress={hold}
           // The like is its own named action: `longpress` is the platform's name for a hold (TalkBack's), and means "open" here.
           // Only a crew's like now (people wave from the card): the double tap likes for your crew.
-          accessibilityActions={onLike ? [{ name: 'activate' }, { name: 'like', label: 'Like for your crew' }] : undefined}
+          accessibilityActions={onLike ? [{ name: 'activate' }, { name: 'like', label: 'Wave for your crew' }] : undefined}
           onAccessibilityAction={(e) => {
             if (e.nativeEvent.actionName === 'activate') onPress?.()
             else if (e.nativeEvent.actionName === 'like') like()

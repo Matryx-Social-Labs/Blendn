@@ -87,20 +87,20 @@ describe('Like → Liked (C3)', () => {
   })
 
   it('the settled plate carries the pop and springs on M.pop', async () => {
-    await render(<CrewCard crew={crew} like={{ liked: true, as: 'Orbit', onPress: jest.fn() }} />)
-    const plate = screen.getByTestId('crew-liked')
+    await render(<CrewCard crew={crew} wave={{ state: 'waved', as: 'Orbit', onPress: jest.fn() }} />)
+    const plate = screen.getByTestId('crew-waved')
     expect(plate.props.entering).toBeDefined()
     const b = plate.props.entering()
     expect(b.initialValues.transform[0].scale).toBe(0.85)
     expect(withSpring).toHaveBeenCalledWith(1, expect.objectContaining({ stiffness: SPRING.pop.stiffness }))
   })
 
-  it('holds a legal 32-character name: two lines and no fixed height', async () => {
+  it('the settled plate says “Waved”, never the crew (board 05-room A): a 32-character name cannot grow it; no fixed height', async () => {
     const as = 'The Midnight Philosophers Society'
-    await render(<CrewCard crew={crew} like={{ liked: true, as, onPress: jest.fn() }} />)
-    const text = screen.getByText(`Liked for ${as}`)
-    expect(text.props.numberOfLines).toBe(2)
-    const plate = StyleSheet.flatten(screen.getByTestId('crew-liked').props.style)
+    await render(<CrewCard crew={crew} wave={{ state: 'waved', as, onPress: jest.fn() }} />)
+    expect(screen.getByText('Waved')).toBeTruthy()
+    expect(screen.queryByText(new RegExp(as))).toBeNull()
+    const plate = StyleSheet.flatten(screen.getByTestId('crew-waved').props.style)
     expect(plate.height).toBeUndefined()
     expect(plate.minHeight).toBe(56)
   })

@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native'
 
 import { COLOR, ICON, RADIUS, SPACE, MAX_FONT_SCALE, TYPE } from '../../lib/design/tokens'
 import { OPACITY } from '../../lib/theme'
-import { crewBadge, stripCrewsFrom, tagText, type Crew, type CrewCard as CrewCardData, type CrewsAtEvent } from '../../lib/crews'
+import { crewBadge, crewWaveState, stripCrewsFrom, tagText, type Crew, type CrewCard as CrewCardData, type CrewsAtEvent } from '../../lib/crews'
 import { Button } from '../ds/Button'
 import { CrewCard } from '../ds/CrewCard'
 import { CrewStrip, type StripCrew } from '../ds/CrewStrip'
@@ -176,20 +176,21 @@ function Line({ text }: { text: string }) {
 }
 
 /**
- * One crew here, as strangers see it: the compact CrewCard, liked as your side.
- * ponytail: no tap yet — R2-D1's "crew detail as a stranger" has no screen
- * (`/crews/[crewId]` is a member's); add `onPress` when one exists.
+ * One crew here, as strangers see it: the compact CrewCard, waved at as your side. A tap on the card opens the crew's
+ * sheet (board crews/05-room A); Wave is its own target.
  */
 export function RoomCrewCard({
   card,
   actions,
   as,
   index,
+  onOpen,
 }: {
   card: CrewCardData
   actions: CrewActions
   as: string | null
   index: number
+  onOpen: () => void
 }) {
   return (
     <View style={styles.gutter}>
@@ -197,9 +198,8 @@ export function RoomCrewCard({
         compact
         crew={{ name: card.name, emblemSeed: card.emblemSeed, size: card.size, here: card.presentCount, bio: card.bio, tags: card.tags.map(tagText), badge: crewBadge(card.badges) }}
         overlap={card.overlaps?.[0]?.text ?? null}
-        // Liked: no crew named. Who sent it isn't known here, and the chip's current crew may not be it.
-        like={{ liked: card.youLiked, as: card.youLiked ? null : as, onPress: () => void actions.like(card) }}
-        onMore={() => actions.report(card)}
+        wave={{ state: crewWaveState(card), as, onPress: () => void actions.wave(card) }}
+        onPress={onOpen}
         testID={`room-crew-${index}`}
       />
     </View>

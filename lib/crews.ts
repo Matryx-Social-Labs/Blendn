@@ -188,8 +188,12 @@ export interface CrewCard {
   presentCount: number
   tags: CrewTag[]
   intent: CrewIntent[]
-  /** Your side liked them tonight. Never whether they liked you. */
+  /** Your side liked or waved at them tonight. */
   youLiked: boolean
+  /** Your side waved at them tonight ("✓ Waved"; admin #1003). Optional: a client outlives a deploy. */
+  youWaved?: boolean
+  /** They waved at your side tonight; unanswered ones (`!youLiked`) come first from the server. A like stays secret. */
+  wavedAtYou?: boolean
   /**
    * Up to two lines of what this crew holds in common with your side —
    * "Both crews are into Techno", "Two RCB crews". Crew-held, never a member
@@ -198,6 +202,14 @@ export interface CrewCard {
   overlaps?: Overlap[]
   /** "6 nights out together". */
   badges?: Badge[]
+}
+
+/** A crew you blocked (`GET /crews/hidden`). */
+export interface HiddenCrew {
+  crewId: string
+  name: string
+  emblemSeed: string
+  hiddenAt: string
 }
 
 /**
@@ -418,6 +430,8 @@ export function crewMessage(result: Refusal, surface: CrewSurface, fallback: str
   if (code === 'RATE_LIMITED' && result?.retryAfter) return 'Slow down — try again in a moment.'
   if (code === 'SERVER_ERROR' || !said) return fallback
   if (/^(HTTP \d|Invalid JSON)/.test(said)) return fallback
+  // ponytail: the wave routes still answer with the like's sentence (admin lib/crews/like.ts); drop this once they say wave.
+  if (said === 'Check in before liking anyone here.') return 'Check in before you wave here.'
   return said
 }
 
@@ -458,7 +472,7 @@ export function defaultRoomName(kind: 'crew' | 'blend' | null): string {
  * ponytail: matched on the words, as the Banter's last message carries no `type` yet (S-7); read the kind once it does.
  */
 export function crewLikeLine(text: string, who: string): string | null {
-  return /^liked .+ for the crew$/.test(text.trim()) ? `${who} ${text.trim()}` : null
+  return /^(liked|waved at) .+ for the crew$/.test(text.trim()) ? `${who} ${text.trim()}` : null
 }
 
 /**
@@ -789,4 +803,13 @@ export async function findInvite(
     cursor = next.nextCursor
   }
   return { kind: 'notOpen' }
+}
+
+/**
+ * What a crew card's button is (board crews/05-room A): your side waved or liked → Waved; they waved at yours and you
+ * haven't answered → Wave back (lit); otherwise Wave.
+ */
+export function crewWaveState(card: Pick<CrewCard, 'youLiked' | 'youWaved' | 'wavedAtYou'>): 'idle' | 'waved' | 'waveBack' {
+  if (card.youLiked || card.youWaved) return 'waved'
+  return card.wavedAtYou ? 'waveBack' : 'idle'
 }

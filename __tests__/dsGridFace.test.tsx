@@ -110,7 +110,7 @@ describe('Flow 4 Room: the double tap likes; arrivals and waves show on the face
     const onLike = jest.fn()
     await render(<GridFace {...PRIYA} onPress={onPress} onLike={onLike} />)
     const face = screen.getByRole('button')
-    expect(face.props.accessibilityActions).toEqual([{ name: 'activate' }, { name: 'like', label: 'Like for your crew' }])
+    expect(face.props.accessibilityActions).toEqual([{ name: 'activate' }, { name: 'like', label: 'Wave for your crew' }])
     await fireEvent(face, 'accessibilityAction', { nativeEvent: { actionName: 'like' } })
     expect(onLike).toHaveBeenCalledTimes(1)
     await fireEvent(face, 'accessibilityAction', { nativeEvent: { actionName: 'activate' } })

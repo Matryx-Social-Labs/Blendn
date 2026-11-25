@@ -26,7 +26,8 @@ const BANNED: readonly { name: string; pattern: RegExp; allowIn?: readonly strin
   { name: 'spaces left (now spots)', pattern: /\bspaces? left\b/i },
   { name: 'Liking as (now Sending as)', pattern: /\bliking as\b/i },
   { name: 'centre (now center)', pattern: /\bcentr(e|es|ed|ing)\b/i },
-  // Wave replaced Like for people (owner ruling 2026-11-12, SCRUM-1042). A crew's "Like for {crew}" stays until crew waves.
+  // Wave replaced Like for people (owner ruling 2026-11-12, SCRUM-1042), and for crews with crew waves (task 17 b1, SCRUM-1105).
+  { name: 'Like for {crew} (now Wave for {crew})', pattern: /\bLiked? for\b/ },
   { name: 'It’s mutual (now You both waved)', pattern: /\bit[’']s mutual\b/i },
   { name: 'matched, between people (now You both waved)', pattern: /\bmatched\b/i },
   // Crews names 7 (owner 2026-11-12, SCRUM-1052): the hold's "With {crew}" is how you tell your crew, so the button is gone;
@@ -179,8 +180,8 @@ describe('retired names stay retired (naming review 2026-11-05)', () => {
       "// the Board, in a comment",
       "import { BoardEntry } from '../components/board/BoardSections'",
       "'The board closes when the doors open — the room is open instead'",
-      'const t = `Like for ${crew}`',
-      "'Liked for your crew'",
+      'const t = `Wave for ${crew}`',
+      "'Waved for your crew'",
       "'You both waved'",
       "'That looks like an email'",
       "'Wave back'",

@@ -69,8 +69,8 @@ export type PersonCardContentProps = {
   /** A wave the server refused (4.3): one neutral line, never naming the action, maybe with its action. No haptic. */
   refusal?: { text: string; action?: { label: string; onPress: () => void } }
   /**
-   * A crew of yours is here (R2-D1, Flow 10 §10.7): "Like for {crew}" as a row under the dock (Wave approval 3: crew
-   * Mix likes stay until crew waves ship). The note says who they would see.
+   * A crew of yours is here (R2-D1, Flow 10 §10.7): "Wave for {crew}" as a row under the dock (board crews/05-room A,
+   * task 17 b1). The note says who they would see.
    */
   crewLike?: { name: string; emblemSeed?: string; onPress: () => void }
   /** Wave, or Wave back. */
@@ -106,7 +106,7 @@ const PRE_EVENT = 'You can only message people from an event you have both atten
  *   in flight the hand swings; then a still lit "✓ Waved" (no Wave again). They waved at you: the chip "Waved at you ·
  *   4 min" and Wave back, the filled one; it answers until the room closes, so a "was here" card offers it too. You
  *   both waved (matched): the chip "You both waved" and Say hi only (`H.primary`). Message (the ConnectSheet reveals
- *   you) or a still Requested. A crew of yours here: "Like for {crew}" as a row under the dock. No person Like.
+ *   you) or a still Requested. A crew of yours here: "Wave for {crew}" as a row under the dock. No person Like.
  * - At the largest text the actions stack (NOTES § Person sheet).
  *
  * The sheet renders only what the caller sent for THIS person (`lensView` over their deck card): it never reaches for
@@ -188,7 +188,7 @@ export function PersonCardContent({
         : isRequested && variant !== 'matched'
         ? `Request sent to ${name}. They’ll see your name and photo.`
         : crewLike && (variant === 'here' || variant === 'was')
-          ? `A crew like is shown to ${name} as ${crewLike.name}, never as you.`
+          ? `A crew wave is shown to ${name} as ${crewLike.name}, never as you.`
           : null
   const lead = thin ? [] : (person.lead ?? [])
   const common = thin ? undefined : person.common
@@ -360,22 +360,22 @@ export function PersonCardContent({
       )}
 
       {crewLike && (variant === 'here' || variant === 'was') ? (
-        // Crew Mix likes stay until crew waves ship (Wave approval 3): a row under the dock, never a third dock button.
+        // Wave for {crew} (board crews/05-room A, person sheet row): a row under the dock, never a third dock button.
         <Control
           testID={id('like-crew')}
           radius={RADIUS.rowInCard}
           onPress={() => {
-            H.like()
+            H.select()
             crewLike.onPress()
           }}
           accessibilityRole="button"
-          accessibilityLabel={`Like for ${crewLike.name}`}
-          accessibilityHint={`${name} sees ${crewLike.name}, never you, and only if they like back.`}
+          accessibilityLabel={`Wave for ${crewLike.name}`}
+          accessibilityHint={`${name} sees ${crewLike.name}, never you.`}
           style={styles.crewRow}
         >
-          {crewLike.emblemSeed ? <CrewEmblem seed={crewLike.emblemSeed} size={ICON.control} /> : <Icon name="heart" size={ICON.control} color={sel.glyph} />}
+          {crewLike.emblemSeed ? <CrewEmblem seed={crewLike.emblemSeed} size={ICON.control} /> : <Icon name="hand" size={ICON.control} color={sel.glyph} />}
           <Text numberOfLines={2} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.ink, styles.shrink]}>
-            {`Like for ${crewLike.name}`}
+            {`Wave for ${crewLike.name}`}
           </Text>
           <Icon name="chevron-right" size={ICON.inline} color={COLOR.textSecondary} />
         </Control>

@@ -16,7 +16,7 @@ jest.mock('expo-router', () => ({
   },
 }))
 jest.mock('../lib/crewsApi', () => ({
-  crewsApi: { crewsAt: jest.fn(), myCrews: jest.fn(), openToCrews: jest.fn(), likeCrew: jest.fn(), report: jest.fn() },
+  crewsApi: { crewsAt: jest.fn(), myCrews: jest.fn(), openToCrews: jest.fn(), waveCrew: jest.fn(), report: jest.fn() },
 }))
 const mockCheckInListeners = new Set<() => void>()
 jest.mock('../lib/checkIn', () => ({
@@ -264,20 +264,20 @@ describe('the crews here, a page at a time (M9)', () => {
     await act(async () => second(page([card('new-event')], false)))
   })
 
-  it('M8: two likes of a card at once send one', async () => {
+  it('M8: two waves of a card at once send one', async () => {
     api.crewsAt.mockResolvedValue(page([card('a')], false))
     let finish: (v: unknown) => void = () => {}
-    api.likeCrew.mockReturnValue(new Promise((r) => (finish = r)) as never)
+    api.waveCrew.mockReturnValue(new Promise((r) => (finish = r)) as never)
     const { result } = await renderHook(() => {
       const crews = useCrewsHere('e1')
       return useCrewActions('e1', crews)
     })
     await act(async () => {
-      void result.current.like(card('a'))
-      void result.current.like(card('a'))
+      void result.current.wave(card('a'))
+      void result.current.wave(card('a'))
     })
-    expect(api.likeCrew).toHaveBeenCalledTimes(1)
-    await act(async () => finish({ success: true, data: { liked: true, blend: null } }))
+    expect(api.waveCrew).toHaveBeenCalledTimes(1)
+    await act(async () => finish({ success: true, data: { liked: true, waved: true, blend: null } }))
   })
 
   it('a failed page says so and offers the retry', async () => {
@@ -315,13 +315,13 @@ describe('the crews here, a page at a time (M9)', () => {
 })
 
 describe('the Room crew card’s badge (YOU-06)', () => {
-  const actions = { like: jest.fn(), report: jest.fn() } as never
+  const actions = { wave: jest.fn(), report: jest.fn() } as never
   it('draws “Out together often” once when the server sends the tier, and nothing when it does not', async () => {
-    await render(<RoomCrewCard card={{ ...card('nebula'), badges: [{ kind: 'nights_together', label: 'Out together often' }] }} actions={actions} as={null} index={0} />)
+    await render(<RoomCrewCard card={{ ...card('nebula'), badges: [{ kind: 'nights_together', label: 'Out together often' }] }} actions={actions} as={null} index={0} onOpen={jest.fn()} />)
     expect(screen.getAllByLabelText('Badge: Out together often')).toHaveLength(1)
   })
   it('no badge key, no pill', async () => {
-    await render(<RoomCrewCard card={card('orbit')} actions={actions} as={null} index={0} />)
+    await render(<RoomCrewCard card={card('orbit')} actions={actions} as={null} index={0} onOpen={jest.fn()} />)
     expect(screen.queryByLabelText(/^Badge:/)).toBeNull()
   })
 })

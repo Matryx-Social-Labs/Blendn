@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 import Animated, { withSpring, withTiming } from 'react-native-reanimated'
 
@@ -9,13 +10,11 @@ import { ACHIEVEMENT, AchievementBadge, type AchievementKind } from './Achieveme
 import { Button } from './Button'
 import { CountTicks } from './CountTicks'
 import { CrewEmblem, type CrewScene } from './CrewEmblem'
-import { CONTROL_FONT_CAP, font, IC_HAIRLINE, minTarget, PRESSED_WASH, useBoldText, useIncreaseContrast } from './shared'
+import { CONTROL_FONT_CAP, font, IC_HAIRLINE, PRESSED_WASH, useBoldText, useIncreaseContrast } from './shared'
 import { Title } from './Title'
 
 /** The emblem: 96 on a card, 56 compact (the page); 40 in a row. */
 const EMBLEM = { full: 96, compact: 56, row: 40 } as const
-/** The ⋯ in the card's corner: a 32 pt raised circle, 12 in, reaching the target through slop. */
-const MORE = SIZE.tag
 const ROW_MIN_HEIGHT = SIZE.primary + SPACE.sm
 
 export type CrewCardCrew = {
@@ -33,10 +32,13 @@ export type CrewCardCrew = {
   badge?: AchievementKind
 }
 
-export type CrewLike = {
-  /** Your side already liked them tonight. */
-  liked?: boolean
-  /** The crew you're liking as; absent for a solo person's plain Like. */
+export type CrewWave = {
+  /**
+   * `idle` Wave; `waved` your side waved (or liked) tonight; `waveBack` they waved at your side and you haven't answered:
+   * the card is lit and the button is Wave back (board crews/05-room A, advisor Q4 2026-11-25).
+   */
+  state: 'idle' | 'waved' | 'waveBack'
+  /** The crew you're waving as; absent (null) for a solo person's plain Wave. */
   as?: string | null
   onPress: () => void
 }
@@ -55,28 +57,25 @@ export type CrewLike = {
 export function CrewCard({
   crew,
   overlap,
-  like,
+  wave,
   compact = false,
   onSheet = false,
   onPress,
-  onMore,
   emblemScene,
   testID,
 }: {
   crew: CrewCardCrew
   /** Crew-held, from the server ("Both crews are into Techno"). */
   overlap?: string | null
-  like?: CrewLike
+  wave?: CrewWave
   compact?: boolean
   /**
    * A preview on a sheet (Make a crew, Flow 10 · 10.2): 8% white on iOS glass,
    * sunken on Android's solid sheet, the frame's `field_bg`. Not for lists.
    */
   onSheet?: boolean
-  /** Opens the crew's sheet. */
+  /** Opens the crew's sheet (Hide tonight, Block, Report live there). */
   onPress?: () => void
-  /** The ⋯: report or hide. */
-  onMore?: () => void
   /** Make a crew's preview only (Shuffle dances): never on a card in a list. */
   emblemScene?: CrewScene
   testID?: string
@@ -87,7 +86,7 @@ export function CrewCard({
   const hashtags = crew.tags.map((t) => `#${t}`)
   const label = [crew.name, `crew of ${crew.size}`, here ? `${here} here` : null, crew.bio, ...hashtags, crew.intent, crew.badge ? `Badge: ${ACHIEVEMENT[crew.badge].label}` : null].filter(Boolean).join(', ')
   const detail = contrast ? COLOR.textPrimary : COLOR.textSecondary
-  const slop = (minTarget() - MORE) / 2
+  const lit = wave?.state === 'waveBack'
 
   return (
     <View
@@ -97,6 +96,7 @@ export function CrewCard({
         { borderRadius: compact ? RADIUS.sheet : RADIUS.card },
         onSheet && { backgroundColor: Platform.OS === 'android' ? COLOR.surfaceSunken : MATERIAL.fillOnGlass },
         contrast && IC_HAIRLINE,
+        lit && styles.lit,
       ]}
     >
       <Pressable
@@ -113,9 +113,14 @@ export function CrewCard({
             <CountTicks size={crew.size} here={here} />
           </View>
           <View style={styles.text}>
-            <Title variant={compact ? 'heading' : 'title'} style={[styles.ink, onMore ? styles.clearMore : null]}>
+            <Title variant={compact ? 'heading' : 'title'} style={styles.ink}>
               {crew.name}
             </Title>
+            {lit ? (
+              <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.atYou]}>
+                {wave?.as ? `Waved at ${wave.as}` : 'Waved at you'}
+              </Text>
+            ) : null}
             {/* The hashtags ride the count's line: one line, cut at the end (board crews/tags/01 · Crew card), so five never wrap the card. */}
             <Text numberOfLines={1} ellipsizeMode="tail" maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: detail }]}>
               {[`Crew of ${crew.size}`, here ? `${here} here now` : null, ...hashtags].filter(Boolean).join(' · ')}
@@ -144,19 +149,7 @@ export function CrewCard({
           </View>
         ) : null}
       </Pressable>
-      {like ? <LikeButton like={like} /> : null}
-      {onMore ? (
-        <Pressable
-          onPress={onMore}
-          hitSlop={slop}
-          accessibilityRole="button"
-          accessibilityLabel={`More, ${crew.name}`}
-          android_ripple={{ color: PRESSED_WASH.android, borderless: true }}
-          style={styles.more}
-        >
-          <Icon name="ellipsis" size={ICON.inline} />
-        </Pressable>
-      ) : null}
+      {wave ? <WaveButton wave={wave} /> : null}
     </View>
   )
 }
@@ -176,26 +169,36 @@ export const popIn = (reduceMotion: boolean) => () => {
   }
 }
 
-function LikeButton({ like }: { like: CrewLike }) {
+export function WaveButton({ wave }: { wave: CrewWave }) {
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const reduceMotion = useReducedMotion()
-  if (!like.liked) return <Button kind="primary" label={like.as ? `Like for ${like.as}` : 'Like'} pressHaptic={H.like} onPress={like.onPress} />
-  const text = like.as ? `Liked for ${like.as}` : 'Liked'
-  // Settled: words in the button's place, not a button (a second like does nothing, §10.2).
+  if (wave.state !== 'waved') {
+    const back = wave.state === 'waveBack'
+    // As the person Wave (Wave dock A): Wave is lit, Wave back the filled one; the press is H.select.
+    return (
+      <Button
+        kind={back ? 'primary' : 'lit'}
+        label={back ? 'Wave back' : wave.as ? `Wave for ${wave.as}` : 'Wave'}
+        icon="hand"
+        pressHaptic={H.select}
+        onPress={wave.onPress}
+      />
+    )
+  }
+  // Settled: words in the button's place, not a button (a second wave does nothing, §10.2).
   return (
     <Animated.View
-      testID="crew-liked"
+      testID="crew-waved"
       entering={popIn(reduceMotion)}
       accessible
       accessibilityRole="text"
-      accessibilityLabel={text}
+      accessibilityLabel="Waved"
       style={[styles.liked, contrast && IC_HAIRLINE]}
     >
-      <Icon name="check" size={ICON.control} active />
-      {/* A legal 32-character crew name at 1.3× wraps to a second line rather than clipping in the plate. */}
-      <Text numberOfLines={2} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('button', bold), styles.ink, styles.likedText]}>
-        {text}
+      <Icon name="check" size={ICON.control} color={COLOR.selectionRoseGlyph} active />
+      <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('button', bold), styles.likedText]}>
+        Waved
       </Text>
     </Animated.View>
   )
@@ -214,12 +217,18 @@ export function CrewRow({
   sub,
   badge,
   onPress,
+  trailing,
   testID,
 }: {
   name: string
   emblemSeed: string
   size: number
   sub?: string
+  /**
+   * A control at the row's end in the chevron's place (Settings → Blocked's Unblock). Such a row is in a list on the
+   * gutter, not in a card, and groups nothing for a screen reader, so the control is reached on its own.
+   */
+  trailing?: ReactNode
   /** The crew's tier badge, drawn and read in the chevron's place. */
   badge?: AchievementKind
   onPress?: () => void
@@ -233,15 +242,16 @@ export function CrewRow({
       testID={testID}
       onPress={onPress}
       disabled={!onPress}
+      accessible={!trailing}
       accessibilityRole={onPress ? 'button' : undefined}
-      accessibilityLabel={[name, line, badge ? `Badge: ${ACHIEVEMENT[badge].label}` : null].filter(Boolean).join(', ')}
+      accessibilityLabel={trailing ? undefined : [name, line, badge ? `Badge: ${ACHIEVEMENT[badge].label}` : null].filter(Boolean).join(', ')}
       android_ripple={{ color: PRESSED_WASH.android }}
-      style={({ pressed }) => [styles.row, pressed && Platform.OS === 'ios' ? { backgroundColor: PRESSED_WASH.ios } : null]}
+      style={({ pressed }) => [styles.row, trailing ? styles.flush : null, pressed && Platform.OS === 'ios' ? { backgroundColor: PRESSED_WASH.ios } : null]}
     >
       <CrewEmblem seed={emblemSeed} size={EMBLEM.row} />
       <View style={styles.text}>
-        {/* A 32-character name takes two lines rather than "The Midnight Vin…"; the row's height is a minimum. */}
-        <Text numberOfLines={2} maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink]}>
+        {/* A 32-character name takes two lines rather than "The Midnight Vin…"; the row's height is a minimum. Beside a control, as many as it needs. */}
+        <Text numberOfLines={trailing ? undefined : 2} maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink]}>
           {name}
         </Text>
         <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>
@@ -252,6 +262,8 @@ export function CrewRow({
         <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
           <AchievementBadge kind={badge} />
         </View>
+      ) : trailing ? (
+        trailing
       ) : onPress ? (
         <Icon name="chevron-right" size={ICON.control} color={COLOR.textTertiary} />
       ) : null}
@@ -267,7 +279,8 @@ const styles = StyleSheet.create({
   emblem: { alignItems: 'center', gap: SPACE.sm },
   text: { flex: 1, gap: SPACE.xs },
   ink: { color: COLOR.textPrimary },
-  clearMore: { paddingRight: MORE },
+  atYou: { color: COLOR.selectionRoseGlyph },
+  lit: { backgroundColor: COLOR.selectionRoseFill, borderWidth: 1, borderColor: COLOR.brandRose },
   meta: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: SPACE.sm },
   liked: {
     minHeight: SIZE.primary,
@@ -278,21 +291,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: SPACE.sm,
     borderRadius: RADIUS.button,
-    backgroundColor: COLOR.surface,
+    // Board crews/05-room A's still state: the rose rim and no fill (the card's own fill drew nothing on the card).
+    borderWidth: 1,
+    borderColor: COLOR.brandRose,
   },
-  likedText: { flexShrink: 1, textAlign: 'center' },
+  likedText: { flexShrink: 1, textAlign: 'center', color: COLOR.selectionRoseGlyph },
   overlap: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
-  more: {
-    position: 'absolute',
-    top: SPACE.md,
-    right: SPACE.md,
-    width: MORE,
-    height: MORE,
-    borderRadius: RADIUS.capsule,
-    backgroundColor: COLOR.surfaceRaised,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  flush: { paddingHorizontal: 0 },
   row: {
     minHeight: ROW_MIN_HEIGHT,
     flexDirection: 'row',
