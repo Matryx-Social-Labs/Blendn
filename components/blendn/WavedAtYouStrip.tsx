@@ -83,7 +83,7 @@ export function WavedAtYouStrip({
         <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold, FONT_FAMILY.brand[500]), styles.ink]}>
           {leadName}
         </Text>
-        <Text numberOfLines={several ? 2 : 1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('note', bold), { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>
+        <Text numberOfLines={2} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('note', bold), { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>
           {second}
         </Text>
       </View>
