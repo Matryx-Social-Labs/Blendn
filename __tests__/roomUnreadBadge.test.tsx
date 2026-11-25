@@ -46,6 +46,7 @@ const mockSubscribeMessage = jest.fn(() => () => {});
 jest.mock("../lib/socketClient", () => ({
   subscribeToChatMessage: (...a: unknown[]) =>
     mockSubscribeMessage(...(a as [])),
+  subscribeToRoomCrewWave: () => () => {},
   subscribeToRoomWave: () => () => {},
   subscribeToBell: () => () => {},
   subscribeToUserNotifications: () => () => {},

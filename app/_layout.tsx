@@ -19,7 +19,7 @@ import { initSocketWithAppState, cleanup as cleanupSocket, disconnect as disconn
 import { ONBOARDING_ROUTES, mayParticipate, resumeStep } from '../lib/onboarding';
 import { ReducedMotionFollower, useReducedMotion } from '../lib/motion';
 import { refreshPhoneZone } from '../lib/time';
-import { openWhenReady, setLinkNavigator, setRouteReady, takePendingRoute } from '../lib/pendingRoute';
+import { isInvitePath, openWhenReady, setLinkNavigator, setRouteReady, takePendingRoute } from '../lib/pendingRoute';
 import { readOnboarding } from '../lib/onboardingStorage';
 import { mayPromptAtStartUp } from '../lib/pushDecline';
 import { PresenceMonitor } from '../components/PresenceMonitor';
@@ -310,7 +310,7 @@ function RootLayout() {
            * in — after sign-in, or after onboarding for a new account. Without
            * this the link was lost at the sign-in screen.
            */
-          if (pathname.startsWith('/f/') || pathname.startsWith('/event/')) openWhenReady(pathname as Href);
+          if (isInvitePath(pathname) || pathname.startsWith('/event/')) openWhenReady(pathname as Href);
           replaceIfNeeded('/');
         }
         // Also remove push token best-effort. Not while the server is merely
@@ -418,7 +418,7 @@ function RootLayout() {
          * signed-out tap is held until sign-in. The link opens once they are
          * through. Other deep links keep the behaviour below.
          */
-        if (pathname.startsWith('/f/')) {
+        if (isInvitePath(pathname)) {
           const stored = user?.id ? await readOnboarding(user.id) : null;
           if (superseded) return;
           const resume = resumeStep({
@@ -780,6 +780,7 @@ function RootLayout() {
         exceeded" took the app down to the root boundary (RC drive 5; `__tests__/plusManageOverPlus.test.tsx`).
       */}
       <Stack.Screen name="plus-manage" options={{ headerShown: false }} />
+      <Stack.Screen name="c/[token]" options={{ headerShown: false, presentation: 'modal', animation: reduceMotion ? 'fade' : 'slide_from_bottom' }} />
       <Stack.Screen name="f/[token]" options={{ headerShown: false, presentation: 'modal', animation: reduceMotion ? 'fade' : 'slide_from_bottom' }} />
           </Stack>
           {/*

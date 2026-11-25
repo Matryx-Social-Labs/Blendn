@@ -51,6 +51,9 @@ export function initSentry() {
 /** The app's invite links (`/f/<token>`) and the API's (`/friends/invite/<token>`): anyone holding one can use it. */
 const APP_INVITE = /\/f\/[^/?#\s'"]+/g
 const API_INVITE = /\/friends\/invite\/[^/?#\s'"]+/g
+/** A crew's link, the same: `/c/<token>`, and the API's `/crews/links/<token>`. */
+const APP_CREW_INVITE = /\/c\/[^/?#\s'"]+/g
+const API_CREW_INVITE = /\/links\/[^/?#\s'"]+/g
 /**
  * Every query parameter's value: a search term is somebody's words, and `token`, `code`, `key`, `signature` are secrets.
  * The names stay (they say what the request was).
@@ -67,6 +70,8 @@ export function scrubReportText(text: string): string {
   return scrubBoardUrl(text)
     .replace(API_INVITE, '/friends/invite/:token')
     .replace(APP_INVITE, '/f/:token')
+    .replace(API_CREW_INVITE, '/links/:token')
+    .replace(APP_CREW_INVITE, '/c/:token')
     .replace(QUERY_VALUE, '$1:redacted')
     .replace(UUID, ':id')
 }

@@ -80,3 +80,13 @@ describe('a blocked crew’s wave never reaches the crew chat (task 17 b1)', () 
     expect(chat).toContain('if (fresh && isCrewWavedLine(incoming)) void loadMessagesRef.current(true)')
   })
 })
+
+describe('Share a crew link (S7 b2)', () => {
+  it('the row sits on the sheet’s own plate: the page’s card is the colour of Android’s solid sheet', () => {
+    expect(src('components/crews/InviteFriendsSheet.tsx')).toContain('<RowsCard onSheet')
+    expect(src('components/crews/RowsCard.tsx')).toContain('onSheet: { backgroundColor: SHEET_FILL }')
+  })
+  it('is shared with the one link builder’s words, through the system sheet', () => {
+    expect(src('app/crews/[crewId].tsx')).toContain("shareNatively({ kind: 'crew', name: crew.name, url: result.data.url })")
+  })
+})

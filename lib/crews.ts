@@ -178,6 +178,23 @@ export interface CrewInvite {
   expiresAt?: string
 }
 
+/** Who shared a crew link, and the crew, before anybody signs in (`GET /crews/links/:token/preview`). */
+export interface CrewLinkPreview {
+  name: string
+  emblemSeed: string
+  size: number
+  invitedBy: { name: string; photoUrl: string | null }
+}
+
+/** The card behind a crew link (S7). `member`: the holder is in the crew already. */
+export interface CrewLink extends CrewLinkPreview {
+  crewId: string
+  bio: string | null
+  tags: CrewTag[]
+  expiresAt: string
+  member: boolean
+}
+
 /** A crew here now, as a card. Counts only — never a person. */
 export interface CrewCard {
   crewId: string
@@ -771,7 +788,7 @@ export function crewsThatMayLikePeople(
  * Who a like of a crew is sent as. With no crew of yours here it is you
  * (crew ↔ person, which needs "Open to joining a crew tonight"); with one,
  * that crew; with several, the person chooses — the app never picks a crew
- * for somebody, because the crew chat says who liked on its behalf.
+ * for somebody, because the crew chat says who waved on its behalf.
  */
 export function likeAs(myCrews: CrewsAtEvent['myCrews']): { as: 'me' } | { as: 'crew'; crewId: string } | { as: 'choose' } {
   if (myCrews.length === 0) return { as: 'me' }

@@ -13,7 +13,7 @@ import { readFileSync } from 'fs'
 import { join } from 'path'
 import { navigateFromNotificationData, notificationTarget } from '../lib/notifications'
 import { queryCache } from '../lib/queryCache'
-import { openWhenReady, pendingEventId, pendingInviteToken, resetPendingRoute, setRouteReady, takePendingRoute } from '../lib/pendingRoute'
+import { isInvitePath, openWhenReady, pendingCrewToken, pendingEventId, pendingInviteToken, resetPendingRoute, setRouteReady, takePendingRoute } from '../lib/pendingRoute'
 
 beforeEach(() => {
   resetPendingRoute()
@@ -42,6 +42,24 @@ describe('openWhenReady', () => {
     await new Promise((resolve) => setImmediate(resolve))
     expect(mockPush).toHaveBeenCalledWith('/(tabs)/chat')
     expect(takePendingRoute()).toBeNull()
+  })
+})
+
+describe('a crew link waiting for sign-in (S7)', () => {
+  it('reads the token without taking it; a friend’s link is not a crew’s', () => {
+    openWhenReady('/c/tok_1-2' as never)
+    expect(pendingCrewToken()).toBe('tok_1-2')
+    expect(pendingInviteToken()).toBeNull()
+    expect(takePendingRoute()).toBe('/c/tok_1-2')
+    openWhenReady('/f/abc123' as never)
+    expect(pendingCrewToken()).toBeNull()
+  })
+  it('a token that could climb out of its segment is not one', () => {
+    openWhenReady('/c/..%2Fusers' as never)
+    expect(pendingCrewToken()).toBeNull()
+  })
+  it('both kinds of invite are held; control: a chat is not an invite', () => {
+    expect(['/c/t', '/f/t', '/chat/1', '/crews/1'].map(isInvitePath)).toEqual([true, true, false, false])
   })
 })
 

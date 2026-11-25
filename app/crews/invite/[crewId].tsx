@@ -1,39 +1,29 @@
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ScrollView, StyleSheet, Text, View } from 'react-native'
+import { StyleSheet, Text, View } from 'react-native'
 import Animated from 'react-native-reanimated'
-import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
+import { InviteCard } from '../../../components/crews/InviteCard'
 import { CrewRefusalSheet, type CrewRefusal } from '../../../components/crews/CrewRefusalSheet'
-import { Avatar } from '../../../components/ds/Avatar'
-import { Button } from '../../../components/ds/Button'
-import { CrewEmblem } from '../../../components/ds/CrewEmblem'
 import { Grain } from '../../../components/ds/Grain'
 import { Orbs } from '../../../components/ds/Orbs'
-import { Title } from '../../../components/ds/Title'
-import { font, HueProvider, IC_HAIRLINE, useBoldText, useIncreaseContrast, useLargeText, useSelection } from '../../../components/ds/shared'
+import { font, HueProvider, useBoldText, useSelection } from '../../../components/ds/shared'
 import { StateScreen } from '../../../components/ds/StateScreen'
-import { Toggle } from '../../../components/ds/Toggle'
 import { TopBar } from '../../../components/ds/TopBar'
 import { useSkeletonCrossfade } from '../../../components/motion/useSkeletonCrossfade'
 import { useToast } from '../../../components/Toast'
-import { useToastDock } from '../../../components/toastDock'
 import { askCrewPush } from '../../../lib/crewPushAsk'
 import { crewInviteAnswered } from '../../../lib/crewInvites'
-import { CONSENT_LINE, KEEP_ANONYMOUS_LABEL, crewMessage, findInvite, type CrewInvite } from '../../../lib/crews'
+import { crewMessage, findInvite, type CrewInvite } from '../../../lib/crews'
 import { crewsApi } from '../../../lib/crewsApi'
-import { askedYouIn, crewVerb, inviteMeta, inviteNote } from '../../../lib/crewsScreens'
-import { COLOR, RADIUS, SPACE, MAX_FONT_SCALE, TYPE } from '../../../lib/design/tokens'
+import { inviteNote } from '../../../lib/crewsScreens'
+import { COLOR, SPACE, MAX_FONT_SCALE } from '../../../lib/design/tokens'
 import { H } from '../../../lib/haptics'
 import { showSheet } from '../../../lib/sheet'
 import { useAuth } from '../../../lib/useAuth'
-import { personFace } from '../../../lib/personFace'
 
 type Load = { kind: 'loading' } | { kind: 'ready'; invite: CrewInvite } | { kind: 'notOpen' } | { kind: 'failed' }
 
-const EMBLEM = 120
-/** The inviter's face in the "Priya asked you in" pill. */
-const INVITER_FACE = 24
 /** How long "Joined" shows before the chat opens. */
 const JOINED_MS = 700
 const NOT_OPEN = 'This invite isn’t open any more'
@@ -50,18 +40,12 @@ function CrewInviteScreenContent() {
   const { crewId: param } = useLocalSearchParams<{ crewId: string }>()
   const crewId = String(param)
   const bold = useBoldText()
-  const largeText = useLargeText()
-  const contrast = useIncreaseContrast()
   const sel = useSelection()
-  const insets = useSafeAreaInsets()
   const { showToast } = useToast()
   const { user } = useAuth()
   const [load, setLoad] = useState<Load>({ kind: 'loading' })
   const [keepAnonymous, setKeepAnonymous] = useState(false)
   const [joining, setJoining] = useState(false)
-  // The Android snackbar stands above the consent dock (the toast adds the bottom inset itself).
-  const [dockHeight, setDockHeight] = useState(0)
-  useToastDock(Math.max(0, dockHeight - insets.bottom))
   /** The server said yes: Join reads "Joined" for a beat, quiet, before the chat opens (R3-D10 #45). */
   const [joined, setJoined] = useState<{ chatGroupId: string; name: string } | null>(null)
   const [refusal, setRefusal] = useState<CrewRefusal | null>(null)
@@ -178,7 +162,6 @@ function CrewInviteScreenContent() {
       ],
     })
 
-  const secondary = contrast ? COLOR.textPrimary : COLOR.textSecondary
   return (
     <View style={styles.container}>
       {/* Lit from behind in the screen's own hue (TG-14), as the board's glow behind the emblem. */}
@@ -186,63 +169,19 @@ function CrewInviteScreenContent() {
       <Grain />
       <TopBar onBack={() => router.back()} testID="invite-top" />
       <Animated.View entering={arrive} style={styles.fill}>
-      {/* One scroll, the dock at its foot: at the largest text the card scrolls whole, so the dock never covers the crew's name. */}
-      <ScrollView testID="invite-scroll" contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={[styles.hero, styles.heroPad]}>
-          <View accessible accessibilityLabel={askedYouIn(invite.invitedBy)} style={[styles.asked, contrast && IC_HAIRLINE]}>
-            <Avatar
-              {...personFace({ named: true, name: invite.invitedBy, photo: invite.invitedByPhoto })}
-              size={INVITER_FACE}
-              testID={invite.invitedByPhoto ? 'invite-inviter-photo' : 'invite-inviter-initial'}
-            />
-            {/* Two lines before an ellipsis: a long first name ("Venkatalakshmi") is never cut at the large sizes. */}
-            <Text numberOfLines={2} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold, TYPE.bodyStrong.fontFamily), styles.ink, styles.shrink]}>
-              {askedYouIn(invite.invitedBy)}
-            </Text>
-          </View>
-          {/* "Priya asked you in": the crew waves hello, once. */}
-          <CrewEmblem seed={invite.emblemSeed} size={EMBLEM} scene="wave" />
-          {/*
-            Two lines at most at the default sizes: a 32-character name is never cut to one, nor left to run on. At the AX sizes
-            the cap lifts, as the crew page's name does (CrewHead): two lines cut "Saint-Jean-sur-Richelieu Runners" to its first word.
-          */}
-          <Title numberOfLines={largeText ? undefined : 2} accessibilityRole="header" style={[styles.centre, styles.ink, styles.name]}>
-            {invite.name}
-          </Title>
-          <View style={styles.about}>
-            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.centre, { color: secondary }]}>{inviteMeta(invite)}</Text>
-            {invite.bio ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.centre, { color: secondary }]}>{`“${invite.bio}”`}</Text> : null}
-          </View>
-          {/* Under the crew, as the board draws it: read on the way down to Join, never pinned under it. */}
-          <View style={[styles.consent, contrast && IC_HAIRLINE]}>
-            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: secondary }]}>{CONSENT_LINE}</Text>
-            <View style={styles.anon}>
-              <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('meta', bold, TYPE.bodyStrong.fontFamily), styles.ink, styles.fill]}>{KEEP_ANONYMOUS_LABEL}</Text>
-              <Toggle value={keepAnonymous} onValueChange={setKeepAnonymous} accessibilityLabel={KEEP_ANONYMOUS_LABEL} disabled={joining} />
-            </View>
-          </View>
-        </View>
-      <View
-        testID="invite-dock"
-        onLayout={(e) => setDockHeight(e.nativeEvent.layout.height)}
-        style={[styles.dock, { paddingBottom: insets.bottom + SPACE.xl }]}
-      >
-        <Button
-          label={joined ? 'Joined' : crewVerb('Join', invite.name)}
-          kind={joined ? 'secondary' : 'primary'}
-          onPress={() => void join()}
-          loading={joining}
-          disabled={!!joined}
+        <InviteCard
+          invite={invite}
+          invitedBy={invite.invitedBy}
+          invitedByPhoto={invite.invitedByPhoto}
+          note={inviteNote(invite)}
+          keepAnonymous={keepAnonymous}
+          onKeepAnonymous={setKeepAnonymous}
+          joining={joining}
+          joined={!!joined}
           refused={!!refusal}
-          pressHaptic={false}
-          testID="invite-join"
+          onJoin={() => void join()}
+          onNotNow={confirmDecline}
         />
-        <Button label="Not now" kind="tertiary" onPress={confirmDecline} disabled={joining || !!joined} testID="invite-not-now" />
-        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.centre, styles.tertiary]} testID="invite-note">
-          {inviteNote(invite)}
-        </Text>
-      </View>
-      </ScrollView>
       </Animated.View>
       <CrewRefusalSheet refusal={refusal} onClose={() => setRefusal(null)} />
     </View>
@@ -252,38 +191,8 @@ function CrewInviteScreenContent() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLOR.ink },
   state: { flex: 1, justifyContent: 'center', paddingHorizontal: SPACE.gutter },
-  content: { flexGrow: 1, justifyContent: 'space-between', paddingTop: SPACE.sm, gap: SPACE.xl },
-  heroPad: { paddingHorizontal: SPACE.gutter },
-  hero: { alignItems: 'center', gap: SPACE.md },
-  name: { marginTop: SPACE.xs },
-  asked: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACE.sm,
-    maxWidth: '100%',
-    paddingLeft: SPACE.xs,
-    paddingRight: SPACE.md,
-    paddingVertical: SPACE.xs,
-    borderRadius: RADIUS.capsule,
-    backgroundColor: COLOR.surface,
-  },
-  shrink: { flexShrink: 1 },
-  about: { alignItems: 'center', gap: SPACE.xs },
-  consent: { alignSelf: 'stretch', marginTop: SPACE.sm, borderRadius: RADIUS.sheet, backgroundColor: COLOR.surface, padding: SPACE.lg, gap: SPACE.md },
-  anon: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACE.md,
-    paddingTop: SPACE.md,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: COLOR.hairline,
-  },
-  dock: { paddingHorizontal: SPACE.gutter, paddingTop: SPACE.md, gap: SPACE.sm },
   fill: { flex: 1 },
-  centre: { textAlign: 'center' },
-  ink: { color: COLOR.textPrimary },
   secondary: { color: COLOR.textSecondary, textAlign: 'center' },
-  tertiary: { color: COLOR.textTertiary },
 })
 
 /** Rose world: one hue on this screen (`HueProvider`). */

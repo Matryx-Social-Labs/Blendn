@@ -6,6 +6,8 @@ import type {
   Crew,
   CrewIntent,
   CrewInvite,
+  CrewLink,
+  CrewLinkPreview,
   CrewReportReason,
   CrewsAtEvent,
   HiddenCrew,
@@ -141,17 +143,36 @@ export const crewsApi = {
   },
 
   /**
-   * A person, on your crew's behalf. `handle` is the deck's room handle. The
-   * answer is `{ liked: true }` whatever the server found out about them —
-   * it tells you nothing about the person, so nothing here may either.
+   * Wave at a person for your crew (admin #1007): `handle` is their room handle. A refusal about THEM is
+   * `{ sent: true, mutual: false }`, the same as a wave that stood: it tells you nothing about the person, so nothing here may.
    */
-  likePersonAsCrew(eventId: string, handle: string, asCrewId: string): Promise<ApiResponse<{ liked: true; blend: BlendRef | null }>> {
+  wavePersonAsCrew(eventId: string, handle: string, asCrewId: string): Promise<ApiResponse<{ sent: true; mutual: boolean; blend?: BlendRef }>> {
     return apiClient.queuedRequest(
-      `/api/mobile/events/${enc(eventId)}/matches/likes`,
-      post({ userId: handle, asCrewId }),
+      `/api/mobile/events/${enc(eventId)}/waves`,
+      post({ toUserId: handle, asCrewId }),
       true,
       2
     )
+  },
+
+  /** S7: a link into your crew, once, for 7 days (10 a day: 429). Share `url`. */
+  makeLink(crewId: string): Promise<ApiResponse<{ token: string; url: string; expiresAt: string }>> {
+    return apiClient.queuedRequest(`/api/mobile/crews/${enc(crewId)}/links`, post(), true, 2)
+  },
+
+  /** The invite card behind a link. Every dead link is one 404 (`INVITE_UNAVAILABLE`). `member`: you are in it already. */
+  link(token: string): Promise<ApiResponse<CrewLink>> {
+    return apiClient.queuedRequest(`/api/mobile/crews/links/${enc(token)}`)
+  },
+
+  /** Signed out: whose link and which crew, nothing more. */
+  linkPreview(token: string): Promise<ApiResponse<CrewLinkPreview>> {
+    return apiClient.queuedRequest(`/api/mobile/crews/links/${enc(token)}/preview`, {}, false)
+  },
+
+  /** Joins, and makes you and whoever shared it friends. Nothing is sent before the consent (`revealConsent`). */
+  joinByLink(token: string, consent: { revealConsent: true; keepMeAnonymous: boolean }): Promise<ApiResponse<{ crewId: string; chatGroupId: string }>> {
+    return apiClient.queuedRequest(`/api/mobile/crews/links/${enc(token)}`, post(consent), true, 2)
   },
 
   /**
