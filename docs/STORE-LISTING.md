@@ -45,25 +45,26 @@ Rules for this field:
 - No word from the name or subtitle. "events" is in the name, which the research memo's draft missed.
 - No competitor names, so no "meetup".
 - `blendn` is there for people who type the brand without the apostrophe.
+- No `chat`, which would push a reviewer toward reading the app as App Review 1.2's "anonymous chat".
 
 ```text ios-keywords
-nightlife,party,bengaluru,bangalore,blendn,friends,club,pub,gig,concert,social,chat,bar,festival
+nightlife,party,bengaluru,bangalore,blendn,friends,club,pub,gig,concert,social,night,bar,festival
 ```
 
 ```
 $ node -e 'const s=require("fs").readFileSync("docs/STORE-LISTING.md","utf8").match(/```text ios-keywords\n([\s\S]*?)\n```/)[1];console.log([...s].length,"chars",Buffer.byteLength(s),"/ 100 bytes",/\s/.test(s)?"HAS SPACES":"no spaces")'
-96 chars 96 / 100 bytes no spaces
+97 chars 97 / 100 bytes no spaces
 ```
 
 **Promotional text** (limit 170). You can change it without a new review, so update it as cities open.
 
 ```text ios-promo
-Starting in Bengaluru: check in at tonight’s events, talk to the room under a nickname, and wave at the people you’d like to meet.
+Starting in Bengaluru: check in at tonight’s events, talk to the room, and wave at the people you’d like to meet.
 ```
 
 ```
 $ node -e 'const s=require("fs").readFileSync("docs/STORE-LISTING.md","utf8").match(/```text ios-promo\n([\s\S]*?)\n```/)[1];console.log([...s].length,"/ 170")'
-130 / 170
+113 / 170
 ```
 
 **Description** (limit 4,000): paste [the shared description](#description-both-stores).
@@ -123,22 +124,22 @@ This is the iOS description and the Play full description. Its first two lines a
 Meet the people at the event you’re already at.
 Check in when you arrive, see who else is in the room, and say hi when you’re both ready. Free, for adults 18 and over.
 
-FIND WHAT’S ON
-The Pulse is a live map of your city tonight, with the places that have something on lit up. Tap “I’m going” on an event and it waits for you in Going.
+Find What’s On
+The Pulse is a live map of the city tonight, with the places that have something on lit up. Tap “I’m going” on an event and it waits for you in Going.
 
-CHECK IN WHEN YOU GET THERE
-Check in at the event and its room opens to you. Only people checked in at the event get into its room.
+Check In When You Get There
+Check in at the event and its room opens to you. The room is for people checked in at the event.
 
-TALK TO THE ROOM
+Talk to the Room
 In the room you go by a nickname the app gives you, like Cosmic Panda. Ask how long the queue is, save someone a seat, find the afters.
 
-WAVE. TALK IF THEY WAVE BACK.
+Wave. Talk If They Wave Back.
 Wave at someone. If they wave back, you can talk one to one, still under your nicknames. You choose if and when to show who you are.
 
-BRING YOUR CREW
+Bring Your Crew
 Make a crew with your friends and see which of them are in the room with you.
 
-YOU’RE IN CONTROL
+Report and Block
 Report or block anyone from their profile, and reports go to our team. Room messages are checked automatically before others see them.
 
 Starting in Bengaluru.
@@ -148,7 +149,7 @@ Questions: support@blendn.app
 
 ```
 $ node -e 'const s=require("fs").readFileSync("docs/STORE-LISTING.md","utf8").match(/```text description\n([\s\S]*?)\n```/)[1];console.log([...s].length,"/ 4000")'
-1178 / 4000
+1169 / 4000
 ```
 
 **Where each claim comes from.**
@@ -159,13 +160,14 @@ $ node -e 'const s=require("fs").readFileSync("docs/STORE-LISTING.md","utf8").ma
 |---|---|
 | Headline, sub-line, "Free, for adults 18 and over" | FACTS.md facts 1, 2, 4 and 6 |
 | The Pulse, a live map; "I’m going"; Going | `app/(tabs)/events.tsx`, `components/home/HomeMap.tsx`, `lib/eventFacts.ts:126`, `app/(tabs)/going.tsx` |
-| Check in, then the room opens; only checked-in people get in | `lib/checkIn.ts:101` (`submitCheckIn`), admin `app/api/mobile/events/[eventId]/chat/route.ts:134` |
+| Check in, then the room opens; the room is for checked-in people | `lib/checkIn.ts:101` (`submitCheckIn`), admin `app/api/mobile/events/[eventId]/chat/route.ts:134` |
 | A nickname the app gives you, like Cosmic Panda | admin `lib/anonymous-names.ts:8`, `lib/board.ts:73` ("a pseudonym, never a name") |
 | Wave; talk one to one if they wave back; choose when to show who you are | `lib/waves.ts:102`, `app/user/[id].tsx:796`, `lib/roomState.ts:36-40` (`revealed`) |
 | Crew; which friends are in the room with you | `app/crews/new.tsx`, `lib/crews.ts:247` (`myCrews`, "Your crews here now") |
 | Report or block from a profile; reports reach the team | `app/user/[id].tsx:773` ("Report or block"), `app/blocked-users.tsx` |
-| Room messages checked before others see them | admin `chat/route.ts:39-46` (`moderateMessage`, `preSaveCheck`), admin `lib/moderation/held-row.ts` (held while the check runs, never emitted) |
+| Room messages checked before others see them (room photos too: `research/r-store-razorpay.md` open question 6) | admin `chat/route.ts:39-46` (`moderateMessage`, `preSaveCheck`), admin `lib/moderation/held-row.ts` (held while the check runs, never emitted) |
 | Starting in Bengaluru | FACTS.md fact 5 |
+| organizers.blendn.app | 200 on 2026-11-25, `<title>` "Blend'n for organizers – …"; the organizer site, which links no price (seo tasks 03, 04) |
 
 **Left out on purpose:**
 - **Dating as a reason to be there.** Pending the owner (FACTS.md fact 20).
