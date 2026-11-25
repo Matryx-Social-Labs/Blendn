@@ -198,3 +198,43 @@ describe('the detail route spells the poster thumbnailUrl (ROOM-12)', () => {
     expect(feedPoster([{ ...clip, thumbnail_url: 'https://cdn.example/snake.jpg' }], null)).toBe('https://cdn.example/snake.jpg')
   })
 })
+
+describe('the server’s media facts ride along (task 21, SCRUM-1066)', () => {
+  const renditions = [{ url: 'https://cdn/540.mp4', width: 540, height: 960, bytes: 2_000_000 }]
+
+  it('a list row (snake): size, focal point, length and copies on the clip', () => {
+    const [clip] = feedPlaylist([
+      { type: 'video', url: 'https://x/c.mp4', thumbnail_url: 'https://x/p.jpg', order: 0, width: 1080, height: 1920, duration_ms: 15200, focal_x: 0.3, focal_y: 0.2, renditions },
+    ])
+    expect(clip).toEqual({
+      kind: 'video',
+      url: 'https://x/c.mp4',
+      posterUrl: 'https://x/p.jpg',
+      size: { width: 1080, height: 1920 },
+      focus: { x: 0.3, y: 0.2 },
+      durationMs: 15200,
+      renditions,
+    })
+  })
+
+  it('a detail row (camel) reads the same', () => {
+    const [clip] = feedPlaylist([{ type: 'video', url: 'https://x/c.mp4', order: 0, width: 1080, height: 1920, durationMs: 9000, focalX: 0.5, focalY: 0.9, renditions: null }])
+    expect(clip).toEqual({ kind: 'video', url: 'https://x/c.mp4', posterUrl: null, size: { width: 1080, height: 1920 }, focus: { x: 0.5, y: 0.9 }, durationMs: 9000 })
+  })
+
+  it('a still carries its size and point', () => {
+    const [still] = feedPlaylist([{ type: 'image', url: 'https://x/a.jpg', order: 0, width: 1200, height: 900, focal_x: 0.1, focal_y: 0.1 }])
+    expect(still).toEqual({ kind: 'image', url: 'https://x/a.jpg', size: { width: 1200, height: 900 }, focus: { x: 0.1, y: 0.1 } })
+  })
+
+  it('the cover takes the facts of its own row in media, when the organizer uploaded it there too', () => {
+    const [cover] = feedPlaylist([{ type: 'image', url: 'https://x/cover.jpg', order: 0, width: 800, height: 600, focal_x: 0.7, focal_y: 0.3 }], 'https://x/cover.jpg')
+    expect(cover).toEqual({ kind: 'image', url: 'https://x/cover.jpg', size: { width: 800, height: 600 }, focus: { x: 0.7, y: 0.3 } })
+  })
+
+  it('a row from before 2026-11-24 (all null) carries nothing extra: fit by the loaded size, as before', () => {
+    const [cover, clip] = feedPlaylist([{ type: 'video', url: 'https://x/c.mp4', order: 0, width: null, height: null, duration_ms: null, focal_x: null, focal_y: null, renditions: null }], 'https://x/cover.jpg')
+    expect(cover).toEqual({ kind: 'image', url: 'https://x/cover.jpg' })
+    expect(clip).toEqual({ kind: 'video', url: 'https://x/c.mp4', posterUrl: null })
+  })
+})

@@ -9,6 +9,7 @@ import { AccessibilityInfo, StyleSheet } from 'react-native'
 
 import { ContainedCover, FIT_TOLERANCE, fitFor } from '../components/ds/LinkPreviewCard'
 import { COLOR } from '../lib/design/tokens'
+import { focusStyle } from '../lib/mediaFit'
 
 const LEAD = { width: 345, height: 256 }
 const SQUARE = { width: 345, height: 345 }
@@ -66,12 +67,36 @@ describe('<ContainedCover auto>', () => {
     expect(prop('m-blur', 'blurRadius')).toBeGreaterThan(0)
   })
 
-  it('within ±15%: covers, 40% from the top (faces sit high), and draws no blurred copy', async () => {
+  it('within ±15%: covers at the default focus the dashboard previews with (50% across, 40% down), and draws no blurred copy', async () => {
     await render(<ContainedCover uri="https://x/a.jpg" auto testID="m" />)
+    // 1200×900 into 345×256 (4:3 in 1.35): scale 0.2875 → drawn 345 × 258.75, overflow 2.75; (0.4 × 258.75 − 128) / 2.75 < 0 → 0%.
     await laidOut(LEAD, { width: 1200, height: 900 })
     expect(prop('m', 'contentFit')).toBe('cover')
-    expect(prop('m', 'contentPosition')).toEqual({ top: '40%', left: '50%' })
+    expect(prop('m', 'contentPosition')).toEqual(focusStyle({ width: 1200, height: 900 }, LEAD, null))
+    expect(prop('m', 'contentPosition')).toEqual({ left: '50%', top: '0%' })
     expect(query('m-blur')).toBeNull()
+  })
+
+  it("a size the server sent: the fit is known once the frame is, before the picture's bytes land (no reflow)", async () => {
+    await render(<ContainedCover uri="https://x/a.jpg" auto size={{ width: 1200, height: 900 }} testID="m" />)
+    await laidOut(LEAD, null)
+    expect(prop('m', 'contentFit')).toBe('cover')
+    expect(query('m-blur')).toBeNull()
+  })
+
+  it("the organizer's point moves the crop, as the dashboard's preview does", async () => {
+    // A square into the square hero has nothing to crop; 1000×1100 (10% taller) does, on the vertical axis.
+    await render(<ContainedCover uri="https://x/a.jpg" auto size={{ width: 1000, height: 1100 }} focus={{ x: 0.5, y: 0.95 }} testID="m" />)
+    await laidOut(SQUARE, null)
+    expect(prop('m', 'contentPosition')).toEqual({ left: '50%', top: '100%' })
+  })
+
+  it('negative control: a point is ignored when rule B shows the picture whole', async () => {
+    await render(<ContainedCover uri="https://x/tall.jpg" auto size={{ width: 1080, height: 1920 }} focus={{ x: 0.5, y: 0.95 }} testID="m" />)
+    await laidOut(SQUARE, null)
+    expect(prop('m', 'contentFit')).toBe('contain')
+    // expo-image reads no position as the centre: never the point's.
+    expect(prop('m', 'contentPosition')).not.toMatchObject({ top: '100%' })
   })
 
   it('outside ±15%: contains, over the SAME picture blurred and dimmed', async () => {

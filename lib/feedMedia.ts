@@ -22,6 +22,8 @@
  * a missing first-frame poster should be fixed, not here.
  */
 
+import { mediaFocus, mediaSize, type Focus, type Rendition, type Size } from './mediaFit'
+
 export interface EventMediaItem {
   id?: string
   url?: string | null
@@ -30,13 +32,44 @@ export interface EventMediaItem {
   thumbnailUrl?: string | null
   type?: string | null
   order?: number | null
+  /** Pixels as displayed, both or neither; null on pasted URLs and rows from before 2026-11-24 (task 20). */
+  width?: number | null
+  height?: number | null
+  /** A clip's length: the list spells it `duration_ms`, the detail `durationMs`. */
+  duration_ms?: number | null
+  durationMs?: number | null
+  /** The organizer's focal point, 0–1, both or neither (task 30): list snake, detail camel. */
+  focal_x?: number | null
+  focal_y?: number | null
+  focalX?: number | null
+  focalY?: number | null
+  /** A checked clip's copies, smallest first (task 30); the same name on both routes. */
+  renditions?: Rendition[] | null
 }
+
+/** What the server knows about one item: only what it sent, so an old row reads exactly as before (`lib/mediaFit`). */
+type MediaFacts = { size?: Size; focus?: Focus }
 
 /** One thing a card can show. */
 export type FeedMediaItem =
-  | { kind: 'image'; url: string }
+  | ({ kind: 'image'; url: string } & MediaFacts)
   /** `posterUrl`: the clip's own still (`thumbnail_url`), or null: never the event's cover (SCRUM-1066). */
-  | { kind: 'video'; url: string; posterUrl: string | null }
+  | ({ kind: 'video'; url: string; posterUrl: string | null; durationMs?: number; renditions?: Rendition[] } & MediaFacts)
+
+function factsOf(m: EventMediaItem | undefined): MediaFacts {
+  if (!m) return {}
+  const size = mediaSize(m)
+  const focus = mediaFocus(m)
+  return { ...(size ? { size } : {}), ...(focus ? { focus } : {}) }
+}
+
+function clipFactsOf(m: EventMediaItem): { durationMs?: number; renditions?: Rendition[] } {
+  const durationMs = m.duration_ms ?? m.durationMs
+  return {
+    ...(typeof durationMs === 'number' && durationMs > 0 ? { durationMs } : {}),
+    ...(Array.isArray(m.renditions) && m.renditions.length ? { renditions: m.renditions } : {}),
+  }
+}
 
 /**
  * Media with a URL, by `order` rather than array position.
@@ -105,23 +138,21 @@ export function feedPlaylist(
   media: readonly EventMediaItem[] | null | undefined,
   coverImageUrl?: string | null
 ): FeedMediaItem[] {
+  const sorted = Array.isArray(media) ? byOrder(media) : []
   const out: FeedMediaItem[] = []
-  if (coverImageUrl) out.push({ kind: 'image', url: coverImageUrl })
-
-  if (!Array.isArray(media)) return out
-
-  const sorted = byOrder(media)
+  // The cover is its own field with no facts of its own; when the organizer also uploaded it into media, that row's apply.
+  if (coverImageUrl) out.push({ kind: 'image', url: coverImageUrl, ...factsOf(sorted.find((m) => m.url === coverImageUrl)) })
 
   for (const m of sorted) {
     if (m.url === coverImageUrl) continue
 
     if (m.type === 'image') {
-      out.push({ kind: 'image', url: m.url as string })
+      out.push({ kind: 'image', url: m.url as string, ...factsOf(m) })
       continue
     }
 
     if (m.type === 'video') {
-      out.push({ kind: 'video', url: m.url as string, posterUrl: m.thumbnail_url || m.thumbnailUrl || null })
+      out.push({ kind: 'video', url: m.url as string, posterUrl: m.thumbnail_url || m.thumbnailUrl || null, ...factsOf(m), ...clipFactsOf(m) })
     }
   }
 
