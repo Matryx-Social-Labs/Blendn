@@ -14,6 +14,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import type { FeedMediaItem } from '../../lib/feedMedia'
+import { clipSource } from '../../lib/mediaFit'
 import { MODAL_FADE_MS, useQueuedModal } from '../../lib/modalTurn'
 import { IconButton } from '../ds/IconButton'
 import { ScrimPill, monoCaption } from '../ds/MonoFamily'
@@ -103,7 +104,7 @@ export function SceneLightbox({
     ({ item, index: i }: { item: FeedMediaItem; index: number }) => (
       <View style={styles.page}>
         {item.kind === 'video' ? (
-          <LightboxVideo source={item.url} poster={item.posterUrl} active={i === index} />
+          <LightboxVideo source={clipSource(item, { sound: true })} poster={item.posterUrl} active={i === index} />
         ) : (
           <ZoomableImage
             uri={item.url}

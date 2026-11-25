@@ -251,3 +251,33 @@ it('past five events: "4 / 12" and one pip', async () => {
   expect(screen.getByTestId('pulse-lead-pip-0')).toBeTruthy()
   expect(screen.queryByTestId('pulse-lead-pip-1')).toBeNull()
 })
+
+describe("a clip's length from the server (task 21, SCRUM-1066)", () => {
+  const clipCard = (durationMs?: number): LeadCard =>
+    card('m', {
+      cover: 'https://x/c.jpg',
+      playlist: [
+        { kind: 'image', url: 'https://x/c.jpg' },
+        { kind: 'video', url: 'https://x/v.mp4', posterUrl: 'https://x/p.jpg', ...(durationMs ? { durationMs } : {}) },
+      ],
+    })
+  const at = () => parseFloat((Reanimated.getAnimatedStyle(screen.getByTestId('pulse-lead-fill', { includeHiddenElements: true })) as { width: string }).width)
+
+  it('fills the pip over duration_ms from the clip’s start, without waiting for the player to say', async () => {
+    await draw({ cards: [clipCard(6000), card('b')] })
+    await wait(STILL_MS + 500)
+    const start = at()
+    await wait(3000)
+    // Half of a 6 s clip: about a quarter of the turn (the clip is its second half).
+    expect(at()).toBeGreaterThan(start + 15)
+    expect(at()).toBeLessThan(100)
+  })
+
+  it('control: with no server length, the pip holds until the player says it is ready', async () => {
+    await draw({ cards: [clipCard(), card('b')] })
+    await wait(STILL_MS + 500)
+    const start = at()
+    await wait(3000)
+    expect(at()).toBeCloseTo(start)
+  })
+})

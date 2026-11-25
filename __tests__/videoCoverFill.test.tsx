@@ -8,7 +8,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react-native'
 import { readdirSync, readFileSync, statSync } from 'fs'
 import { join } from 'path'
 import React from 'react'
-import { View } from 'react-native'
+import { PixelRatio, StyleSheet, View } from 'react-native'
 
 let mockReduce = false
 jest.mock('../lib/motion', () => ({ ...jest.requireActual('../lib/motion'), useReducedMotion: () => mockReduce }))
@@ -16,8 +16,13 @@ jest.mock('../lib/mediaSaver', () => ({ useMediaSaver: () => ({ lowPower: false,
 jest.mock('../lib/haptics', () => ({ H: new Proxy({}, { get: () => jest.fn() }) }))
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
 const mockPlayer = { play: jest.fn(), pause: jest.fn(), addListener: () => ({ remove: () => {} }), loop: false, muted: false, duration: 12 }
+/** Every source a player was made with, in order: which copy of a clip plays (task 21). */
+const mockSources: unknown[] = []
 jest.mock('expo-video', () => ({
-  useVideoPlayer: () => mockPlayer,
+  useVideoPlayer: (source: unknown) => {
+    mockSources.push(source)
+    return mockPlayer
+  },
   VideoView: (props: object) => {
     const { View: V } = jest.requireActual('react-native')
     return <V {...props} testID="clip" />
@@ -35,6 +40,8 @@ import { SceneHero } from '../components/scene/SceneHero'
 import { SceneHeroMedia } from '../components/scene/SceneHeroMedia'
 import { STILL_MS } from '../lib/featuredLap'
 import type { FeedMediaItem } from '../lib/feedMedia'
+import { clipSource, focusStyle, videoFrame } from '../lib/mediaFit'
+import { SceneLightbox } from '../components/scene/SceneLightbox'
 /* eslint-enable import/first */
 
 const CLIP = 'https://cdn.example/clip.mp4'
@@ -67,6 +74,7 @@ async function settle(frame: { width: number; height: number }, size: { width: n
 beforeEach(() => {
   jest.clearAllMocks()
   mockReduce = false
+  mockSources.length = 0
 })
 
 describe('the event hero', () => {
@@ -234,5 +242,66 @@ describe('every card that plays video covers (source guard)', () => {
   it('control: the scan reads the attribute (the lightbox is contain, and is the only one)', () => {
     const contained = views.filter((v) => /contentFit="contain"/.test(v.attrs)).map((v) => v.path.slice(ROOT.length + 1))
     expect(contained).toEqual(VIEWERS)
+  })
+})
+
+describe("the server's facts on the clip (task 21: size, the organizer's point, its copies)", () => {
+  const TALL = { width: 1080, height: 1920 }
+  const small = { url: 'https://cdn.example/540.mp4', width: 540, height: 960, bytes: 2_000_000 }
+  const large = { url: 'https://cdn.example/1080.mp4', width: 1080, height: 1920, bytes: 9_000_000 }
+  const clip = (over: Partial<Extract<FeedMediaItem, { kind: 'video' }>> = {}): FeedMediaItem => ({ kind: 'video', url: CLIP, posterUrl: POSTER, size: TALL, ...over })
+  const hero = (item: FeedMediaItem) => <SceneHeroMedia playlist={[item]} width={SQUARE.width} height={SQUARE.height} autoAdvance={false} pips="center" />
+  const box = (id: string) => StyleSheet.flatten(one(id).props.style) as { width: number; height: number; left: number; top: number }
+
+  it("hero: the clip is drawn whole and shifted so the organizer's point sits as near the centre as it can; the poster crops the same", async () => {
+    const focus = { x: 0.5, y: 0.8 }
+    await render(hero(clip({ focus })))
+    const want = videoFrame(TALL, SQUARE, focus)
+    expect(box('clip')).toMatchObject(want)
+    // 0.8 down a 9:16 is past what the square can centre: its bottom edge on the card's.
+    expect(want.top).toBeCloseTo(SQUARE.height - want.height)
+    expect(one('media-poster').props.contentPosition).toEqual(focusStyle(TALL, SQUARE, focus))
+    expect(one('media-poster').props.contentPosition).toEqual({ left: '50%', top: '100%' })
+  })
+
+  it('hero: no point picked, the default focus (as the dashboard previews it), not the centre', async () => {
+    await render(hero(clip()))
+    expect(box('clip')).toMatchObject(videoFrame(TALL, SQUARE, null))
+    // 40% down sits higher in the clip than the centre would: the player is lifted less.
+    expect(box('clip').top).toBeGreaterThan(-(videoFrame(TALL, SQUARE, null).height - SQUARE.height) / 2 + 1)
+    expect(one('media-poster').props.contentPosition).toEqual(focusStyle(TALL, SQUARE, null))
+  })
+
+  it('control: a clip the server never sized (pasted, or from before 2026-11-24) keeps the centre crop, filling the card', async () => {
+    await render(hero({ kind: 'video', url: CLIP, posterUrl: POSTER, focus: { x: 0.5, y: 0.8 } }))
+    expect(box('clip')).toMatchObject({ position: 'absolute', left: 0, top: 0, right: 0, bottom: 0 })
+    expect(one('media-poster').props.contentPosition ?? 'center').toBe('center')
+  })
+
+  it('the lead: the same shift at its own size', async () => {
+    jest.useFakeTimers()
+    try {
+      const focus = { x: 0.5, y: 0.3 }
+      const card: LeadCard = { id: 'a', title: 'Night a', time: '9 PM', venue: 'Pebble', cover: STILL, playlist: [clip({ focus }), { kind: 'image', url: STILL }] }
+      await render(<LeadPager cards={[card, { ...card, id: 'b' }]} width={LEAD.width} height={LEAD.height} onOpen={jest.fn()} />)
+      expect(box('clip')).toMatchObject(videoFrame(TALL, LEAD, focus))
+      expect(all('media-poster')[0].props.contentPosition).toEqual(focusStyle(TALL, LEAD, focus))
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
+  it('hero on Wi-Fi: the copy that covers the card at this screen density; no copies, the organizer’s URL', async () => {
+    await render(hero(clip({ renditions: [large, small] })))
+    expect(mockSources.at(-1)).toBe(clipSource({ url: CLIP, renditions: [large, small] }, { frame: SQUARE, density: PixelRatio.get(), saver: false }))
+    expect([small.url, large.url]).toContain(mockSources.at(-1))
+    mockSources.length = 0
+    await render(hero(clip()))
+    expect(mockSources.at(-1)).toBe(CLIP)
+  })
+
+  it('the viewer plays the largest copy, the only one with sound', async () => {
+    await render(<SceneLightbox items={[clip({ renditions: [large, small] })]} visible onClose={jest.fn()} />)
+    expect(mockSources.at(-1)).toBe(large.url)
   })
 })
