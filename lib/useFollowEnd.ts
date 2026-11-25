@@ -1,5 +1,10 @@
 import { useRef } from 'react'
-import type { FlatList, ScrollView } from 'react-native'
+import type { FlatList, NativeScrollEvent, ScrollView } from 'react-native'
+
+/** Within this many points of the newest message counts as at the end. */
+const AT_END = 80
+export const atEndOf = ({ contentSize, contentOffset, layoutMeasurement }: NativeScrollEvent) =>
+  contentSize.height - contentOffset.y - layoutMeasurement.height < AT_END
 
 /**
  * Keep a chat list on its newest message while the reader is there.
@@ -25,16 +30,47 @@ export interface FollowEnd {
   /**
    * From `onScroll`. Once `stop`ped, only a reader's own drag lets it follow again: a jump that lands short of a list
    * still laying out clamps to its end, and following from there carried the thread past the first unread (SCRUM-958).
+   * Mid-gesture it is ignored, as `noteAtEnd` is: a drag from the newest message reads "at the end" for its first events,
+   * and following from there pulled every drag back to the newest, so a long DM would not scroll (SCRUM-1321).
    */
   noteScroll: (atEnd: boolean) => void
   /** Stop following — the thread opened somewhere else, at its first unread. */
   stop: () => void
+  /** The reader asked for the newest (the pill): follow until there, ending any gesture still coasting (SCRUM-1321). */
+  toEnd: () => void
+  /**
+   * Whether the list's top (`onStartReached`) was reached by the reader's own gesture: once per drag or fling. A first page
+   * paints at the top before the jump to the newest lands, and that asked for older pages nobody scrolled to (SCRUM-1321).
+   * ponytail: an ask refused here is spent until the reader moves half a screen down and back ("Load older" covers it).
+   */
+  readerAsksOlder: () => boolean
+  /**
+   * The list's own events, for where the reader's gesture comes to rest (SCRUM-1321 review). A drag lifted with velocity
+   * coasts until its momentum ends; a momentum end while the finger is still down is the app's own animated scroll (Android
+   * sends it after a grab), not the reader letting go; on iOS a tap that stops a fling sends no momentum end, so a touch
+   * that never became a drag ends it where the list stopped.
+   */
+  onScrollEndDrag: (atEnd: boolean, velocity: number | undefined) => void
+  onMomentumScrollEnd: (atEnd: boolean) => void
+  onTouchStart: () => void
+  onTouchEnd: (atEnd: boolean) => void
 }
 
 export function followEnd(scrollToEnd: () => void): FollowEnd {
   let following = true
   let held = false
   let gesture = false
+  let asked = false
+  let dragging = false
+  let coasting = false
+  let touchDragged = false
+  const end = (atEnd: boolean) => {
+    // Android reports momentum for the app's own animated jump too: with no gesture of the reader live, nothing ends.
+    if (!gesture) return
+    gesture = false
+    following = atEnd
+    held = false
+  }
   return {
     onContentSizeChange: () => {
       if (following) scrollToEnd()
@@ -43,11 +79,28 @@ export function followEnd(scrollToEnd: () => void): FollowEnd {
       following = false
       held = false
       gesture = true
+      asked = true
+      dragging = true
+      touchDragged = true
+      coasting = false
     },
-    onGestureEnd: (atEnd) => {
-      gesture = false
-      following = atEnd
-      held = false
+    onGestureEnd: end,
+    onScrollEndDrag: (atEnd, velocity) => {
+      dragging = false
+      coasting = !!velocity
+      if (!coasting) end(atEnd)
+    },
+    onMomentumScrollEnd: (atEnd) => {
+      coasting = false
+      if (!dragging) end(atEnd)
+    },
+    onTouchStart: () => {
+      touchDragged = false
+    },
+    onTouchEnd: (atEnd) => {
+      if (!coasting || touchDragged) return
+      coasting = false
+      end(atEnd)
     },
     noteAtEnd: (atEnd) => {
       if (!atEnd || gesture) return
@@ -55,11 +108,22 @@ export function followEnd(scrollToEnd: () => void): FollowEnd {
       held = false
     },
     noteScroll: (atEnd) => {
-      if (!held && atEnd) following = true
+      if (!held && !gesture && atEnd) following = true
     },
     stop: () => {
       following = false
       held = true
+    },
+    toEnd: () => {
+      following = true
+      held = false
+      gesture = false
+      coasting = false
+    },
+    readerAsksOlder: () => {
+      const now = asked
+      asked = false
+      return now
     },
   }
 }
