@@ -455,6 +455,16 @@ describe('a crew’s wave at you (S5 b2, advisor T-A / U-A / W-A / X-A 2026-11-2
     expect(seen.store!.version).toBe(before)
   })
 
+  it('a 32-character crew name wraps: "waved at you" is never cut; control: a person’s toast stays one line', async () => {
+    jest.useFakeTimers({ now: NOW })
+    const name = 'Saint-Jean-sur-Richelieu Runners'
+    await render(<WaveToast toast={{ waves: [{ eventId: 'e1', fromCrewId: 'c1', fromName: name, at: NOW }] }} onOpen={jest.fn()} onWaveBack={jest.fn()} onSeeAll={jest.fn()} onSafety={jest.fn()} onDone={jest.fn()} />)
+    expect(screen.getByText(`${name} waved at you`).props.numberOfLines).toBe(2)
+    await screen.unmount()
+    await render(<WaveToast toast={{ waves: [{ eventId: 'e1', fromUserId: 'p', fromName: 'Night Cat', at: NOW }] }} onOpen={jest.fn()} onWaveBack={jest.fn()} onSeeAll={jest.fn()} onSafety={jest.fn()} onDone={jest.fn()} />)
+    expect(screen.getByText('Night Cat waved at you').props.numberOfLines).toBe(1)
+  })
+
   it('a blocked crew leaves the toast and the fold, and is not heard again', async () => {
     jest.useFakeTimers({ now: NOW })
     await render(<Probe />)

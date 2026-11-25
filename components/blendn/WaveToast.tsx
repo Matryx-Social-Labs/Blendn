@@ -138,7 +138,8 @@ export function WaveToast({
               <Facepile faces={toast.waves.slice(0, FOLD_FACES).map((w): PileFace => ('fromCrewId' in w ? { kind: 'crew', seed: emblemOf(w.fromCrewId) } : { kind: 'creature', pseudonym: w.fromName }))} total={Math.min(toast.waves.length, FOLD_FACES)} size={32} />
             )}
           </View>
-          <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold, FONT_FAMILY.brand[500]), styles.text]}>
+          {/* A crew's name runs to 32 characters: two lines, so "waved at you" is never what an ellipsis takes. */}
+          <Text numberOfLines={one && 'fromCrewId' in one ? 2 : 1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold, FONT_FAMILY.brand[500]), styles.text]}>
             {text}
           </Text>
           {/* Wave back is the DS positive (buttons board C); the toast's has no hand (board 03 L-A). */}
