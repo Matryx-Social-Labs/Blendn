@@ -111,8 +111,14 @@ describe('a crew arrival says who is here (the server titles it, task 12)', () =
     expect(row.title).toBe(CREW)
   })
 
-  it('a plan push keeps its own words, even if the server titles it as an arrival (SCRUM-1098)', () => {
-    const [row] = fresh([titled('p', 'k1', 30, 'Asha wants to go together. Open the crew to see the night.')])
+  it('the server decides which crew rows are arrivals (SCRUM-1098): its title is taken whatever the body says', () => {
+    const two = { ...arrival('a', 'k1', 60, 'Asha and Ravi just walked in'), display: { title: `2 from ${CREW} are here` } }
+    expect(fresh([two])[0].title).toBe(`2 from ${CREW} are here`)
+  })
+
+  it('negative control: a plan row (`data.kind: crew_plan`) comes untitled from the server, so the crew name stands', () => {
+    const plan = arrival('p', 'k1', 30, 'Asha wants to go together. Open the crew to see the night.')
+    const [row] = fresh([{ ...plan, data: { ...plan.data, kind: 'crew_plan' } }])
     expect(row.title).toBe(CREW)
   })
 })

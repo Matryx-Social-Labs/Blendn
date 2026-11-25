@@ -2,6 +2,7 @@ import { AppState, type NativeEventSubscription } from 'react-native'
 
 import { apiClient } from './apiClient'
 import type { AttendancePhase } from './attendanceState'
+import { checkInChanged } from './checkIn'
 import { showSheet } from './sheet'
 import { toast } from './toast'
 
@@ -105,6 +106,13 @@ export async function sendLeave(eventId: string, title: string, putBack: () => v
       message: 'Your ticket stays yours until it’s refunded. Ask the host about their refund policy.',
       actions: [{ label: 'Keep my ticket', variant: 'secondary', then: () => {} }],
     })
+    return
+  }
+  // Checked in here, maybe on another phone this one has not polled yet (SCRUM-1092): read the status again now, so ⋯ offers
+  // Check out, and say the server's sentence. Not sent again: only a check-out ends it.
+  if (result?.reasonCode === 'ALREADY_CHECKED_IN') {
+    checkInChanged(eventId)
+    toast(result.error ?? 'You’re checked in here. Check out first.', 'error')
     return
   }
   toast(`Couldn’t take ${title} off your list. Try again.`, 'error')

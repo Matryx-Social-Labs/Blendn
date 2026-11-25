@@ -108,9 +108,12 @@ describe('waveAccessibilityLabel', () => {
 describe('wavedAgo', () => {
   it('"4 min", at least 1, and hours past the hour', () => {
     const now = Date.parse('2026-11-12T21:00:00Z')
-    expect(wavedAgo('2026-11-12T20:56:00Z', now)).toBe('4 min')
-    expect(wavedAgo('2026-11-12T20:59:50Z', now)).toBe('1 min')
-    expect(wavedAgo('2026-11-12T18:30:00Z', now)).toBe('2 h')
+    // The number and its unit never part at a line end ("Waved at you · 1 / h" at font 2.0, task 24): a no-break space.
+    expect(wavedAgo('2026-11-12T20:56:00Z', now)).toBe('4\u00A0min')
+    expect(wavedAgo('2026-11-12T20:59:50Z', now)).toBe('1\u00A0min')
+    expect(wavedAgo('2026-11-12T18:30:00Z', now)).toBe('2\u00A0h')
+    // Negative control: no ordinary space is left between them to break at.
+    expect(wavedAgo('2026-11-12T18:30:00Z', now)).not.toMatch(/\d h/)
     expect(wavedAgo(undefined, now)).toBeNull()
     expect(wavedAgo('garbage', now)).toBeNull()
   })

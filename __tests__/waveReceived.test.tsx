@@ -171,7 +171,7 @@ describe('S-A: the strip', () => {
   })
 
   it('"Waved at you · 4 min" from the list’s time', () => {
-    expect(wavedAtYouLine(new Date(NOW - 4 * 60_000).toISOString(), NOW)).toBe('Waved at you · 4 min')
+    expect(wavedAtYouLine(new Date(NOW - 4 * 60_000).toISOString(), NOW)).toBe('Waved at you · 4\u00A0min')
     expect(wavedAtYouLine(undefined, NOW)).toBe('Waved at you')
   })
 
