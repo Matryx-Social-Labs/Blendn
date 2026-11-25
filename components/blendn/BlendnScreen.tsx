@@ -591,11 +591,19 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
   /** The crew whose sheet is open (board crews/05-room A), read live from the list so a wave or a block shows at once. */
   const [sheetCrewId, setSheetCrewId] = useState<string | null>(null)
   const sheetCrew = crewCards(crews).find((c) => c.crewId === sheetCrewId) ?? null
-  /** Each row closes the sheet first: its next step (a confirm, the report) is a sheet of its own. */
-  const fromCrewSheet = (then: (card: NonNullable<typeof sheetCrew>) => void) => () => {
+  /** Each row closes the sheet first; its next step (a confirm, the report, the Mix) waits for it to have left, as the card's does. */
+  const afterCrewSheet = useRef<(() => void) | null>(null)
+  const fromCrewSheet = (then: (card: NonNullable<typeof sheetCrew>) => void) => {
     if (!sheetCrew) return
+    afterCrewSheet.current = () => then(sheetCrew)
     setSheetCrewId(null)
-    then(sheetCrew)
+  }
+  /** Gone: the next step, if a row asked for one. The id goes too, so a crew that left the room and came back never reopens it. */
+  const crewSheetGone = () => {
+    setSheetCrewId(null)
+    const next = afterCrewSheet.current
+    afterCrewSheet.current = null
+    next?.()
   }
   /** The chip's menu: your crews here and "Just me". Cancel changes nothing. */
   const chooseLikingAs = async (among = myCrewsHere, title = 'Sending as…', justMe = true) => {
@@ -1185,10 +1193,11 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
         card={sheetCrew}
         wave={{ state: sheetCrew ? crewWaveState(sheetCrew) : 'idle', as: crewCardAs && crewCardAs !== 'ask' ? crewCardAs.name : null }}
         onClose={() => setSheetCrewId(null)}
-        onWave={fromCrewSheet((c) => void crewActions.wave(c))}
-        onHideTonight={fromCrewSheet((c) => crews.hideTonight(c.crewId))}
-        onBlock={fromCrewSheet(crewActions.block)}
-        onReport={fromCrewSheet(crewActions.report)}
+        onDismissed={crewSheetGone}
+        onWave={() => fromCrewSheet((c) => void crewActions.wave(c))}
+        onHideTonight={() => fromCrewSheet((c) => crews.hideTonight(c.crewId))}
+        onBlock={() => fromCrewSheet(crewActions.block)}
+        onReport={() => fromCrewSheet(crewActions.report)}
       />
 
       <PersonCard

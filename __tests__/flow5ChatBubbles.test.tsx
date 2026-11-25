@@ -180,6 +180,14 @@ describe('the row after a chip: 16 from the bubble, as drawn, now that the chip�
     expect(flat(`row-${item.message_id}`).marginTop).toBe(16)
   })
 
+  it.each([
+    ['a crewmate’s own wave', msg({ message_type: 'system', message_text: 'waved at Orbit for the crew', sender_name: 'Rohan' })],
+    ['the room speaking', msg({ sender_id: 'system', message_type: 'system', message_text: 'Quiet Heron joined' })],
+  ])('%s starts 16 under the row above, never touching it', async (_, item) => {
+    await at(item)
+    expect(flat(`row-${item.message_id}`).marginTop).toBe(16)
+  })
+
   it('only a bubble that draws a chip leaves the space (hangsChips)', () => {
     expect(hangsChips({ ...speech, reactions: [{ emoji: '❤️', count: 1 }] } as RoomMessage)).toBe(true)
     expect(hangsChips(speech)).toBe(false)

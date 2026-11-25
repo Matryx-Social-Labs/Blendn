@@ -54,7 +54,7 @@ export function SystemNotice({ text, icon, kind = 'info', action, note, testID }
           {text}
         </Text>
         {note ? (
-          <View accessible style={styles.note}>
+          <View accessible accessibilityRole="text" accessibilityLabel={note.text} style={styles.note}>
             {note.icon ? <Icon name={note.icon} size={ICON.inline} color={COLOR.textSecondary} /> : null}
             <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.quiet]}>{note.text}</Text>
           </View>

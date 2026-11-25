@@ -46,10 +46,13 @@ const openToCrewsByCheckIn = new Map<string, boolean>()
 /** "Hide this crew tonight" (advisor S-A): this session only, per room; the server never hears of it. */
 const hiddenTonight = new Set<string>()
 const tonightKey = (eventId: string, crewId: string) => `${eventId}|${crewId}`
-/** A page as you see it: the crews you hid tonight left out, and out of the count. The paging offset stays the server's. */
-function withoutHidden(eventId: string, data: CrewsAtEvent): CrewsAtEvent {
-  const crews = data.crews.filter((c) => !hiddenTonight.has(tonightKey(eventId, c.crewId)))
-  return { ...data, crews, total: Math.max(0, data.total - (data.crews.length - crews.length)) }
+/**
+ * A page as you see it: the crews you hid tonight left out, and out of the count. The server's total counts them on every
+ * page, so every hidden crew it has served this read (`served`) comes off. The paging offset stays the server's.
+ */
+function withoutHidden(eventId: string, data: CrewsAtEvent, served: ReadonlySet<string>): CrewsAtEvent {
+  const isHidden = (crewId: string) => hiddenTonight.has(tonightKey(eventId, crewId))
+  return { ...data, crews: data.crews.filter((c) => !isHidden(c.crewId)), total: Math.max(0, data.total - [...served].filter(isHidden).length) }
 }
 
 /**
@@ -67,6 +70,8 @@ export function useCrewsHere(eventId: string | null, hereCount?: number) {
   const [loadingMore, setLoadingMore] = useState(false)
   const [pageFailed, setPageFailed] = useState(false)
   const generation = useRef(0)
+  /** Every crew the server has listed since the last reload, hidden ones included (`withoutHidden`). */
+  const served = useRef<ReadonlySet<string>>(new Set())
 
   const reload = useCallback(async () => {
     if (!eventId) return
@@ -80,7 +85,8 @@ export function useCrewsHere(eventId: string | null, hereCount?: number) {
       setState({ status: isOrganiserSuspended(page) ? 'gone' : page.errorCode === 'NOT_CHECKED_IN' ? 'not_here' : 'error' })
       return
     }
-    const data = withoutHidden(eventId, page.data)
+    served.current = new Set(page.data.crews.map((c) => c.crewId))
+    const data = withoutHidden(eventId, page.data, served.current)
     setState({ status: 'ready', data: { ...data, crews: mergeCrewPage([], data.crews, 0) }, offset: nextCrewOffset(0, page.data.crews) })
   }, [eventId])
 
@@ -153,11 +159,12 @@ export function useCrewsHere(eventId: string | null, hereCount?: number) {
       setPageFailed(true)
       return
     }
-    const served = page.data.crews
-    const data = withoutHidden(eventId, page.data)
+    const listed = page.data.crews
+    served.current = new Set([...served.current, ...listed.map((c) => c.crewId)])
+    const data = withoutHidden(eventId, page.data, served.current)
     setState((prev) =>
       prev.status === 'ready'
-        ? { status: 'ready', data: { ...data, crews: mergeCrewPage(prev.data.crews, data.crews, offset) }, offset: nextCrewOffset(offset, served) }
+        ? { status: 'ready', data: { ...data, crews: mergeCrewPage(prev.data.crews, data.crews, offset) }, offset: nextCrewOffset(offset, listed) }
         : prev
     )
   }, [eventId, state, loadingMore])

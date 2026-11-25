@@ -1,4 +1,4 @@
-import { useRef, type ComponentRef } from 'react'
+import { useRef, useState, type ComponentRef } from 'react'
 import { Platform, StyleSheet, Text, View } from 'react-native'
 
 import { COLOR, FONT_FAMILY, MATERIAL, MAX_FONT_SCALE, RADIUS, SPACE } from '../../lib/design/tokens'
@@ -23,9 +23,10 @@ const EMBLEM = 104
  */
 export function CrewSheet({
   visible,
-  card,
+  card: live,
   wave,
   onClose,
+  onDismissed,
   onWave,
   onHideTonight,
   onBlock,
@@ -35,6 +36,8 @@ export function CrewSheet({
   card: CrewCard | null
   wave: Omit<CrewWave, 'onPress'>
   onClose: () => void
+  /** Once it has left the screen: what a row opens next (a confirm, the report, the Mix) waits for it. */
+  onDismissed?: () => void
   onWave: () => void
   onHideTonight: () => void
   onBlock: () => void
@@ -43,6 +46,10 @@ export function CrewSheet({
   const bold = useBoldText()
   const quiet = useIncreaseContrast() ? COLOR.textPrimary : COLOR.textSecondary
   const head = useRef<ComponentRef<typeof View>>(null)
+  // Drawn as it leaves, even when its card has gone (blocked, hidden, left): the last crew shown (state adjusted in render).
+  const [held, setHeld] = useState(live)
+  if (live && live !== held) setHeld(live)
+  const card = live ?? held
   if (!card) return null
   const here = Math.max(0, Math.min(card.presentCount, card.size))
   const badge = crewBadge(card.badges)
@@ -51,7 +58,7 @@ export function CrewSheet({
   const overlap = card.overlaps?.[0]?.text ?? null
 
   return (
-    <Sheet visible={visible} onClose={onClose} focusRef={head} testID="crew-sheet">
+    <Sheet visible={visible} onClose={onClose} onDismissed={onDismissed} focusRef={head} testID="crew-sheet">
       <View style={styles.body}>
         <View ref={head} accessible accessibilityRole="header" accessibilityLabel={`${card.name}, ${line}`} style={styles.head}>
           <CrewEmblem seed={card.emblemSeed} size={EMBLEM} />

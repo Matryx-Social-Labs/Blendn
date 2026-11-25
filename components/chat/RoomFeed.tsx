@@ -7,7 +7,6 @@ import { broadcastParts } from '../../lib/chatFeed'
 import { crewLikeLine } from '../../lib/crews'
 import { isCrewWavedLine, type WaveBackOutcome } from '../../lib/crewWaveBack'
 import { CrewWavedNotice } from './CrewWavedNotice'
-
 import { goneKindFor } from '../../lib/chatGone'
 import { liveEndedState, type LiveEndedAction } from '../../lib/chatLiveEnded'
 import { markSeed } from '../../lib/creatureSeed'
@@ -25,7 +24,6 @@ import type { PollRefusal } from '../../lib/chatPoll'
 import { RoomPoll } from './RoomPoll'
 import { chatHeaderBottom } from './ChatHeader'
 import { opensInSpoken } from '../../lib/preEventRoom'
-
 
 /** The poll's host as the server names them; the client's own stand-ins for no name are not a name. */
 const pollHost = (name: string) => (name && name !== 'Attendee' && name !== 'You' && name !== 'System' ? name : undefined)
@@ -108,7 +106,13 @@ export const RoomMessageRow = memo(function RoomMessageRow({
   handlers: RowHandlers
 }) {
   const runStart = afterChips ? styles.runStartAfterChips : styles.runStart
-  if (item.sender_id === 'system') return <SystemLine text={item.message_text} />
+  if (item.sender_id === 'system') {
+    return (
+      <View testID={`row-${item.message_id}`} style={runStart}>
+        <SystemLine text={item.message_text} />
+      </View>
+    )
+  }
   // Another crew (or a person) waved at this crew: a notice with Wave back, never a bubble (advisor L-A).
   if (isCrewWavedLine(item)) {
     const answer = item.crewWave ? handlers.crewWaveBack : undefined
@@ -120,7 +124,13 @@ export const RoomMessageRow = memo(function RoomMessageRow({
   }
   // A crew like is the room saying who did what, never somebody's bubble (your own drew as yours, TG-10).
   const like = item.message_type === 'system' ? crewLikeLine(item.message_text, mine ? 'You' : item.sender_name) : null
-  if (like) return <SystemLine text={like} testID={`system-${item.message_id}`} />
+  if (like) {
+    return (
+      <View testID={`row-${item.message_id}`} style={runStart}>
+        <SystemLine text={like} testID={`system-${item.message_id}`} />
+      </View>
+    )
+  }
   /*
    * A poll is the organiser's question. With its poll id on the message (SV8) it is the poll, answerable, as
    * <PollBubble>; until the server names it, the room says it as a notice, never as somebody's bubble.

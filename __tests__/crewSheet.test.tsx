@@ -102,7 +102,34 @@ describe('the crew’s sheet (S-A)', () => {
   })
 })
 
+describe('closing', () => {
+  const handlers = () => ({ onClose: jest.fn(), onWave: jest.fn(), onHideTonight: jest.fn(), onBlock: jest.fn(), onReport: jest.fn() })
+  it('keeps the crew drawn while the sheet leaves, even when its card has gone (blocked, hidden, left)', async () => {
+    const h = handlers()
+    const { rerender } = await render(<CrewSheet visible card={card('orbit', { name: 'Orbit' })} wave={{ state: 'idle' }} {...h} />)
+    await rerender(<CrewSheet visible={false} card={null} wave={{ state: 'idle' }} {...h} />)
+    expect(screen.getByText('Orbit')).toBeTruthy()
+  })
+  it('never opened: nothing is drawn', async () => {
+    await render(<CrewSheet visible={false} card={null} wave={{ state: 'idle' }} {...handlers()} />)
+    expect(screen.queryByTestId('crew-sheet')).toBeNull()
+  })
+})
+
 describe('Hide this crew tonight (session only)', () => {
+  it('the count leaves hidden crews out on every page, not only the one they were on', async () => {
+    api.crewsAt.mockResolvedValueOnce({ success: true, data: { ...page([card('a'), card('b')]).data, total: 4, hasMore: true } })
+    api.crewsAt.mockResolvedValueOnce({ success: true, data: { ...page([card('c'), card('d')]).data, total: 4, hasMore: false } })
+    const { result } = await renderHook(() => useCrewsHere('e-count'))
+    await waitFor(() => expect(ids(result.current)).toEqual(['a', 'b']))
+    const total = () => (result.current.state.status === 'ready' ? result.current.state.data.total : null)
+    await act(async () => result.current.hideTonight('a'))
+    expect(total()).toBe(3)
+    await act(async () => result.current.loadMore())
+    expect(ids(result.current)).toEqual(['b', 'c', 'd'])
+    expect(total()).toBe(3)
+  })
+
   it('drops the card, and a re-read in this session keeps it gone', async () => {
     api.crewsAt.mockResolvedValue(page([card('a'), card('b')]))
     const { result } = await renderHook(() => useCrewsHere('e-hide'))

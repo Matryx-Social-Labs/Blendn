@@ -43,6 +43,13 @@ describe('<SystemNotice>', () => {
     for (const spy of spies) expect(spy).not.toHaveBeenCalled()
   })
 
+  it('a note is read as text, one stop, its words only', async () => {
+    await render(<SystemNotice text="Orbit waved at your crew" note={{ text: 'Waved back', icon: 'check' }} testID="n" />)
+    const note = screen.getByLabelText('Waved back')
+    expect(note.props.accessible).toBe(true)
+    expect(note.props.accessibilityRole).toBe('text')
+  })
+
   it('warn: on the warning tint, and read as a warning (never the tint alone)', async () => {
     await render(<SystemNotice kind="warn" text="A message here was taken down." testID="n" />)
     expect(flat('n').backgroundColor).toBe(COLOR.warningTint)
