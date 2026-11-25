@@ -16,12 +16,10 @@ jest.mock('expo-router', () => ({
 jest.mock('../lib/apiClient', () => ({
   apiClient: { getBoardPreview: jest.fn(), getBoard: jest.fn(), getBoardAlerts: jest.fn(), setBoardAlerts: jest.fn() },
 }))
-jest.mock('../lib/lobbySeen', () => ({ lobbySeenAt: jest.fn(), rememberLobbySeen: jest.fn() }))
 
 import { EventLobbyPreview, LobbyRowNews, NewInLobbyRow } from '../components/board/LobbyPreview'
 import { LobbyAlertsSheet } from '../components/board/LobbyAlertsSheet'
 import { apiClient } from '../lib/apiClient'
-import { lobbySeenAt } from '../lib/lobbySeen'
 import { WORST } from './helpers/longText'
 import { StyleSheet } from 'react-native'
 import { COLOR } from '../lib/design/tokens'
@@ -31,7 +29,6 @@ const LONG_NAME = 'Midnight Butterfly'
 const LONG_BODY = `First time at the festival and going solo all three nights. Anyone up for the riso workshop on Friday and the night market after, from ${WORST.venue}?`
 
 const api = apiClient as unknown as Record<string, jest.Mock>
-const seenAt = lobbySeenAt as jest.Mock
 
 const post = (id: string, author: string, body: string, extra: object = {}) => ({
   id, author, body, kind: 'offer', subKind: 'ride', spacesLeft: 2, createdAt: new Date(Date.now() - 12 * 60_000).toISOString(), mine: false, requestCount: 0, photo: null, ...extra,
@@ -155,51 +152,43 @@ describe('P-A, the event page’s Lobby card', () => {
   })
 })
 
-describe('Going: New in the Lobby', () => {
+describe('Going: New in the Lobby (the server’s count, SCRUM-1115)', () => {
   const page = (n: number, mineFirst = false) => ({
     success: true,
     data: { posts: Array.from({ length: n }, (_, i) => post(`p${i}`, `Creature ${i}`, 'x', { mine: mineFirst && i === 0, createdAt: new Date(Date.now() - i * 60_000).toISOString() })) },
   })
 
-  it('shows what is new since you last opened the Lobby, 9+ past nine, and opens the Lobby', async () => {
-    seenAt.mockResolvedValue(null)
-    api.getBoard.mockResolvedValue(page(10))
-    await render(<NewInLobbyRow eventId="ev1" />)
+  it('says the server’s count, 9+ past nine with the exact number in its label, faces from one page, and opens the Lobby', async () => {
+    api.getBoard.mockResolvedValue(page(10, true))
+    await render(<NewInLobbyRow eventId="ev1" count={12480} />)
     expect(api.getBoard).toHaveBeenCalledWith('ev1', { limit: '10' })
     expect(screen.getByText('9+')).toBeTruthy()
-    await fireEvent.press(screen.getByRole('button', { name: 'New in the Lobby, 9+ new posts' }))
+    // Three faces, the newest others: p0 is yours.
+    expect(screen.getAllByTestId(/^going-lobby-face-/, { includeHiddenElements: true }).map((n) => n.props.testID)).toEqual(['going-lobby-face-p1', 'going-lobby-face-p2', 'going-lobby-face-p3'])
+    await fireEvent.press(screen.getByRole('button', { name: 'New in the Lobby, 12,480 new posts' }))
     expect(mockPush).toHaveBeenCalledWith({ pathname: '/board/[eventId]', params: { eventId: 'ev1' } })
   })
 
   it('the count is ink on rose, 4.61:1 (white was 4.23:1, under AA for 13 pt text; going-lifecycle sheet 12)', async () => {
-    seenAt.mockResolvedValue(null)
     api.getBoard.mockResolvedValue(page(3))
-    await render(<NewInLobbyRow eventId="ev1" />)
+    await render(<NewInLobbyRow eventId="ev1" count={3} />)
     expect(StyleSheet.flatten(screen.getByText('3').props.style).color).toBe(COLOR.selectionInk)
+    expect(screen.getByRole('button', { name: 'New in the Lobby, 3 new posts' })).toBeTruthy()
   })
 
-  it('counts exactly under ten, never your own', async () => {
-    seenAt.mockResolvedValue(new Date(Date.now() - 5.5 * 60_000).toISOString())
-    api.getBoard.mockResolvedValue(page(8, true))
-    await render(<NewInLobbyRow eventId="ev1" />)
-    expect(screen.getByRole('button', { name: 'New in the Lobby, 5 new posts' })).toBeTruthy()
-  })
-
-  it('nothing new: the quiet line, still the way in (L2, owner 2026-11-17); a refusal draws nothing (control: one new post is the news line)', async () => {
-    seenAt.mockResolvedValue(new Date(Date.now() + 60_000).toISOString())
-    api.getBoard.mockResolvedValue(page(3))
-    await render(<NewInLobbyRow eventId="ev1" />)
+  it('nothing new: the quiet line, still the way in (L2), and no page read for it (control: one new post is the news line)', async () => {
+    await render(<NewInLobbyRow eventId="ev1" count={undefined} />)
     await fireEvent.press(screen.getByRole('button', { name: 'The Lobby. Rides, plus-ones and hellos before the night' }))
     expect(mockPush).toHaveBeenLastCalledWith({ pathname: '/board/[eventId]', params: { eventId: 'ev1' } })
     expect(screen.queryByText('New in the Lobby')).toBeNull()
+    expect(api.getBoard).not.toHaveBeenCalled()
     // Sheet 14's `.nlb .sub`: 13/18, so the quiet line is the board's height (meta's 14/20 drew it 2 pt taller).
     expect(StyleSheet.flatten(screen.getByText('Rides, plus-ones and hellos before the night', { includeHiddenElements: true }).props.style)).toMatchObject({ fontSize: 13, lineHeight: 18 })
-    seenAt.mockResolvedValue(null)
+    await render(<NewInLobbyRow eventId="ev1" count={0} />)
+    expect(screen.getByRole('button', { name: 'The Lobby. Rides, plus-ones and hellos before the night' })).toBeTruthy()
+    // A page the Lobby refuses costs only the faces: the server's count still says what is new.
     api.getBoard.mockResolvedValue({ success: false, error: 'closed' })
-    await render(<NewInLobbyRow eventId="ev1" />)
-    expect(screen.toJSON()).toBeNull()
-    api.getBoard.mockResolvedValue(page(1))
-    await render(<NewInLobbyRow eventId="ev1" />)
+    await render(<NewInLobbyRow eventId="ev1" count={1} />)
     expect(screen.getByRole('button', { name: 'New in the Lobby, 1 new post' })).toBeTruthy()
     // The count grows with the text and its pill with it (sheet 14 [data-xl]: 30 tall, 16 pt): a fixed 24 clipped the "1" at AX XXXL.
     const count = screen.getByText('1', { includeHiddenElements: true })

@@ -80,7 +80,7 @@ import { withDaySeparators, withUnreadDivider, type UnreadDivider } from '../../
 import { useAuth } from '../../lib/useAuth'
 import { useFriendAsk } from '../../lib/useFriendAsk'
 import { useComposerLock } from '../../lib/useComposerLock'
-import { scrollListToEnd, useFollowEnd } from '../../lib/useFollowEnd'
+import { atEndOf, scrollListToEnd, useFollowEnd } from '../../lib/useFollowEnd'
 import { useReducedMotion } from '../../lib/motion'
 import { useLatest } from '../../lib/useLatest'
 import { useLiveSync } from '../../lib/useLiveSync'
@@ -90,7 +90,6 @@ import { userMessage } from '../../lib/userMessage'
 
 type ChatListItem = ({ kind: 'message' } & PrivateMessage) | { kind: 'separator'; id: string; label: string } | UnreadDivider
 
-const AT_END = 80
 const KEYBOARD_DISMISS = Platform.OS === 'ios' ? 'interactive' : 'on-drag'
 /** #23: the reveal resolves in with one M.settle-length crossfade. */
 const REVEAL_MS = 700
@@ -106,6 +105,8 @@ const revealOut = FadeOut.duration(DURATION.base)
  */
 /** One page of a thread, and the width of a full read. */
 const DM_PAGE = 50
+/** The list's hold on the reader's place: by row 1, the first message (row 0 is a day pill). */
+const KEEP_READERS_PLACE = { minIndexForVisible: 1 } as const
 /** Kept warm so a re-open paints the thread at once; the network read that follows replaces it. */
 const MESSAGES_CACHE_TTL = 5 * 60 * 1000
 
@@ -375,8 +376,8 @@ function PrivateChatInner() {
       .finally(() => setLoading(false))
 
   /* Where the list is, from onScroll and from where a drag or the pill's jump came to rest. */
-  const noteOffset = ({ contentSize, contentOffset, layoutMeasurement }: NativeScrollEvent) => {
-    const atBottom = contentSize.height - contentOffset.y - layoutMeasurement.height < AT_END
+  const noteOffset = (n: NativeScrollEvent) => {
+    const atBottom = atEndOf(n)
     isAtBottomRef.current = atBottom
     follow.noteScroll(atBottom)
     setAwayFromEnd(!atBottom)
@@ -846,16 +847,30 @@ function PrivateChatInner() {
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
               keyboardDismissMode={KEYBOARD_DISMISS}
-              onTouchEnd={foldPanel}
-              onScrollEndDrag={foldPanel}
+              onTouchStart={follow.onTouchStart}
+              onTouchEnd={() => {
+                foldPanel()
+                follow.onTouchEnd(isAtBottomRef.current)
+              }}
+              // Where the reader's gesture comes to rest decides (SCRUM-1321): here, or at the end of the fling it started.
+              onScrollEndDrag={(e) => {
+                foldPanel()
+                follow.onScrollEndDrag(atEndOf(e.nativeEvent), e.nativeEvent.velocity?.y)
+              }}
               // Android clips off-screen rows by default; the jump to the newest under Reduce Motion lands before they are re-attached, a blank frame (SCRUM-1040).
               removeClippedSubviews={false}
               maxToRenderPerBatch={12}
               windowSize={10}
               initialNumToRender={25}
-              onStartReached={() => void loadOlderMessages()}
+              onStartReached={() => follow.readerAsksOlder() && void loadOlderMessages()}
+              // From half a screen short of the top: a fling's last scroll event lands short of it (Android, SCRUM-1321).
+              onStartReachedThreshold={0.5}
               // Older pages go in above the reader: the row in view stays in view, so the unread rule stays under the thumb (SCRUM-958).
-              maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
+              // From row 1, the first message: row 0 is a day pill whose key an older page of the same day keeps, and held by it
+              // the reader sat at the top of each new page with nothing above to scroll into (SCRUM-1321).
+              // Only once there is a message: held, an empty thread's Say hi stayed where the header or the skeleton had been
+              // (top after a deep link, under the composer after a Lobby accept), not at the bottom by the composer (SCRUM-1107).
+              maintainVisibleContentPosition={feed.length ? KEEP_READERS_PLACE : undefined}
               ListHeaderComponent={
                 <View>
                   {/* Permanent, not an empty state: seen by both, whoever types first. */}
@@ -910,6 +925,7 @@ function PrivateChatInner() {
               onScroll={(e) => noteOffset(e.nativeEvent)}
               // Where a drag or the pill's jump came to rest: onScroll's last reading can be throttled away (driven 2026-11-11).
               onMomentumScrollEnd={(e) => {
+                follow.onMomentumScrollEnd(atEndOf(e.nativeEvent))
                 noteOffset(e.nativeEvent)
               }}
               scrollEventThrottle={80}
@@ -920,6 +936,8 @@ function PrivateChatInner() {
                 bottom={dockHeight + dockBottom + SPACE.lg}
                 onPress={() => {
                   setNewWhileAway(0)
+                  // Follow until it gets there: from far up the jump lands short of rows not yet measured (SCRUM-1321).
+                  follow.toEnd()
                   scrollToBottom(true)
                 }}
               />

@@ -1,238 +1,102 @@
-import * as Location from 'expo-location'
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { AppState, type AppStateStatus } from 'react-native'
+import { useEffect, useState } from 'react'
+import { AppState } from 'react-native'
 
 import { apiClient } from '../lib/apiClient'
-import { checkOutOf } from '../lib/checkIn'
-import { getDistanceMetres } from '../lib/geo'
+import { checkInChanged, subscribeCheckInChanged } from '../lib/checkIn'
 import { Logger } from '../lib/logger'
-import {
-  SAMPLE_INTERVAL_MS,
-  presenceAction,
-  trimSamples,
-  type PresenceSample,
-} from '../lib/presence'
+import { usePresence } from '../lib/usePresence'
+import { useCheckOut } from '../lib/useRoomControls'
 import { PresenceSheets } from './PresenceSheets'
 
-interface Fence {
-  eventId: string
-  latitude: number
-  longitude: number
-  radiusM: number
-}
-
 /**
- * Checks somebody out when they have actually left, and almost never otherwise.
+ * The app's one presence loop, for whatever event you are checked in at (SCRUM-1327).
  *
- * `lib/presence.ts` has held this policy — with tests — since it was written,
- * and nothing ran it. The geofence was enforced once, at check-in, and after
- * that a person who went home stayed on the roster and in the match pool for the
- * rest of the night.
+ * The event is the one `/checkins/active` names, re-read on every return to the app and on every check-in or check-out
+ * (`checkInChanged`), the read that answers last winning. A Go Live's venue day is LiveAtVenue's. It pings that event
+ * through `usePresence` and the server judges: the same fence and accuracy rule as the door, so a fix the door would
+ * refuse places nobody (`unknown`). The server checks people out, after 20 minutes outside; the app never does on its
+ * own, only when "Check me out" is tapped.
  *
- * ## Everything here is biased toward doing nothing
+ * "Still at the event?" is asked once per departure, when the server has had two good outside readings a grace period
+ * apart (`outside` / `grace_expired`): one reading at the gate is not a departure. "I'm still here" changes nothing on
+ * the server; the next reading inside clears it. A check-out by the server for leaving is said (`left_area`); the end
+ * of the event (end + 60, the presence sweeper) is not.
  *
- * A stale check-in is mildly wrong: the count is a few too high. A false
- * check-out removes somebody **standing in the venue** from the room and the
- * chat because their phone lost GPS in a basement. Those are not close, so the
- * policy needs six readings across ten minutes before it will even ask, and half
- * an hour of continued absence after a human says "I'm still here" before it
- * overrides them.
- *
- * The most important rule is in `presenceAction` rather than here: **no fix is
- * not the same as outside.** A phone that cannot see satellites is a phone in a
- * building, which is where the event is.
- *
- * ## Foreground only, and mounted at the root
- *
- * No background location. That needs iOS's *always* permission — an App Review
- * liability, a battery cost people notice — and it buys least exactly where a
- * false eviction is least recoverable, because nobody is looking at the phone to
- * say "no, I'm still here". Someone who leaves and never reopens the app is
- * checked out when the event ends, by the chat lifecycle sweeper.
- *
- * Mounted at the root rather than inside The Room, because leaving the venue
- * should be noticed whether or not the room happens to be the screen you have
- * open. It renders nothing until it has something to ask.
+ * Foreground only, mounted at the root while signed in: no background location (DECISIONS). Leaving with the app
+ * closed is closed at the event's end.
  */
-export function PresenceMonitor() {
-  const [fence, setFence] = useState<Fence | null>(null)
-  const [asking, setAsking] = useState(false)
-  const [autoNotice, setAutoNotice] = useState(false)
+/** A failed read of the active check-in is tried again after this. */
+const RESOLVE_RETRY_MS = 60_000
 
-  const samplesRef = useRef<PresenceSample[]>([])
-  const saidStillHereAtRef = useRef<number | null>(null)
-  /*
-   * Guards the prompt against the timer.
-   *
-   * Once asked, further ticks must not re-open the tray underneath the answer
-   * somebody is in the middle of giving. `presenceAction` would keep returning
-   * `'ask'` for as long as the run continues, which is correct of it — the
-   * decision is stateless and the "have we asked" part belongs here.
-   */
-  const askingRef = useRef(false)
+export function PresenceMonitor() {
+  // The check-in, not only its event: checking out and back in to the same event starts a new loop.
+  const [active, setActive] = useState<{ eventId: string; id: string } | null>(null)
+  const eventId = active?.eventId ?? null
+  const presence = usePresence(eventId, active?.id)
+  // Answered for this departure, of this event (a late answer cannot carry over to the next one). Only a reading inside
+  // ends it: a blurry `unknown` in between is no news, so "I'm still here" is not asked again on the next outside one.
+  const [answeredFor, setAnsweredFor] = useState<string | null>(null)
+  if (answeredFor && presence.state === 'inside') setAnsweredFor(null)
+  const asking = presence.state === 'outside' && presence.reason === 'grace_expired' && answeredFor !== eventId
+  // Checked out by the server for leaving: said once, and kept on screen after the loop has moved on (React's
+  // "information from previous renders" pattern, so no effect sets state).
+  const leftFor = presence.finished && presence.reason === 'left_area' ? eventId : null
+  const [seenLeftFor, setSeenLeftFor] = useState<string | null>(null)
+  const [notice, setNotice] = useState(false)
+  if (leftFor !== seenLeftFor) {
+    setSeenLeftFor(leftFor)
+    if (leftFor) setNotice(true)
+  }
+  const { checkOut } = useCheckOut(eventId)
 
   useEffect(() => {
-    /*
-     * Which room, and how big its fence is.
-     *
-     * Two calls, because `/checkins/active` returns the event's title and cover
-     * but not its coordinates or radius — a shape that made sense when nothing
-     * needed the geometry after check-in.
-     */
-    const loadFence = async () => {
+    let latest = 0
+    let retry: ReturnType<typeof setTimeout> | undefined
+    const resolve = async () => {
+      const mine = ++latest
+      clearTimeout(retry)
       try {
-        const active = await apiClient.getActiveCheckins({ force: true })
-        // A Go Live's venue day is LiveAtVenue's: its presence, its end (step 5 review, L4).
-        const checkIn = active.success ? active.data?.checkIns?.find((c) => c.kind !== 'venue_day') : null
-        if (!checkIn?.eventId) {
-          setFence(null)
-          return
-        }
-
-        const event = await apiClient.getEvent(checkIn.eventId)
-        const data = event.data as
-          | { latitude?: number | null; longitude?: number | null; checkInRadius?: number | null }
-          | undefined
-        if (
-          !event.success ||
-          typeof data?.latitude !== 'number' ||
-          typeof data?.longitude !== 'number'
-        ) {
-          // An event without coordinates cannot be geofenced, and inventing a
-          // centre would evict on the first reading. Online events land here.
-          setFence(null)
-          return
-        }
-
-        setFence({
-          eventId: checkIn.eventId,
-          latitude: data.latitude,
-          longitude: data.longitude,
-          radiusM: typeof data.checkInRadius === 'number' ? data.checkInRadius : 100,
-        })
+        const read = await apiClient.getActiveCheckins({ force: true })
+        if (mine !== latest) return
+        if (!read.success) throw new Error(read.error ?? 'active check-ins unavailable')
+        const checkIn = read.data?.checkIns?.find((c) => c.kind !== 'venue_day')
+        setActive(checkIn?.eventId ? { eventId: checkIn.eventId, id: checkIn.id } : null)
       } catch (e) {
-        Logger.warn('presence', 'could not resolve the fence', { error: e })
-        setFence(null)
+        if (mine !== latest) return
+        // Keeps the check-in it had (offline at the venue must not stop the loop), and tries again: launched offline,
+        // there is none yet, and nothing else would ask before the next return to the app.
+        Logger.warn('presence', 'could not read the active check-in', { error: String(e) })
+        retry = setTimeout(() => void resolve(), RESOLVE_RETRY_MS)
       }
     }
-
-    void loadFence()
-    /*
-     * Re-resolve on foreground.
-     *
-     * Check-in and check-out both happen on other screens, and a monitor that
-     * only looked once would keep watching a room somebody had left or ignore
-     * one they had just joined.
-     */
-    const sub = AppState.addEventListener('change', (next: AppStateStatus) => {
-      if (next === 'active') void loadFence()
+    void resolve()
+    const app = AppState.addEventListener('change', (next) => {
+      if (next === 'active') void resolve()
     })
-    return () => sub.remove()
+    const off = subscribeCheckInChanged(() => void resolve())
+    return () => {
+      latest = -1
+      clearTimeout(retry)
+      app.remove()
+      off()
+    }
   }, [])
 
-  const checkOut = useCallback(
-    async (eventId: string, automatic: boolean) => {
-      try {
-        await checkOutOf(eventId)
-      } catch (e) {
-        Logger.error('presence', 'check-out failed', { error: e })
-      }
-      samplesRef.current = []
-      saidStillHereAtRef.current = null
-      setFence(null)
-      // Never silent. Somebody finding themselves out of the chat with no
-      // explanation and no idea how to get back is the worst version of this.
-      if (automatic) setAutoNotice(true)
-    },
-    []
-  )
-
   useEffect(() => {
-    if (!fence) {
-      samplesRef.current = []
-      saidStillHereAtRef.current = null
-      askingRef.current = false
-      return
-    }
-
-    let cancelled = false
-
-    const tick = async () => {
-      // Foreground only, and this is the check that enforces it. A timer can
-      // still fire during the moment an app is going to sleep.
-      if (cancelled || AppState.currentState !== 'active') return
-
-      const now = Date.now()
-      let distanceM: number | null = null
-      try {
-        const { status } = await Location.getForegroundPermissionsAsync()
-        if (status === 'granted') {
-          const position = await Location.getCurrentPositionAsync({
-            accuracy: Location.Accuracy.Balanced,
-          })
-          distanceM = getDistanceMetres(
-            position.coords.latitude,
-            position.coords.longitude,
-            fence.latitude,
-            fence.longitude
-          )
-        }
-      } catch {
-        /*
-         * A failed fix is a `null` sample, not a skipped one.
-         *
-         * Recording it matters: `presenceAction` breaks a run of outside
-         * readings on a null rather than extending it, so a phone losing signal
-         * *stops* the clock toward eviction. Skipping the sample entirely would
-         * leave the previous outside readings adjacent to the next one and let
-         * a basement look like a walk home.
-         */
-      }
-
-      if (cancelled) return
-      samplesRef.current = trimSamples([...samplesRef.current, { at: now, distanceM }], now)
-
-      const action = presenceAction({
-        samples: samplesRef.current,
-        now,
-        fenceRadiusM: fence.radiusM,
-        saidStillHereAt: saidStillHereAtRef.current,
-      })
-
-      if (action === 'ask' && !askingRef.current) {
-        askingRef.current = true
-        setAsking(true)
-      } else if (action === 'checkOut') {
-        askingRef.current = false
-        setAsking(false)
-        await checkOut(fence.eventId, true)
-      }
-    }
-
-    void tick()
-    const id = setInterval(() => void tick(), SAMPLE_INTERVAL_MS)
-    return () => {
-      cancelled = true
-      clearInterval(id)
-    }
-  }, [fence, checkOut])
+    if (presence.finished && eventId) checkInChanged(eventId)
+  }, [presence.finished, eventId])
 
   return (
     <PresenceSheets
       asking={asking}
-      onStay={() => {
-        saidStillHereAtRef.current = Date.now()
-        askingRef.current = false
-        setAsking(false)
+      onStay={() => setAnsweredFor(eventId)}
+      // Closed only once it worked: a refusal is toasted by `useCheckOut` and the question stays.
+      onLeave={async () => {
+        const leaving = eventId
+        if (await checkOut()) setAnsweredFor(leaving)
       }}
-      onLeave={() => {
-        askingRef.current = false
-        setAsking(false)
-        // Not automatic: they said so, so they do not need telling.
-        if (fence) void checkOut(fence.eventId, false)
-      }}
-      notice={autoNotice}
-      onNoticeDone={() => setAutoNotice(false)}
+      notice={notice}
+      onNoticeDone={() => setNotice(false)}
     />
   )
 }

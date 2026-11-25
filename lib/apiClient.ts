@@ -596,6 +596,9 @@ export type PeerRatingIssue = 'none' | 'uncomfortable' | 'no_show' | 'misreprese
 
 export type RsvpStatus = 'going' | 'maybe' | 'not_going' | 'waitlisted'
 
+/** `organizer.kind` on an event (admin #1005): an org, a venue's own day, Blendn standing in, or a person's own event. */
+export type OrganizerKind = 'org' | 'venue' | 'platform' | 'person'
+
 export interface MatchCard {
   userId: string
   /** Pseudonym unless they revealed for this event. Never the real name otherwise. */
@@ -652,6 +655,8 @@ export interface MatchCard {
   youWaved?: boolean
   /** They waved at you in this room and it is yours to answer: "Wave back". Waves only, never a like. */
   wavedAtYou?: boolean
+  /** When they waved at you here (ISO), so "Waved at you · 4 min" survives a restart (SCRUM-1092). Null to a host; absent from an older server. */
+  wavedAtYouAt?: string | null
   /** The conversation your mutual here opened: Say hi reaches it after a restart. Null otherwise; absent from an older server. */
   conversationId?: string | null
   /**
@@ -774,7 +779,8 @@ export interface ReactionTally {
 export { CHAT_REACTIONS, type ChatReaction } from './chatReactions'
 
 export interface PresencePing {
-  status: 'inside' | 'outside' | 'prompt' | 'checked_out' | 'not_checked_in'
+  /** `unknown`: a fix worse than the door's 150 m that reads outside, which places nobody (server SCRUM-1326). */
+  status: 'inside' | 'outside' | 'unknown' | 'checked_out' | 'not_checked_in'
   reason?: string
   shortfallMetres?: number | null
   graceEndsAt?: string | null
@@ -1040,10 +1046,12 @@ export interface EventApiItem {
   interested_preview?: Array<{ id: string; name: string | null; image: string | null }>
   interestedUsers?: Array<{ id: string; name?: string | null; avatar?: string | null }>
   organizer?: {
-    id?: string
+    id?: string | null
     name?: string | null
     image?: string | null
     email?: string
+    /** Whose event it is: only an org is a host (Room info); a person's own event signs nothing (`lib/roomInfo.ts`). */
+    kind?: OrganizerKind
   }
   /**
    * "Running this event? Claim it" — detail endpoint only. `{ url }` for a
@@ -4127,6 +4135,19 @@ class ApiClientClass {
   async getBoard(eventId: string, query: Record<string, string> = {}): Promise<ApiResponse<Partial<LobbyMeta> & { posts: BoardPost[] }>> {
     const qs = new URLSearchParams(query).toString()
     return this.queuedRequest(`/api/mobile/events/${encodeURIComponent(eventId)}/board${qs ? `?${qs}` : ''}`)
+  }
+
+  /**
+   * The Lobby seen up to `at`, the newest post on the page shown (SCRUM-1115): the server's marker, so Going's count
+   * (`lobby.newCount` on /me/rsvps) follows the account across phones. It only moves forward; readers only.
+   */
+  async markBoardSeen(eventId: string, at: string): Promise<ApiResponse<{ seenAt: string }>> {
+    return this.queuedRequest(
+      `/api/mobile/events/${encodeURIComponent(eventId)}/board/seen`,
+      { method: 'POST', body: JSON.stringify({ at }) },
+      true,
+      2
+    )
   }
 
   /** One post, for a post link: the Lobby's own gate. */

@@ -35,7 +35,7 @@ const detail = (organizer: unknown) => ({
     organizer,
   },
 })
-const NIGHTSHIFT = { id: 'u-org', name: 'Nightshift Collective', image: 'https://cdn/x.jpg' }
+const NIGHTSHIFT = { id: 'u-org', name: 'Nightshift Collective', image: 'https://cdn/x.jpg', kind: 'org' }
 const faces = [
   { kind: 'creature' as const, pseudonym: 'Quiet Lynx' },
   { kind: 'creature' as const, pseudonym: 'Lunar Fox' },
@@ -87,8 +87,12 @@ describe('Room info (I-A)', () => {
   })
 
   // Control (owner call D2, A): the platform standing in is nobody running the night.
-  it('no host row when the platform stands in', async () => {
-    mockGetEvent.mockResolvedValue(detail({ id: null, name: 'Blendn', image: null }))
+  // SCRUM-1115: a person's own event carries an id (the creator) and their name; it is not a host either.
+  it.each([
+    ['the platform stands in', { id: null, name: 'Blendn', image: null, kind: 'platform' }],
+    ['it is a person’s own event', { id: 'u-7', name: 'Priya Raman', image: null, kind: 'person' }],
+  ])('no host row when %s', async (_, organizer) => {
+    mockGetEvent.mockResolvedValue(detail(organizer))
     await open()
     expect(screen.queryByTestId('room-info-host', HIDDEN)).toBeNull()
     expect(screen.getByTestId('room-info-people', HIDDEN)).toBeTruthy()

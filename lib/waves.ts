@@ -103,10 +103,13 @@ export function waveAccessibilityLabel(name: string, status: WaveStatus): string
   }
 }
 
-/** "4 min" or "2 h" since a wave (ISO), for "Waved at you · 4 min"; null when there is no time to say. */
+/**
+ * "4 min" or "2 h" since a wave (ISO), for "Waved at you · 4 min"; null when there is no time to say. The number and its
+ * unit are joined by a no-break space, so a wrapped line never ends on "1" with "h" alone below it (large text).
+ */
 export function wavedAgo(at: string | number | undefined | null, now: number): string | null {
   const t = typeof at === 'number' ? at : at ? Date.parse(at) : NaN
   if (!Number.isFinite(t)) return null
   const minutes = Math.max(1, Math.floor((now - t) / 60_000))
-  return minutes < 60 ? `${minutes} min` : `${Math.floor(minutes / 60)} h`
+  return minutes < 60 ? `${minutes}\u00A0min` : `${Math.floor(minutes / 60)}\u00A0h`
 }

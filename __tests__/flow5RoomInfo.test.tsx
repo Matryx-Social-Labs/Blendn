@@ -58,7 +58,7 @@ const api = apiClient as jest.Mocked<typeof apiClient>
 const COVER = 'https://cdn.blendn.app/covers/vinyl.jpg'
 const eventRow = { id: 'g1', name: 'Vinyl Night', memberCount: 3, isCheckedIn: true, event: { id: 'e1', title: 'Vinyl Night', coverImageUrl: COVER } }
 /** The event's detail: its host is the org (C6's `roomHost`). */
-const ORG = { id: 'o1', name: 'Nightshift Collective' }
+const ORG = { id: 'o1', name: 'Nightshift Collective', kind: 'org' }
 const crowd = {
   success: true,
   data: {
@@ -136,8 +136,11 @@ it('the host is the org, in its own row with the ember mark (C6’s row)', async
   expect(screen.getByTestId('info-host-mark')).toBeTruthy()
 })
 
-it('no host row when no org owns the event (a curated event: "Blendn", no id)', async () => {
-  api.getEvent.mockResolvedValue({ success: true, data: { id: 'e1', title: 'Vinyl Night', organizer: { id: null, name: 'Blendn' } } } as never)
+it.each([
+  ['a curated event', { id: null, name: 'Blendn', kind: 'platform' }],
+  ['a person’s own event', { id: 'u-7', name: 'Priya Raman', kind: 'person' }],
+])('no host row when no org owns the event (%s)', async (_, organizer) => {
+  api.getEvent.mockResolvedValue({ success: true, data: { id: 'e1', title: 'Vinyl Night', organizer } } as never)
   await open()
   expect(screen.queryByTestId('info-host')).toBeNull()
   expect(screen.queryByText('Host')).toBeNull()

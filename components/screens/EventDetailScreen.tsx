@@ -50,6 +50,7 @@ import { Logger } from '../../lib/logger'
 import {
   subscribeToEventCheckIn,
   subscribeToEventInterest,
+  subscribeToEventRsvp,
   EventCheckInCallback,
   EventInterestCallback
 } from '../../lib/socketClient'
@@ -61,6 +62,7 @@ import { Title } from '../ds/Title'
 import { PAGE_TITLE, useScreenReader } from '../ds/shared'
 import { toastDwell } from '../ds/Toast'
 import { dateStamp, eventDock, holdUnder, shortDistance, untilWords, whoLine, type DockDoes } from '../../lib/eventFacts'
+import { byLine } from '../../lib/roomInfo'
 import { readingOf } from '../../lib/mapPresence'
 import type { DistanceReading } from '../../lib/placesPane'
 import { SceneLightbox } from '../scene/SceneLightbox'
@@ -359,7 +361,7 @@ export default function EventDetail() {
       max_capacity: d.maxCapacity || d.max_capacity || 0,
       current_capacity: d.currentCapacity || d.current_capacity || 0,
       cover_image_url: d.coverImageUrl || d.cover_image_url || '',
-      organizer: d.organizer?.name || '',
+      organizer: byLine(d.organizer) ?? '',
       latitude: d.latitude ?? 0,
       longitude: d.longitude ?? 0,
       check_in_radius: d.checkInRadius || d.check_in_radius || 100,
@@ -522,14 +524,16 @@ export default function EventDetail() {
       fetchEventDetails()
     }
 
-    // Subscribe to both check-in and interest events
+    // Subscribe to check-ins, interest, and the going count (event:rsvpUpdate, a count only: no refetch, SCRUM-1115)
     const unsubCheckIn = subscribeToEventCheckIn(String(id), handleCheckIn)
     const unsubInterest = subscribeToEventInterest(String(id), handleInterest)
+    const unsubRsvp = subscribeToEventRsvp(String(id), (data) => setGoingCount(data.rsvpCount))
 
     return () => {
       Logger.info('events', 'Cleaning up event subscriptions')
       unsubCheckIn()
       unsubInterest()
+      unsubRsvp()
     }
     // fetchEventDetails is redefined every render; only id/user should
     // re-establish these subscriptions.
@@ -959,7 +963,7 @@ export default function EventDetail() {
   // No staff control in the ⋯ for anybody: an organiser edits, announces and deletes on the dashboard (Flow 15 #2, owner ruling D3).
 
   /** The dock's state and its one action (`lib/eventFacts.ts`); null at the doors, where the hold is the dock. */
-  const dock = eventDock({ cta: ctaState, when: dockWhen, roomOpen: roomLine?.open === true, canInvite: !!shareTarget, between: betweenLine, alone: checkInCount <= 1, leftTonight: leftTonight && rsvpStatus === null })
+  const dock = eventDock({ cta: ctaState, when: dockWhen, roomOpen: roomLine?.open === true, canInvite: !!shareTarget, between: betweenLine, alone: checkInCount <= 1, leftTonight: (leftTonight && rsvpStatus === null) || rsvpStatus === 'not_going' })
   // The way out in this state (SCRUM-1074): "Change" before the doors, "Can’t make it" under the hold, Check out once in.
   const leaveNow = leaveKind({ phase: cancelled ? 'cancelled' : isEnded ? 'ended' : isLive ? 'live' : 'upcoming', rsvpStatus, checkedIn: isCheckedIn, roomOpen: roomLine?.open === true })
   const openLeave = () => {

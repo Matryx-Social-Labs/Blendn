@@ -70,6 +70,14 @@ it('reads the board and your requests with signed GETs', async () => {
   expect(seen.every((s) => s.auth === 'Bearer tok')).toBe(true)
 })
 
+it('marks the Lobby seen up to the newest post shown: a signed POST with its time (SCRUM-1115)', async () => {
+  const seen = server(ok({ seenAt: '2026-11-08T10:00:00Z' }))
+  await apiClient.markBoardSeen('e 1', '2026-11-08T10:00:00Z')
+  expect(seen.map((s) => [`${s.method} ${s.path}`, s.body, s.auth])).toEqual([
+    ['POST /api/mobile/events/e%201/board/seen', { at: '2026-11-08T10:00:00Z' }, 'Bearer tok'],
+  ])
+})
+
 it('posts an offer with its spaces, and a seeking without', async () => {
   const seen = server(ok({ id: 'p1' }))
   await apiClient.postToBoard('e1', { kind: 'offer', body: 'Two seats', spacesLeft: 2 })

@@ -4,7 +4,6 @@ import { router, useLocalSearchParams, useScrollToTop } from 'expo-router'
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   Dimensions,
-  AppState,
   Keyboard,
   Linking,
   type NativeScrollEvent,
@@ -49,7 +48,6 @@ import { NEAR_KM, vibeOf, type Vibe } from '../../lib/pulseChips'
 import { groupByWhen, nearSpan, nothingNearCopy, SEE_ALL_KINDS, seeAllFilters, type Beyond, type SeeAllKind } from '../../lib/nearby'
 import { farCity, nearYouCopy, openCitiesNearest, type NearSignal } from '../../lib/nothingNear'
 import { NearbyRow, WhenHeading } from '../../components/pulse/NearbyRow'
-import { LOCATION_FIX_TIMEOUT_MS, withDeadline } from '../../lib/locationFix'
 import { useLocationSharing } from '../../lib/shareLocation'
 import { useReducedMotion } from '../../lib/motion'
 import { searchTermOf } from '../../lib/searchTerm'
@@ -99,7 +97,8 @@ import { saveHomeCity, useHomeCitySlug } from '../../lib/homeCity'
 
 import { getDistanceMetres, roundCoord } from '../../lib/geo'
 import { EVENT_DETAIL_QUERY } from '../../lib/eventDetailQuery'
-import { FIX_MAX_AGE_MS, fixAfterPermission, fixOf, type PreciseFix } from '../../lib/roomButton'
+import { fixAfterPermission, type PreciseFix } from '../../lib/roomButton'
+import { keepPlace, useFixRefresh } from '../../lib/useFixRefresh'
 import { readingOf } from '../../lib/mapPresence'
 import type { DistanceShown } from '../../lib/placesPane'
 import { homeCardProps, groupByDay } from '../../lib/pulse'
@@ -131,8 +130,8 @@ import { shareEvent } from '../../lib/shareRow'
 import { PulseArrival } from '../../components/share/PulseArrival'
 import { openBlendn } from '../../lib/blendnOverlay'
 import { apiClient } from '../../lib/apiClient'
+import { subscribeCheckInChanged } from '../../lib/checkIn'
 import { Logger } from '../../lib/logger'
-import { usePresence } from '../../lib/usePresence'
 import { getOptimizedImageUrl } from '../../lib/photoUtils'
 import { useLiveSync } from '../../lib/useLiveSync'
 import { useAuth } from '../../lib/useAuth'
@@ -342,7 +341,10 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
   const [refreshing, setRefreshing] = useState(false)
   // Pull-to-refresh count: a failed Upcoming thumb tries its cover again (SCRUM-480).
   const [pulls, setPulls] = useState(0)
+  // What the feed is keyed on: moves only past PLACE_MOVE_M (`keepPlace`), so a phone standing still never refetches.
   const [userLocation, setUserLocation] = useState<PreciseFix | null>(null)
+  // The newest fix, with its own time: what the map draws as you, and how old it says it is (SCRUM-1324).
+  const [youFix, setYouFix] = useState<PreciseFix | null>(null)
   /** A recent last-known position that only orders the Featured lap on a cold start (SCRUM-1077); never shown or sent. */
   const [lapSeed, setLapSeed] = useState<{ latitude: number; longitude: number } | null>(null)
   const proximityData = useMemo(
@@ -376,23 +378,6 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
   const latestInterestStatusesRef = useLatest(interestStatuses)
   const latestInterestCountsRef = useLatest(interestCounts)
 
-  const checkedInEventId =
-    Object.keys(checkinStatuses).find((id) => checkinStatuses[id]?.status === 'checked_in') ?? null
-  const presence = usePresence(checkedInEventId)
-
-  // The server has ended this check-in -- the user walked out and the grace
-  // period expired, or the sweeper got there first. Reflect it rather than
-  // leaving a stale "checked in" chip on screen.
-  //
-  // Done during render, not in an effect, so the stale chip is never painted.
-  // It cannot loop: marking the event checked out takes it out of
-  // `checkedInEventId`, and that is the condition that brought us here.
-  if (presence.finished && checkedInEventId) {
-    setCheckinStatuses((prev) => ({
-      ...prev,
-      [checkedInEventId]: { ...prev[checkedInEventId], status: 'checked_out' },
-    }))
-  }
   /*
    * Browse scope, and the two things that are *not* it.
    *
@@ -723,6 +708,9 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
     }
   }, [user, showToast, latestInterestStatusesRef, latestInterestCountsRef])
 
+  // Checked in or out anywhere else — the presence monitor's check-out for leaving among them — re-reads the chips (SCRUM-1327).
+  useEffect(() => subscribeCheckInChanged(() => void loadCheckinStatusesBatch()), [loadCheckinStatusesBatch])
+
   /** The room's sheet said yes (it toasted the yes; `useCheckOut` toasts a refusal): out of the checked-in state, then refetch. */
   const onCheckedOut = useCallback(() => {
     if (checkingOut) setCheckinStatuses((prev) => ({ ...prev, [checkingOut.id]: { status: 'not_checked_in' } }))
@@ -757,12 +745,34 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
     [toggleInterest, handleEventPress]
   )
 
+  /*
+   * Re-check permission, not only coordinates, at mount, on every return and every five minutes while the Pulse is on
+   * screen with sharing on (`useFixRefresh`). The "Enable location" banner is keyed off `locationStatus`, so somebody who
+   * granted location in Settings came back to a banner that stayed pinned for ever. And a new fix with its own time: the
+   * map's "Last seen here N min ago" counted up for ever while the app was open (SCRUM-1324).
+   */
+  const askFix = useFixRefresh(visible && sharing, {
+    permission: (status) => {
+      setLocationStatus(status === 'granted' ? 'granted' : status === 'denied' ? 'denied' : 'undetermined')
+      // Location turned off in Settings while away: the fix from before goes, and every distance with it.
+      setUserLocation((current) => fixAfterPermission(status, current))
+      setYouFix((current) => fixAfterPermission(status, current))
+      // …and the last-known position that orders the lap: it is a position too, sent with the Featured read.
+      setLapSeed((seed) => (status === 'granted' ? seed : null))
+    },
+    fix: (fix) => {
+      setYouFix(fix)
+      setUserLocation((current) => keepPlace(current, fix))
+    },
+  })
+
   const getCurrentLocationQuietly = useCallback(async () => {
     try {
       // Best-effort permission request with quick timeout; fallback if denied/unavailable
       const { status } = await Location.requestForegroundPermissionsAsync()
       if (status !== 'granted') {
         setUserLocation(null)
+        setYouFix(null)
         setLocationStatus(status === 'denied' ? 'denied' : 'undetermined')
         Logger.warn('events', 'permission:notGranted', {})
         showSheet({
@@ -778,16 +788,14 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
         return
       }
       setLocationStatus('granted')
-      // Bounded: `getCurrentPositionAsync` has no deadline, and this ask's caller shows "waiting" until it settles (SCRUM-906).
-      const position = await withDeadline(Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }), LOCATION_FIX_TIMEOUT_MS)
-      const coords = fixOf(position)
-      setUserLocation(coords)
+      // Bounded (15 s) and guarded like every other fix: the hook's one ask (SCRUM-906, SCRUM-1324).
+      await askFix()
       Logger.journey('proximity', 'quietLocation:resolved')
     } catch (error) {
       // Keep status as granted if permission was granted but position fetch failed
       Logger.warn('events', 'quietLocation:error', { error: error as any })
     }
-  }, [])
+  }, [askFix])
 
   // Settles when the ask does, so the map's "my location" can show it is waiting.
   const requestLocationIfNeeded = useCallback((): Promise<void> => {
@@ -808,29 +816,16 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
         if (status === 'granted') {
           // Permission already granted - mark as granted immediately (before fetching coords)
           setLocationStatus('granted')
-          try {
-            const lastKnown = await Location.getLastKnownPositionAsync({ maxAge: FIX_MAX_AGE_MS })
-            if (lastKnown?.coords) {
-              setUserLocation(fixOf(lastKnown))
-            }
-          } catch {}
+          // The fix itself is `useFixRefresh`'s, asked at mount: every fix goes through its one guarded ask.
           // A cold start's first fix often takes longer than the lead's 3 s hold: a recent last-known position orders the
           // lap meanwhile, never shown as you (SCRUM-1077). None good enough: the server's order, as before.
           Location.getLastKnownPositionAsync({ maxAge: LAP_SEED.maxAgeMs, requiredAccuracy: LAP_SEED.accuracyM })
             .then((seed) => setLapSeed(lapSeedOf(seed, Date.now())))
             .catch(() => {})
-          // Defer live GPS to avoid blocking startup render
-          setTimeout(async () => {
-            try {
-              const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
-              setUserLocation(fixOf(position))
-            } catch {
-              // Position fetch failed but permission is still granted - don't show prompt
-            }
-          }, 600)
         } else if (status === 'denied') {
           setLocationStatus('denied')
           setUserLocation(null)
+          setYouFix(null)
         } else {
           // 'undetermined' - permission not yet requested
           setLocationStatus('undetermined')
@@ -1167,15 +1162,15 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
    * stored or sent — `resolveBrowseCity` returns the server's spelling when the
    * two match, so the value used as a filter is always one the server knows.
    */
+  // Named from the point to ~110 m, so the fix asked every minute while open (`useFixRefresh`) is not a geocode a minute.
+  const namedLat = roundCoord(userLocation?.latitude)
+  const namedLon = roundCoord(userLocation?.longitude)
   useEffect(() => {
-    if (!userLocation || !sharing) return
+    if (namedLat === undefined || namedLon === undefined || !sharing) return
     let cancelled = false
     ;(async () => {
       try {
-        const [place] = await Location.reverseGeocodeAsync({
-          latitude: userLocation.latitude,
-          longitude: userLocation.longitude,
-        })
+        const [place] = await Location.reverseGeocodeAsync({ latitude: namedLat, longitude: namedLon })
         if (cancelled) return
         setNamedCity(place?.city || place?.subregion || place?.region || null)
         setNamedCountry(place?.isoCountryCode?.toUpperCase() || null)
@@ -1188,7 +1183,7 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
     return () => {
       cancelled = true
     }
-  }, [userLocation, sharing])
+  }, [namedLat, namedLon, sharing])
 
   /*
    * Once the device city is known, a **guess** may be improved. A choice is not.
@@ -1237,43 +1232,6 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
    * Only the *coordinates* are refreshed here. What happens next is the effect
    * above, which is where the never-override-a-choice rule lives.
    */
-  useEffect(() => {
-    const sub = AppState.addEventListener('change', (state) => {
-      if (state !== 'active') return
-      /*
-       * Re-check permission, not only coordinates. The mount effect reads the
-       * permission once; the "Enable location" banner is keyed off
-       * `locationStatus`, so somebody who granted location in Settings (or in
-       * the OS dialog after the app was backgrounded) came back to a banner
-       * that stayed pinned for ever — the app never looked again. Refresh the
-       * status on every foreground so a grant elsewhere clears it.
-       */
-      Location.getForegroundPermissionsAsync()
-        .then(({ status }) => {
-          setLocationStatus(status === 'granted' ? 'granted' : status === 'denied' ? 'denied' : 'undetermined')
-          // Location turned off in Settings while away: the fix from before goes, and every distance with it.
-          setUserLocation((current) => fixAfterPermission(status, current))
-          // …and the last-known position that orders the lap: it is a position too, sent with the Featured read.
-          setLapSeed((seed) => (status === 'granted' ? seed : null))
-          return status === 'granted' ? Location.getLastKnownPositionAsync({ maxAge: FIX_MAX_AGE_MS }) : null
-        })
-        .then((position) => {
-          if (!position) return
-          // The state keeps its identity for a nearby fix (a new one would refetch the feed).
-          setUserLocation((current) =>
-            current &&
-            Math.abs(current.latitude - position.coords.latitude) < 0.01 &&
-            Math.abs(current.longitude - position.coords.longitude) < 0.01
-              ? current
-              : fixOf(position)
-          )
-        })
-        // A refused or unavailable fix is not an error worth surfacing: it just
-        // means the city stays where it was.
-        .catch(() => {})
-    })
-    return () => sub.remove()
-  }, [])
 
   /**
    * Every path a user can take to a city, and all of them count as choosing.
@@ -1753,7 +1711,7 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
       onBrowse({
         // The chip says the drawer's side from far away (board op-near, advisor 2026-11-21): a label, never a choice.
         city: nearSide ? 'Near you' : selectedCity,
-        location: userLocation,
+        location: youFix,
         withDistance,
         ready: cityResolved,
         // The stored city's own centre until the catalogue answers (or when it fails): the map is never left blank.
@@ -1768,7 +1726,7 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
         reach,
         onLocate: leaveFarCity,
       }),
-    [leaveFarCity, onBrowse, nearSide, selectedCity, selection?.centre, userLocation, withDistance, cityResolved, browseOption, travelling, cityOptions, phoneSlug, catalogue.defaultCitySlug, cityPick, requestLocationIfNeeded, peekLine, focus, reach]
+    [leaveFarCity, onBrowse, nearSide, selectedCity, selection?.centre, youFix, withDistance, cityResolved, browseOption, travelling, cityOptions, phoneSlug, catalogue.defaultCitySlug, cityPick, requestLocationIfNeeded, peekLine, focus, reach]
   )
 
   const firstSection = sections[0]?.key ?? null
