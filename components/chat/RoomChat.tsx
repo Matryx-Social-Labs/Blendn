@@ -511,7 +511,8 @@ function RoomChatInner({ params, embedded }: { params: RoomChatParams; embedded?
                 prev,
                 { ...incoming, replyTo: incoming.reply_to_message_id ? prev.find((m) => m.message_id === incoming.reply_to_message_id) : undefined },
                 (m) => m.created_at,
-                (m) => m.message_id
+                (m) => m.message_id,
+                isTemp
               )
         )
         setTypingUsers((prev) => {

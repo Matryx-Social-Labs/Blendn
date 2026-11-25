@@ -2,7 +2,7 @@ import { insertInOrder } from '../lib/insertInOrder'
 
 type M = { id: string; at: string }
 const t = (s: number) => `2026-10-15T19:06:0${s}.000Z`
-const put = (list: M[], item: M) => insertInOrder(list, item, (m) => m.at, (m) => m.id).map((m) => m.id)
+const put = (list: M[], item: M) => insertInOrder(list, item, (m) => m.at, (m) => m.id, (m) => m.id.startsWith('temp-')).map((m) => m.id)
 
 describe('insertInOrder (SCRUM-1168)', () => {
   const held: M[] = [
@@ -26,5 +26,11 @@ describe('insertInOrder (SCRUM-1168)', () => {
   it('breaks a tie by id, and puts a time that does not parse last', () => {
     expect(put(held, { id: 'c', at: t(2) })).toEqual(['a', 'b', 'c', 'd', 'e'])
     expect(put(held, { id: 'x', at: 'not a time' })).toEqual(['a', 'b', 'd', 'e', 'x'])
+  })
+
+  it('goes above what only this phone holds, whatever its clock says', () => {
+    // A send in flight stamped by a phone clock ahead of the server's, and one behind it.
+    expect(put([...held, { id: 'temp-1', at: t(9) }], { id: 'f', at: t(6) })).toEqual(['a', 'b', 'd', 'e', 'f', 'temp-1'])
+    expect(put([...held, { id: 'temp-1', at: t(0) }], { id: 'f', at: t(6) })).toEqual(['a', 'b', 'd', 'e', 'f', 'temp-1'])
   })
 })

@@ -449,7 +449,7 @@ function PrivateChatInner() {
         // Your own send echoed before the request resolved is still yours; the first into an empty thread takes over from Say hi.
         // Theirs rise too (DS #13) when you are at the bottom; read back, nothing moves: the chip counts it.
         if (prev.length === 0 || data.message.senderId === myId || isAtBottomRef.current) markArriving(data.message.id)
-        return insertInOrder(prev, directMessageFrom(data.message), (m) => m.createdAt, (m) => m.id)
+        return insertInOrder(prev, directMessageFrom(data.message), (m) => m.createdAt, (m) => m.id, isLocalMessage)
       })
       setIsOtherTyping(false)
       if (otherTypingTimeoutRef.current) clearTimeout(otherTypingTimeoutRef.current)
