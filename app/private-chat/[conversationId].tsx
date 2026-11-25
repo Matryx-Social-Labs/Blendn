@@ -314,6 +314,8 @@ function PrivateChatInner() {
   const reduceMotion = useLatest(useReducedMotion())
   const scrollToBottom = (animated = true) => {
     ruleHeldRef.current = false
+    // Follow until it gets there: from far up the jump lands short of rows not yet measured (SCRUM-1321).
+    follow.noteAtEnd(true)
     scrollListToEnd(flatListRef.current, animated && !reduceMotion.current)
   }
   const follow = useFollowEnd(() => scrollToBottom(false))
