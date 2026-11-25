@@ -1,6 +1,6 @@
 import { Image } from 'expo-image'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { AppState, Pressable, StyleSheet, View } from 'react-native'
+import { AppState, PixelRatio, Pressable, StyleSheet, View } from 'react-native'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import Animated, { cancelAnimation, Easing, FadeIn, ReduceMotion, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated'
 import { scheduleOnRN } from 'react-native-worklets'
@@ -11,6 +11,7 @@ import { HeroVideo, PagePicture } from '../scene/SceneHeroMedia'
 import { Icon } from '../ui/Icon'
 import { BARE_TURN_MS, lapPolicy, nextStep, pipModel, playLabel, STILL_MS, turnOf, type LapStep } from '../../lib/featuredLap'
 import type { FeedMediaItem } from '../../lib/feedMedia'
+import { clipLength, clipSource, type Size } from '../../lib/mediaFit'
 import { COLOR, DURATION, EASING, MATERIAL, RADIUS, REDUCE_MOTION, SPACE, SPRING } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { settlePage } from '../../lib/home'
@@ -80,13 +81,19 @@ export function leadLabel(card: LeadCard, index: number, count: number, paused =
 function TurnMedia({
   items,
   at,
+  frame,
   clips,
+  saver,
   paused,
   onClipDone,
   onClipReady,
 }: {
   items: FeedMediaItem[]
   at: number
+  /** The card, in points. */
+  frame: Size
+  /** Low Power or cellular (`useMediaSaver`): the smallest copy, should a clip play at all. */
+  saver: boolean
   clips: boolean
   paused: boolean
   onClipDone: () => void
@@ -99,7 +106,7 @@ function TurnMedia({
   const playing = current?.kind === 'video' && clips
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
-      {floor ? <PagePicture item={floor} /> : null}
+      {floor ? <PagePicture item={floor} frame={frame} /> : null}
       {current && at > 0 ? (
         <Animated.View key={key} entering={ITEM_IN} style={StyleSheet.absoluteFill}>
           {current.kind === 'video' && !current.posterUrl ? (
@@ -107,14 +114,17 @@ function TurnMedia({
             // (another picture, SCRUM-1066), as the event hero's.
             <View testID="pulse-lead-clip-ground" style={[StyleSheet.absoluteFill, styles.clipGround]} />
           ) : (
-            <PagePicture item={current} />
+            <PagePicture item={current} frame={frame} />
           )}
         </Animated.View>
       ) : null}
       {playing && current?.kind === 'video' ? (
         <HeroVideo
           key={key}
-          source={current.url}
+          source={clipSource(current, { frame, density: PixelRatio.get(), saver })}
+          frame={frame}
+          size={current.size}
+          focus={current.focus}
           paused={paused}
           loop={false}
           onEnded={onClipDone}
@@ -234,14 +244,11 @@ export function LeadPager({
     if (ahead.length) Image.prefetch(ahead).catch(() => {})
   }, [turn, item, cards, shown])
   const dwell = turn.length <= 1 ? BARE_TURN_MS : STILL_MS
-  // A playing clip's length, once it says: its share of the pip fills over it (the clip's end, not a timer, moves on).
-  const [clip, setClip] = useState<{ key: string; ms: number } | null>(null)
+  // A playing clip's length, the server's from the start, else once the player says (`clipLength`): its share of the pip
+  // fills over it (the clip's end, not a timer, moves on).
+  const [clip, setClip] = useState<{ key: string; sec: number } | null>(null)
   const clipKey = `${shown}-${item}`
-  const clipMs = clip?.key === clipKey ? clip.ms : null
-  useEffect(() => {
-    if (!policy.advances || !clipPlays || !clipMs) return
-    fill.set(withTiming((item + 1) / items, { duration: clipMs, easing: Easing.linear }))
-  }, [policy.advances, clipPlays, clipMs, item, items, fill])
+  const clipMs = clipLength(current?.kind === 'video' ? current.durationMs : null, clip?.key === clipKey ? clip.sec : null)
   useEffect(() => {
     if (!policy.advances || clipPlays) {
       cancelAnimation(fill)
@@ -253,6 +260,12 @@ export function LeadPager({
     const id = setTimeout(step_, dwell)
     return () => clearTimeout(id)
   }, [policy.advances, clipPlays, item, items, dwell, step_, fill, step.lapDone, reduceMotion, shown])
+  // After the effect above, which cancels the fill whenever a clip is on: the server's length can be known in the same
+  // commit the clip arrives, and the fill must start after that cancel, not before it.
+  useEffect(() => {
+    if (!policy.advances || !clipPlays || !clipMs) return
+    fill.set(withTiming((item + 1) / items, { duration: clipMs, easing: Easing.linear }))
+  }, [policy.advances, clipPlays, clipMs, item, items, fill])
 
   const step0 = step.event
   const go = useCallback(
@@ -377,10 +390,12 @@ export function LeadPager({
                       <TurnMedia
                         items={turn}
                         at={item}
+                        frame={{ width, height }}
                         clips={clipMounts}
+                        saver={lowPower || expensiveNetwork}
                         paused={!policy.advances}
                         onClipDone={step_}
-                        onClipReady={(sec) => setClip({ key: clipKey, ms: Math.max(0, sec) * 1000 })}
+                        onClipReady={(sec) => setClip({ key: clipKey, sec })}
                       />
                     ) : undefined
                   }

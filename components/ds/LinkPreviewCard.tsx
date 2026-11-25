@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { StyleSheet, Text, View, type TextProps, type TextStyle } from 'react-native'
 
 import { COLOR, FONT_FAMILY, RADIUS, TYPE } from '../../lib/design/tokens'
+import { focusStyle, type Focus, type Size } from '../../lib/mediaFit'
 import { tint } from '../../lib/theme'
 import { DiscMark } from './DiscMark'
 import { useReduceTransparency } from './shared'
@@ -75,12 +76,8 @@ export const dateLine = (d: ShareEvent['date']) => `${d.day} ${d.num} ${d.month}
 export const joinParts = (parts: (string | null | undefined)[], separator: string) => parts.filter(Boolean).join(separator)
 export const placeLine = (e: Pick<ShareEvent, 'venue' | 'area' | 'unlisted'>) => (e.unlisted ? e.area : joinParts([e.venue, e.area], ' · '))
 
-type Size = { width: number; height: number }
-
 /** Fit rule B (pulse-media board 11–13, owner 2026-11-17): an upload crops only when its ratio is this close to the frame's. */
 export const FIT_TOLERANCE = 0.15
-/** Fit rule B's crop keeps the point 40% from the top in view: faces sit high. */
-const COVER_FOCUS = { top: '40%', left: '50%' } as const
 
 /** Fit rule B: `cover` within ±15% of the frame's ratio, else `contain`. An unknown size never crops. */
 export function fitFor(media: Size | null | undefined, frame: Size): 'cover' | 'contain' {
@@ -98,17 +95,27 @@ export function fitFor(media: Size | null | undefined, frame: Size): 'cover' | '
  * when the two ratios are within ±15% (`fitFor`); otherwise the whole upload over the same picture blurred and dimmed,
  * never another image. Under Reduce Transparency the fill is flat `surfaceSunken`, as other glass is. The share templates
  * leave it off: they are pictures of the card, always contained, whatever the sharer's phone is set to.
+ *
+ * A crop sits where the dashboard previews it (task 21, `focusStyle`): at the organizer's point, else 50% across and 40%
+ * down. A size the server sent decides the fit as soon as the frame is laid out, before the bytes land (no reflow); else
+ * the picture's own, once loaded. A point is ignored when the picture is shown whole.
  */
 export function ContainedCover({
   uri,
   radius = 0,
   auto = false,
+  size,
+  focus,
   onError,
   testID,
 }: {
   uri: string
   radius?: number
   auto?: boolean
+  /** The picture's size from the server, when it sent one. */
+  size?: Size | null
+  /** The organizer's focal point, when they picked one. */
+  focus?: Focus | null
   /** The picture would not load (EventCover's retry). */
   onError?: () => void
   testID?: string
@@ -116,7 +123,8 @@ export function ContainedCover({
   const reduceTransparency = useReduceTransparency()
   const [frame, setFrame] = useState<Size>({ width: 0, height: 0 })
   const [media, setMedia] = useState<{ uri: string; size: Size } | null>(null)
-  const fit = auto ? fitFor(media?.uri === uri ? media.size : null, frame) : 'contain'
+  const known = size ?? (media?.uri === uri ? media.size : null)
+  const fit = auto ? fitFor(known, frame) : 'contain'
   const flat = auto && reduceTransparency
   return (
     <View
@@ -138,8 +146,8 @@ export function ContainedCover({
         recyclingKey={uri}
         style={StyleSheet.absoluteFill}
         contentFit={fit}
-        contentPosition={fit === 'cover' ? COVER_FOCUS : undefined}
-        onLoad={auto ? (e) => setMedia({ uri, size: { width: e.source.width, height: e.source.height } }) : undefined}
+        contentPosition={fit === 'cover' && known ? focusStyle(known, frame, focus ?? null) : undefined}
+        onLoad={auto && !size ? (e) => setMedia({ uri, size: { width: e.source.width, height: e.source.height } }) : undefined}
         onError={onError}
         accessible={false}
       />

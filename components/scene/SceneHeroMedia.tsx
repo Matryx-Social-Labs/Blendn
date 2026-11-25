@@ -1,9 +1,11 @@
 import { Image } from 'expo-image'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { Pressable, ScrollView, StyleSheet, View, type NativeSyntheticEvent, type NativeScrollEvent } from 'react-native'
+import { PixelRatio, Pressable, ScrollView, StyleSheet, View, type NativeSyntheticEvent, type NativeScrollEvent } from 'react-native'
 
 import type { FeedMediaItem } from '../../lib/feedMedia'
 import { STILL_MS } from '../../lib/featuredLap'
+import { clipSource, focusStyle, videoFrame, type Focus, type Size } from '../../lib/mediaFit'
+import { useMediaSaver } from '../../lib/mediaSaver'
 import { COLOR, MATERIAL, RADIUS, SPACE } from '../../lib/design/tokens'
 import { ContainedCover } from '../ds/LinkPreviewCard'
 import { useReduceTransparency } from '../ds/shared'
@@ -88,6 +90,8 @@ export function SceneHeroMedia({
   const [manual, setManual] = useState(false)
   const reduceMotion = useReducedMotion()
   const reduceTransparency = useReduceTransparency()
+  const { lowPower, expensiveNetwork } = useMediaSaver()
+  const frame = { width, height }
   const scrollRef = useRef<ScrollView>(null)
 
   // `index` in a ref as well, so the timer can read the current page without
@@ -193,7 +197,7 @@ export function SceneHeroMedia({
               recycled view still holding the previous page's picture and then
               dissolve out of it — which is the other half of the same flash.
             */}
-            <PagePicture item={item} />
+            <PagePicture item={item} frame={frame} />
             {/*
               Mounted only while it is the page in view — the Pulse's rule.
 
@@ -220,7 +224,10 @@ export function SceneHeroMedia({
             {item.kind === 'video' && i === index && mountsClip(item) ? (
               <HeroVideo
                 key={`${item.url}-${i}`}
-                source={item.url}
+                source={clipSource(item, { frame, density: PixelRatio.get(), saver: lowPower || expensiveNetwork })}
+                frame={frame}
+                size={item.size}
+                focus={item.focus}
                 paused={paused}
                 /*
                  * Loops exactly when nothing is going to advance past it.
@@ -281,15 +288,27 @@ export function SceneHeroMedia({
 /**
  * A page's picture, here and in the Pulse lead's turn.
  *
- * - A still: fit rule B (`ContainedCover auto`), because a flyer must not be cut.
- * - A clip's poster: cropped exactly as the clip is (`HeroVideo`: cover, centred; iOS's aspect-fill and Android's zoom
- *   both centre), so the swap from poster to playing clip does not move the picture. No blurred copy: there are no bars.
+ * - A still: fit rule B (`ContainedCover auto`), because a flyer must not be cut; its size and point from the server
+ *   when it sent them.
+ * - A clip's poster: cropped exactly as the clip is (`HeroVideo`), so the swap from poster to playing clip does not move
+ *   the picture. With the clip's size, at its point (or the default focus, as the dashboard previews it); without it,
+ *   centred, as the player then is. No blurred copy: there are no bars.
  * - A clip with no poster: nothing, and the frame's dark surface shows until the clip's own first frame.
  */
-export function PagePicture({ item }: { item: FeedMediaItem }) {
-  if (item.kind === 'image') return <ContainedCover uri={item.url} auto testID="media-still" />
+export function PagePicture({ item, frame }: { item: FeedMediaItem; frame: Size }) {
+  if (item.kind === 'image') return <ContainedCover uri={item.url} auto size={item.size} focus={item.focus} testID="media-still" />
   if (!item.posterUrl) return null
-  return <Image testID="media-poster" source={{ uri: item.posterUrl }} recyclingKey={item.posterUrl} style={StyleSheet.absoluteFill} contentFit="cover" accessible={false} />
+  return (
+    <Image
+      testID="media-poster"
+      source={{ uri: item.posterUrl }}
+      recyclingKey={item.posterUrl}
+      style={StyleSheet.absoluteFill}
+      contentFit="cover"
+      contentPosition={item.size ? focusStyle(item.size, frame, item.focus ?? null) : undefined}
+      accessible={false}
+    />
+  )
 }
 
 /** The empty band under the hero's caption: the pager dots live in it, so no title length can reach them. */
@@ -327,6 +346,9 @@ const styles = StyleSheet.create({
   pips: { position: 'absolute', left: 0, right: 0, bottom: SPACE.md, flexDirection: 'row', justifyContent: 'center', gap: PIP.gap },
   pip: { width: PIP.off, height: PIP.off, borderRadius: RADIUS.capsule, backgroundColor: tint(COLOR.textPrimary, 0.4) },
   pipOn: { width: PIP.on, backgroundColor: COLOR.textPrimary },
+  /** The card's box: a shifted player is larger than the card, and must not spill onto the next page. */
+  clipBox: { position: 'absolute', left: 0, top: 0, right: 0, bottom: 0, overflow: 'hidden' },
+  shifted: { position: 'absolute' },
 })
 
 /**
@@ -339,20 +361,33 @@ const styles = StyleSheet.create({
  * Muted, like the feed. Sound belongs in the lightbox, where opening it is a
  * deliberate act.
  *
- * Cover at any ratio (owner 2026-11-18, "video fills the card"): a clip is cropped to the card, centred, as Instagram,
- * Netflix, Airbnb and TikTok do; never letterboxed, never over a blurred copy. Its poster (`PagePicture`) takes the same
- * fit. ponytail: centre crop; a server focal point (ROADMAP § Backend later) becomes the poster's `contentPosition` and an
- * offset player, both from the one value.
+ * Cover at any ratio (owner 2026-11-18, "video fills the card"): a clip is cropped to the card, as Instagram, Netflix,
+ * Airbnb and TikTok do; never letterboxed, never over a blurred copy. Its poster (`PagePicture`) takes the same crop. With
+ * the clip's size from the server (task 21), the crop sits at the organizer's point, else the default focus: `VideoView`
+ * has no content position, so the player is drawn whole at the cover scale and shifted inside a clipped box
+ * (`videoFrame`). Without a size, centred, as the native aspect-fill does.
+ *
+ * `source` is read once: a network change mid-clip never swaps the copy that is playing (advisor 2026-11-25).
  */
 export function HeroVideo({
   source,
+  frame,
+  size,
+  focus,
   paused,
   loop,
   onEnded,
   onFailed,
   onReady,
 }: {
+  /** The copy to play (`clipSource`). */
   source: string
+  /** The card, in points. */
+  frame: Size
+  /** The clip's size from the server, when it sent one. */
+  size?: Size
+  /** The organizer's focal point, when they picked one. */
+  focus?: Focus
   /** Holds the frame it is on; Play carries on from there. */
   paused: boolean
   loop: boolean
@@ -365,9 +400,11 @@ export function HeroVideo({
   /** Ready to play, with the clip's length in seconds (the Pulse lead fills its pip over it). */
   onReady?: (durationSec: number) => void
 }) {
-  const player = useVideoPlayer(source, (p) => {
+  const [opened] = useState(source)
+  const player = useVideoPlayer(opened, (p) => {
     p.muted = true
   })
+  const shift = size && frame.width > 0 && frame.height > 0 ? videoFrame(size, frame, focus ?? null) : null
 
   // `loop` can change after construction — a manual swipe flips it — so it is
   // assigned on every change rather than only in the setup callback.
@@ -443,16 +480,18 @@ export function HeroVideo({
   }, [player])
 
   return (
-    <VideoView
-      player={player}
-      style={StyleSheet.absoluteFill}
-      contentFit="cover"
-      // Android: a SurfaceView ignores the parent's clip, so a cover-cropped (zoomed) surface would spill past the card's
-      // rounded corners; a TextureView is clipped by it (pulse-media sheet 12).
-      surfaceType="textureView"
-      nativeControls={false}
-      allowsPictureInPicture={false}
-      accessible={false}
-    />
+    <View style={styles.clipBox} pointerEvents="none">
+      <VideoView
+        player={player}
+        style={shift ? [styles.shifted, shift] : StyleSheet.absoluteFill}
+        contentFit="cover"
+        // Android: a SurfaceView ignores the parent's clip, so a cover-cropped (zoomed) surface would spill past the card's
+        // rounded corners; a TextureView is clipped by it (pulse-media sheet 12).
+        surfaceType="textureView"
+        nativeControls={false}
+        allowsPictureInPicture={false}
+        accessible={false}
+      />
+    </View>
   )
 }
