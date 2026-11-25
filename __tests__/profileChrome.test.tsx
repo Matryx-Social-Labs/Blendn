@@ -72,30 +72,23 @@ describe('Nights out chooses its state (Me 04 · 05 · 06)', () => {
     expect(nightsView('ready', []).kind).toBe('first')
   })
   it('keeps the last good tiles when a refresh failed', () => {
-    expect(nightsView('failed', [night(1)])).toMatchObject({ kind: 'tiles', failed: true, locked: 0 })
+    expect(nightsView('failed', [night(1)])).toMatchObject({ kind: 'tiles', failed: true })
   })
   it('says a failure with nothing to show without tiles', () => {
     expect(nightsView('failed', []).kind).toBe('failed')
   })
   // D-H1: "48 NIGHTS" over "Your first night isn't written yet". The free 3 can be nights still going, which the list hides.
-  it('never says "first night" under a count above 0: locked nights say Blend\'n+', () => {
-    expect(nightsView('ready', [], 45, 48)).toEqual({ kind: 'locked', total: 48 })
-  })
   it('never says "first night" under a count above 0: nights still going say they land later', () => {
-    expect(nightsView('ready', [], 0, 2)).toEqual({ kind: 'pending', total: 2 })
-  })
-  // Admin S-1 (fixed): a free account sees its latest 3 ended nights; the rest are `lockedCount`, said under the tiles.
-  it('carries the locked nights with the tiles', () => {
-    expect(nightsView('ready', [night(1), night(2), night(3)], 43, 48)).toMatchObject({ kind: 'tiles', locked: 43 })
+    expect(nightsView('ready', [], 2)).toEqual({ kind: 'pending', total: 2 })
   })
   it('is the first night only when the count is 0, or unknown', () => {
-    expect(nightsView('ready', [], 0, 0).kind).toBe('first')
-    expect(nightsView('ready', [], 0, null).kind).toBe('first')
+    expect(nightsView('ready', [], 0).kind).toBe('first')
+    expect(nightsView('ready', [], null).kind).toBe('first')
   })
-  it('reads the total as the shown nights plus the locked ones', () => {
-    expect(nightsCounts({ pagination: { totalCount: 3 }, lockedCount: 45 })).toEqual({ locked: 45, total: 48, running: 0 })
-    expect(nightsCounts({ lockedCount: 2 })).toEqual({ locked: 2, total: null, running: 0 })
-    expect(nightsCounts(null)).toEqual({ locked: 0, total: null, running: 0 })
+  it('reads the total as the server’s count of nights, every one of them free (launch gate 5)', () => {
+    expect(nightsCounts({ pagination: { totalCount: 48 } })).toEqual({ total: 48, running: 0 })
+    expect(nightsCounts({})).toEqual({ total: null, running: 0 })
+    expect(nightsCounts(null)).toEqual({ total: null, running: 0 })
   })
   // RC 7, account d: "4 NIGHTS" over one tile and "1 night out", because 3 nights were still going (S-1 lists them).
   it('counts the listed nights that have not ended, which the grid leaves out', () => {
@@ -106,18 +99,18 @@ describe('Nights out chooses its state (Me 04 · 05 · 06)', () => {
       { end_time: '2026-10-24T12:00:00.000Z' },
       { end_time: '2026-10-23T22:00:00.000Z' },
     ]
-    expect(nightsCounts({ pagination: { totalCount: 4 }, lockedCount: 0, events }, NOW)).toEqual({ locked: 0, total: 4, running: 3 })
-    expect(nightsView('ready', [night(1)], 0, 4, 3)).toMatchObject({ kind: 'tiles', running: 3, locked: 0 })
+    expect(nightsCounts({ pagination: { totalCount: 4 }, events }, NOW)).toEqual({ total: 4, running: 3 })
+    expect(nightsView('ready', [night(1)], 4, 3)).toMatchObject({ kind: 'tiles', running: 3 })
   })
   // rc7 (drive 7 report, 4): "3 nights out in the last 12 weeks" under 46, and "40" against 44 ended. The line counted the
   // shown tiles in a window; it now says every ended night since you joined, which with the running ones is the stat.
   it('the line counts every ended night, so it and the running nights add up to the stat', () => {
-    const a = nightsView('ready', [night(1), night(2), night(3)], 43, 48, 0)
+    const a = nightsView('ready', [night(1), night(2), night(3)], 48, 0)
     expect(a).toMatchObject({ kind: 'tiles', ended: 48, running: 0 })
-    const c = nightsView('ready', [night(1), night(2), night(3)], 41, 46, 2)
+    const c = nightsView('ready', [night(1), night(2), night(3)], 46, 2)
     expect(c).toMatchObject({ kind: 'tiles', ended: 44, running: 2 })
     // No total from an older server: the ended nights it listed.
-    expect(nightsView('ready', [night(1), night(2)], 0, null, 0)).toMatchObject({ ended: 2 })
+    expect(nightsView('ready', [night(1), night(2)], null, 0)).toMatchObject({ ended: 2 })
   })
   it('labels a night the way the tile reads', () => {
     expect(nightLabel(new Date(2025, 9, 3, 20).toISOString())).toBe('Fri 3 Oct')
@@ -152,24 +145,15 @@ describe('Nights out chooses its state (Me 04 · 05 · 06)', () => {
     fireEvent.press(screen.getByText('Try again'))
     expect(onRetry).toHaveBeenCalledTimes(1)
   })
-  it('says the locked count, never the first-night card, and sells nothing: Plus is sold once on Me, by its row (A 01)', async () => {
-    await render(<NightsOut status="ready" events={[]} lockedCount={1045} total={1048} onOpenEvent={jest.fn()} onSeeAll={jest.fn()} onRetry={jest.fn()} onFirstNight={jest.fn()} />)
-    expect(screen.queryByText(FIRST_NIGHT.title)).toBeNull()
-    expect(screen.getByText(NIGHTS_HELD.locked(1048))).toBeTruthy()
-    expect(NIGHTS_HELD.locked(1048)).toBe('1,048 nights · the older ones are with Blend’n+')
-    expect(screen.queryByText('See Blend’n+')).toBeNull()
-    expect(screen.queryAllByRole('button')).toHaveLength(0)
-  })
   it('renders nights still going without the first-night card or a Blend\'n+ button', async () => {
     await render(<NightsOut status="ready" events={[]} total={1} onOpenEvent={jest.fn()} onSeeAll={jest.fn()} onRetry={jest.fn()} onFirstNight={jest.fn()} />)
     expect(screen.queryByText(FIRST_NIGHT.title)).toBeNull()
     expect(screen.getByText('1 night · it lands here once it ends')).toBeTruthy()
     expect(screen.queryByText('See Blend’n+')).toBeNull()
   })
-  it('names Blend\'n+ nowhere under the tiles: Me sells it once, by its own row (A 01; drive 2026-11-18 found it twice)', async () => {
-    await render(<NightsOut status="ready" events={[night(1), night(2), night(3)]} lockedCount={43} total={48} onOpenEvent={jest.fn()} onSeeAll={jest.fn()} onRetry={jest.fn()} onFirstNight={jest.fn()} />)
+  it('names Blend\'n+ nowhere under the tiles (launch gate 5): every night is free to see', async () => {
+    await render(<NightsOut status="ready" events={[night(1), night(2), night(3)]} total={48} onOpenEvent={jest.fn()} onSeeAll={jest.fn()} onRetry={jest.fn()} onFirstNight={jest.fn()} />)
     expect(screen.getByTestId('nights-grid')).toBeTruthy()
-    // The header counts all 48 and See all leads to Going, where the locked nights' row lives. Negative control: the old line fails.
     expect(screen.queryByText(/Blend’n\+/)).toBeNull()
     expect(screen.queryByTestId('nights-more')).toBeNull()
   })

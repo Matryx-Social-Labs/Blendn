@@ -1,8 +1,8 @@
 /*
  * <ExpiryPrompt> and <NotLiveNotice> (guidelines/components/ExpiryPrompt.html,
  * Flow 11 · 11.4, ROUND3 G1): asked once when live time runs out. The free
- * extend is 45 minutes and the gradient primary; the Blend'n+ row is a solid
- * secondary and never on a night's first Go Live. After, the room says so.
+ * extend is 45 minutes and the gradient primary; the Stay row is a solid
+ * secondary, free for everyone (launch gate 5). After, the room says so.
  */
 import { fireEvent, render, screen } from '@testing-library/react-native'
 import React from 'react'
@@ -32,7 +32,7 @@ beforeEach(() => {
 })
 
 const ended = (props: Partial<React.ComponentProps<typeof ExpiryPrompt>> = {}) => (
-  <ExpiryPrompt kind="ended" visible venue="Toit" onExtend={jest.fn()} plus={{ from: '₹49', onPress: jest.fn() }} onDone={jest.fn()} {...props} />
+  <ExpiryPrompt kind="ended" visible venue="Toit" onExtend={jest.fn()} stay={{ onPress: jest.fn() }} onDone={jest.fn()} {...props} />
 )
 
 describe('<ExpiryPrompt>', () => {
@@ -55,11 +55,11 @@ describe('<ExpiryPrompt>', () => {
     expect(primary).not.toHaveBeenCalled()
   })
 
-  it('the Blend’n+ row sits between Extend and Done, and is silent', async () => {
+  it('the Stay row sits between Extend and Done, and is silent', async () => {
     const onPlus = jest.fn()
-    await render(ended({ plus: { from: '₹49', onPress: onPlus } }))
+    await render(ended({ stay: { onPress: onPlus } }))
     const names = screen.getAllByRole('button').map((b) => b.props.accessibilityLabel)
-    expect(names.slice(-3)).toEqual(['Extend 45 min — free', 'Stay while you’re here with Blend’n+, up to 4 h, from 49 rupees', 'Done for now'])
+    expect(names.slice(-3)).toEqual(['Extend 45 min — free', 'Stay while you’re here, up to 4 h', 'Done for now'])
     await fireEvent(screen.getByRole('button', { name: /Stay while you’re here/ }), 'pressIn')
     await fireEvent.press(screen.getByRole('button', { name: /Stay while you’re here/ }))
     expect(onPlus).toHaveBeenCalledTimes(1)
@@ -76,18 +76,9 @@ describe('<ExpiryPrompt>', () => {
     expect(onDone).not.toHaveBeenCalled()
   })
 
-  it('never a Blend’n+ row on a person’s first Go Live', async () => {
-    await render(ended({ firstGoLiveTonight: true }))
-    expect(screen.queryByRole('button', { name: /Blend’n\+/ })).toBeNull()
-  })
-
-  /**
-   * Negative control: dropping the `plus.from &&` in the first-Go-Live test hides the free row too, and
-   * fails "where staying is free the row stays, even on a first Go Live".
-   */
-  it('where staying is free the row stays, with no price and no Blend’n+, even on a first Go Live', async () => {
+  it('the row says staying and its limit, with no price and no Blend’n+', async () => {
     const onStay = jest.fn()
-    await render(ended({ plus: { onPress: onStay }, firstGoLiveTonight: true }))
+    await render(ended({ stay: { onPress: onStay } }))
     const row = screen.getByRole('button', { name: 'Stay while you’re here, up to 4 h' })
     expect(screen.getByText('Stay while you’re here')).toBeTruthy()
     expect(screen.getByText('up to 4 h')).toBeTruthy()

@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-na
 import Animated, { Easing, FadeIn } from 'react-native-reanimated'
 
 import { Avatar } from '../ds/Avatar'
-import { RadioRing } from '../ds/PlanCard'
+import { RadioRing } from '../ds/RadioRing'
 import { font, quickTransition, useAnnounced, useBoldText, useSelection } from '../ds/shared'
 import { EventCover } from '../EventCover'
 import { Icon } from '../ui/Icon'

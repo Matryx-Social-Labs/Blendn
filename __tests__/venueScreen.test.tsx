@@ -49,12 +49,10 @@ const mockLive = { id: null as string | null, title: null as string | null }
 jest.mock('../lib/blendnOverlay', () => ({ openBlendn: jest.fn(), useLiveEventId: () => mockLive.id, useLiveTitle: () => mockLive.title }))
 jest.mock('../lib/checkIn', () => ({ checkOutOf: jest.fn(), checkInChanged: jest.fn(), subscribeCheckInChanged: () => () => {} }))
 jest.mock('../lib/socketClient', () => ({ subscribeToLiveEnded: (cb: never) => { mockEnded.push(cb); return () => {} } }))
-// The real useGoLive runs: only the phone's position, the network and the paywall are stood in for.
+// The real useGoLive runs: only the phone's position and the network are stood in for.
 jest.mock('../lib/locationFix', () => ({ getCurrentLocation: jest.fn(async () => ({ latitude: 12.97, longitude: 77.64, accuracy: 10 })) }))
 jest.mock('../lib/sheetDismissed', () => ({ ...jest.requireActual('../lib/sheetDismissed'), afterSheetDismissed: () => Promise.resolve() }))
 jest.mock('../lib/useAuth', () => ({ useAuth: () => ({ user: { id: 'u1' } }) }))
-jest.mock('../lib/plus', () => ({ usePlusStatus: () => ({ status: null, refresh: jest.fn() }) }))
-jest.mock('../lib/paywall', () => ({ openTonight: jest.fn(async () => true) }))
 const mockOpenShare = jest.fn((_target?: unknown) => Promise.resolve(true))
 jest.mock('../lib/shareTray', () => ({ openShare: (t: unknown) => mockOpenShare(t) }))
 jest.mock('../lib/openInMaps', () => ({ openInMaps: jest.fn(() => Promise.resolve()) }))
@@ -75,7 +73,6 @@ import { NO_AREA_REASON } from '../lib/goLive'
 import { markOffline, markOnline } from '../lib/networkStatus'
 import { H } from '../lib/haptics'
 import { openInMaps } from '../lib/openInMaps'
-import { openTonight } from '../lib/paywall'
 import { clockTime } from '../lib/roomMoments'
 /* eslint-enable import/first */
 
@@ -541,35 +538,16 @@ describe('the dock', () => {
       expect(screen.queryAllByRole('radio').length).toBe(4)
     })
 
-    it('“Staying live is part of Blend’n+” when the paywall may not open: Pick a time goes back to the dial, See Blend’n+ opens the Tonight sheet', async () => {
-      goLiveApi.mockResolvedValue({ success: false, errorCode: 'PLUS_REQUIRED', error: 'Staying live is part of Blendn+.' })
-      ;(openTonight as jest.Mock).mockResolvedValue(false)
+    it('PLUS_REQUIRED from an old server is the sheet’s own “Couldn’t go live”, in the server’s words, with nothing to buy', async () => {
+      goLiveApi.mockResolvedValue({ success: false, errorCode: 'PLUS_REQUIRED', error: 'Staying live isn’t open here right now.' })
       await mount()
       await openDial(3)
       await hold()
       await act(async () => { jest.advanceTimersByTime(900) })
-      expect(screen.getByRole('header', { name: 'Staying live is part of Blend’n+' })).toBeTruthy()
-      await act(async () => {
-        fireEvent.press(screen.getByRole('button', { name: 'Pick a time' }))
-      })
-      expect(screen.getAllByRole('radio')).toHaveLength(4)
-      expect(screen.getAllByRole('radio')[0].props.accessibilityState).toMatchObject({ checked: true })
-      goLiveApi.mockResolvedValue({ success: false, errorCode: 'PLUS_REQUIRED', error: 'x' })
-      await openDialAgainStay()
-      await act(async () => {
-        fireEvent.press(screen.getByRole('button', { name: 'See Blend’n+' }))
-      })
-      await act(async () => { jest.advanceTimersByTime(900) })
-      expect(openTonight).toHaveBeenLastCalledWith(expect.objectContaining({ trigger: 'stay', venue: 'The Humming Tree' }), { userInitiated: true })
+      expect(screen.getByRole('header', { name: 'Couldn’t go live' })).toBeTruthy()
+      expect(screen.getByText('Staying live isn’t open here right now.')).toBeTruthy()
+      expect(screen.queryByText(/Blend’n\+/)).toBeNull()
     })
-
-    const openDialAgainStay = async () => {
-      await act(async () => {
-        fireEvent.press(screen.getAllByRole('radio')[3])
-      })
-      await hold()
-      await act(async () => { jest.advanceTimersByTime(900) })
-    }
 
     it('the generic tray is not used for any of them', async () => {
       goLiveApi.mockResolvedValue({ success: false, errorCode: 'OUT_OF_RANGE', error: 'x' })
@@ -580,15 +558,12 @@ describe('the dock', () => {
     })
   })
 
-  it('Stay is Blend’n+’s where the server gates it: the dial shows it locked, and a tap opens the Tonight sheet once the dial has left', async () => {
-    const plus = require('../lib/plus')
-    jest.spyOn(plus, 'usePlusStatus').mockReturnValue({ status: { active: false, gated: true }, refresh: jest.fn() })
-    ;(openTonight as jest.Mock).mockResolvedValue(true)
+  it('Stay is free for everyone (launch gate 5): the dial names no Blend’n+ and draws no Plus mark', async () => {
     await mount()
     await openDial(3)
-    await act(async () => { jest.advanceTimersByTime(900) })
-    expect(openTonight).toHaveBeenCalledWith(expect.objectContaining({ trigger: 'stay', venue: 'The Humming Tree', onFree: expect.any(Function), onUnlocked: expect.any(Function) }), { userInitiated: true })
-    expect(goLiveApi).not.toHaveBeenCalled()
+    expect(screen.getAllByRole('radio')[3].props.accessibilityLabel).toMatch(/, free today$/)
+    expect(screen.queryByText('Plus', { includeHiddenElements: true })).toBeNull()
+    expect(screen.queryByText(/Blend’n\+/)).toBeNull()
   })
 
   // SCRUM-635 drive: the one-tap Go live again took somebody checked in at an event out of it without a word.

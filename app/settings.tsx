@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { router, useFocusEffect } from 'expo-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Linking, Platform, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { Linking, ScrollView, StyleSheet, Text, View } from 'react-native'
 import Animated, { LinearTransition } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Avatar } from '../components/ds/Avatar'
@@ -10,7 +10,6 @@ import { TextField } from '../components/ds/TextField'
 import { SettingsGroup, SettingsRow } from '../components/ds/SettingsRow'
 import { font, HueProvider, useBoldText } from '../components/ds/shared'
 import { TopBar } from '../components/ds/TopBar'
-import { BannerPresence } from '../components/motion/BannerPresence'
 import { bannerFadeIn, bannerIn, bannerOut } from '../components/motion/presence'
 import { OfflineBanner } from '../components/OfflineBanner'
 import { useToast } from '../components/Toast'
@@ -37,11 +36,6 @@ import { usePushPreference } from '../lib/usePushPreference'
 import { Logger } from '../lib/logger'
 import { useAuth, refreshAuthUser, signOut, signOutEverywhere, deleteAccount } from '../lib/useAuth'
 import { notificationsHint, useMutedRooms } from '../lib/mutedRooms'
-import { openPaywall } from '../lib/paywall'
-import { usePlusStatus, type PlusStatus } from '../lib/plus'
-import { plusRowLine, showsPlus } from '../lib/mePlus'
-import { useMonthlyPrice } from '../lib/useMonthlyPrice'
-import { manageSubscriptionUrl } from '../lib/purchases'
 import { useReducedMotion } from '../lib/motion'
 
 /** The banner's sentence when the profile could not be read (Flow 7 frame 06). */
@@ -107,11 +101,6 @@ function SettingsScreenContent() {
   const [loadingPreferences, setLoadingPreferences] = useState(true)
   const [preferencesError, setPreferencesError] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
-  /** The delete sheet's first step is on screen: a late store-subscription answer may still redraw it, and only then. */
-  const deleteExplainOpen = useRef(false)
-  /** Blendn+ as the server says it: the row's words, and the delete tray's warning. */
-  const { status: plus, refresh: refreshPlus } = usePlusStatus()
-  useFocusEffect(refreshPlus)
   /** The delete is in flight: the row says so and nothing can close the sheet (Flow 7 frame 15). */
   const [deleting, setDeleting] = useState(false)
   /** The Notifications row's hint: how many rooms are muted, else whether pushes are on. */
@@ -309,12 +298,6 @@ function SettingsScreenContent() {
     },
     [showToast]
   )
-  const openStore = useCallback(
-    (url: string) => {
-      Linking.openURL(url).catch(() => showToast("That page didn’t open. Try again.", 'error'))
-    },
-    [showToast]
-  )
 
   /**
    * Deleting is two steps in one sheet: what it does, then "for good?". The confirm's own haptic is H.destructive (SheetHost).
@@ -380,78 +363,30 @@ function SettingsScreenContent() {
   }, [authMethodNow])
 
   const explainDeleteSheet = useCallback(
-    (storePlus: PlusStatus['source'] | null): Sheet => {
-      const store = storePlus === 'apple' ? 'the App Store' : 'Google Play'
-      return {
-        kind: 'actions',
-        hue: 'violet',
-        icon: 'trash-2',
-        title: 'Delete your account?',
-        message: deleteExplainMessage(homeCountry),
-        // A running store subscription keeps billing after the account is gone: said first, as a banner (review H1).
-        // In presence: a late store answer redraws the sheet with it, and it must not pop.
-        content: storePlus ? (
-          <BannerPresence>
-            <Banner kind="info" icon="sparkles" text={`Blend’n+ renews through ${store}. Deleting doesn’t cancel it.`} testID="delete-renews" />
-          </BannerPresence>
-        ) : undefined,
-        onDismiss: () => {
-          deleteExplainOpen.current = false
+    (): Sheet => ({
+      kind: 'actions',
+      hue: 'violet',
+      icon: 'trash-2',
+      title: 'Delete your account?',
+      message: deleteExplainMessage(homeCountry),
+      actions: [
+        {
+          label: 'Delete account',
+          // Outlined, not filled (Me + settings A 07): the way back, not the delete, is the easy thing on this sheet.
+          variant: 'danger',
+          // Each destructive press plays the tick (Flow 7 frame 13), the one that only leads to "for good?" included.
+          pressHaptic: () => H.destructive(),
+          next: () => confirmDeleteSheet(),
         },
-        actions: [
-          ...(storePlus
-            ? [
-                {
-                  label: 'Manage subscription',
-                  variant: 'secondary' as const,
-                  then: () => {
-                    deleteExplainOpen.current = false
-                    void manageSubscriptionUrl().then(openStore)
-                  },
-                },
-              ]
-            : []),
-          {
-            label: 'Delete account',
-            // Outlined, not filled (Me + settings A 07): the way back, not the delete, is the easy thing on this sheet.
-            variant: 'danger',
-            // Each destructive press plays the tick (Flow 7 frame 13), the one that only leads to "for good?" included.
-            pressHaptic: () => H.destructive(),
-            next: () => {
-              deleteExplainOpen.current = false
-              return confirmDeleteSheet()
-            },
-          },
-          // The page that lists everything kept, quiet beside the way back (kept from Flow 7; the board drew three buttons).
-          {
-            label: 'What’s kept',
-            variant: 'tertiary',
-            then: () => {
-              deleteExplainOpen.current = false
-              openPage(BLENDN_LINKS.deleteAccount)
-            },
-          },
-          { label: 'Keep my account', cancel: true },
-        ],
-      }
-    },
-    [confirmDeleteSheet, homeCountry, openPage, openStore]
+        // The page that lists everything kept, quiet beside the way back (kept from Flow 7; the board drew three buttons).
+        { label: 'What’s kept', variant: 'tertiary', then: () => openPage(BLENDN_LINKS.deleteAccount) },
+        { label: 'Keep my account', cancel: true },
+      ],
+    }),
+    [confirmDeleteSheet, homeCountry, openPage]
   )
 
-  const handleDeleteAccount = useCallback(() => {
-    deleteExplainOpen.current = true
-    showSheet(explainDeleteSheet(null))
-    apiClient
-      .getMyPlus()
-      .then((res) => {
-        const source = res.success ? res.data?.source : null
-        // Only while the first step is still the sheet: a late answer must not pull someone back from "for good?".
-        if (deleteExplainOpen.current && res.success && res.data?.active && (source === 'apple' || source === 'google')) {
-          showSheet(explainDeleteSheet(source))
-        }
-      })
-      .catch(() => {})
-  }, [explainDeleteSheet])
+  const handleDeleteAccount = useCallback(() => showSheet(explainDeleteSheet()), [explainDeleteSheet])
 
   /** Sign out asks first (one stray tap used to end the session on the spot); so does signing out of every device. */
   const askSignOut = useCallback(() => showSheet(signOutSheet({ signOut, showToast })), [showToast])
@@ -507,11 +442,6 @@ function SettingsScreenContent() {
       />
     )
   }
-
-  // The paywall, asked for: no cooldown (step 11, trigger `profile`). Only where Blend'n+ is sold (`showsPlus`, owner 2026-11-18).
-  // The same line as Me's row (D23, `plusRowLine`): one account, one sentence on both.
-  const plusPrice = useMonthlyPrice(!!plus && !plus.active && plus.gated)
-  const plusHint = plusRowLine(plus, plusPrice, Platform.OS === 'android' ? 'android' : 'ios') ?? undefined
 
   /** The Account card (R4.1 7.1): who is signed in, how, and the ways out. A Google or Apple account has no password to change. */
   const email = user?.email
@@ -573,20 +503,6 @@ function SettingsScreenContent() {
             <SettingsRow icon="key-round" title="Password" trail="chevron" onPress={() => askPasswordLink(email)} testID="settings-password" />
           ) : null}
         </SettingsGroup>
-
-        {/* Where you stand with Blend’n+, the same line as Me's row (D23, `plusRowLine`); only where it is sold (owner 2026-11-18: the app is free). */}
-        {showsPlus(plus) ? (
-          <SettingsGroup>
-            <SettingsRow
-              icon="sparkles"
-              title="Blend’n+"
-              hint={plusHint}
-              trail="chevron"
-              onPress={() => void openPaywall('profile', { userInitiated: true })}
-              testID="settings-plus"
-            />
-          </SettingsGroup>
-        ) : null}
 
         {/* Push, what to hear about, offers and muted rooms live on their own screen (Flow 9); the row is named as that screen is. */}
         <SettingsGroup title="Notifications">

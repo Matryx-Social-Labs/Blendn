@@ -31,13 +31,9 @@ jest.mock('../lib/apiClient', () => ({
     getMyAttendance: jest.fn(),
     getFriends: jest.fn(async () => ({ success: true, data: { count: 9, friends: [] } })),
     getFriendRequests: jest.fn(async () => ({ success: true, data: { incoming: [{ id: 'r1' }, { id: 'r2' }] } })),
-    getMyPlus: jest.fn(async () => ({ success: true, data: { active: false, gated: true, product: null, source: null, expiresAt: null } })),
     updateProfile: jest.fn(),
   },
 }))
-const mockOpenPaywall = jest.fn()
-jest.mock('../lib/paywall', () => ({ openPaywall: (...a: unknown[]) => mockOpenPaywall(...a) }))
-jest.mock('../lib/useMonthlyPrice', () => ({ useMonthlyPrice: () => '₹199' }))
 jest.mock('../lib/crewsApi', () => ({
   crewsApi: { myCrews: jest.fn(async () => ({ success: true, data: { crews: [{ crewId: 'c1', emblemSeed: 'a' }, { crewId: 'c2', emblemSeed: 'b' }], invites: [{ crewId: 'c3' }] } })) },
 }))
@@ -249,52 +245,13 @@ describe('what GET /profiles/:you adds (blendn-admin #716): badges and photos ta
     expect(screen.getByText('When 80%+ of your RSVPs turn into nights, 3 or more')).toBeTruthy()
   })
 
-  describe('Blend’n+ on Me, sold once and last (Me + settings A 01)', () => {
-    it('says Blend’n+ with the store’s price when you have not got it; one tap goes to the paywall as asked for', async () => {
-      await mount({ success: true, data: { profile: { badges } } })
-      await screen.findByTestId('me-plus-row')
-      expect(await screen.findByText('from ₹199 a month')).toBeTruthy()
-      await fireEvent.press(screen.getByTestId('me-plus-row'))
-      expect(mockOpenPaywall).toHaveBeenCalledWith('profile', { userInitiated: true })
-    })
-
-    it('an ungated city (prod, owner ruling 2026-11-18: the app is free): no Blend’n+ row, no launch line, no way to the paywall', async () => {
-      ;(api.getMyPlus as jest.Mock).mockResolvedValue({ success: true, data: { active: false, gated: false, product: null, source: null, expiresAt: null } })
-      await mount({ success: true, data: { profile: { badges } } })
-      await screen.findByTestId('me-badges')
-      await waitFor(() => expect(api.getMyPlus).toHaveBeenCalled())
-      expect(screen.queryByTestId('me-plus-row')).toBeNull()
-      expect(screen.queryByText(/Blend’n\+|Free during launch/)).toBeNull()
-      expect(mockOpenPaywall).not.toHaveBeenCalled()
-      ;(api.getMyPlus as jest.Mock).mockResolvedValue({ success: true, data: { active: false, gated: true, product: null, source: null, expiresAt: null } })
-    })
-
-    it('is the last thing on Me: Nights out, the badges, About, then Blend’n+', async () => {
-      await mount({ success: true, data: { profile: { badges } } })
-      await screen.findByTestId('me-badges')
-      await screen.findByTestId('nights-first')
-      // The row waits for the Plus status (it shows only where Blend’n+ is sold).
-      await screen.findByTestId('me-plus-row')
-      expect(screen.getAllByTestId(/^(me-plus-row|me-badges|nights-first|about)$/).map((n) => n.props.testID)).toEqual(['nights-first', 'me-badges', 'about', 'me-plus-row'])
-    })
-
-    it('a free account with nights held is sold Blend’n+ once: the row, never again inside Nights out (device bug)', async () => {
-      api.getPublicProfile.mockResolvedValue(PROFILE as never)
-      api.getMyAttendance.mockResolvedValue({ success: true, data: { ...ONE_NIGHT.data, lockedCount: 4, total: 5 } } as never)
-      api.getProfile.mockResolvedValue({ success: true, data: { profile: { badges } } } as never)
-      await render(<Profile />)
-      await screen.findByTestId('nights-grid')
-      await screen.findByTestId('me-plus-row')
-      // Negative control: Nights out's old "See Blend’n+" button is a second sell and fails this.
-      expect(screen.queryByText('See Blend’n+')).toBeNull()
-      expect(screen.getAllByTestId('me-plus-row')).toHaveLength(1)
-    })
-
-    it('with Plus on, the line is the renewal', async () => {
-      ;(api.getMyPlus as jest.Mock).mockResolvedValue({ success: true, data: { active: true, gated: true, product: 'plus', source: 'apple', state: 'active', expiresAt: '2027-01-03T00:00:00Z' } })
-      await mount({ success: true, data: { profile: { badges } } })
-      expect(await screen.findByText(/^Renews 3 Jan 2027 · App Store$/)).toBeTruthy()
-    })
+  it('Me has no Blend’n+ row (launch gate 5): About is the last thing on it', async () => {
+    await mount({ success: true, data: { profile: { badges } } })
+    await screen.findByTestId('me-badges')
+    await screen.findByTestId('nights-first')
+    expect(screen.queryByTestId('me-plus-row')).toBeNull()
+    expect(screen.queryByText(/Blend’n\+|Free during launch/)).toBeNull()
+    expect(screen.getAllByTestId(/^(me-badges|nights-first|about)$/).map((n) => n.props.testID)).toEqual(['nights-first', 'me-badges', 'about'])
   })
 
   it('none earned yet is a sentence and no pills, and nothing to unlock', async () => {

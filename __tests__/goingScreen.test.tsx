@@ -49,14 +49,12 @@ jest.mock('../lib/lobbySeen', () => ({ postPhoneLobbyMarkers: jest.fn(() => (moc
 jest.mock('../lib/shareRow', () => ({ shareEvent: jest.fn() }))
 let mockLiveEventId: string | null = null
 jest.mock('../lib/blendnOverlay', () => ({ openBlendn: jest.fn(), openPass: jest.fn(), useLiveEventId: () => mockLiveEventId }))
-jest.mock('../lib/paywall', () => ({ openTonight: jest.fn() }))
 
 /* eslint-disable import/first */
 import { router } from 'expo-router'
 import Going from '../app/(tabs)/going'
 import { apiClient } from '../lib/apiClient'
 import { showSheet } from '../lib/sheet'
-import { isLitControl } from './helpers/lit'
 /* eslint-enable import/first */
 
 const api = apiClient as jest.Mocked<typeof apiClient>
@@ -88,7 +86,7 @@ beforeEach(() => {
   jest.clearAllMocks()
   api.getUserFavorites.mockResolvedValue({ success: true, data: { events: [], pagination: page(1, 0, false) } } as never)
   api.getMyRsvps.mockResolvedValue({ success: true, data: { events: [], pagination: page(1, 0, false) } } as never)
-  api.getMyAttendance.mockResolvedValue({ success: true, data: { events: [], pagination: page(1, 0, false), lockedCount: 0 } } as never)
+  api.getMyAttendance.mockResolvedValue({ success: true, data: { events: [], pagination: page(1, 0, false) } } as never)
 })
 
 const open = async () => {
@@ -98,7 +96,7 @@ const open = async () => {
 
 describe('hundreds of past nights', () => {
   // Four rows to a page keeps the section's end inside the first window; the server's real page is 30.
-  const pageOf = (n: number) => ({ success: true, data: { events: nights((n - 1) * 4, 4), pagination: page(n, 312, true), lockedCount: 0 } })
+  const pageOf = (n: number) => ({ success: true, data: { events: nights((n - 1) * 4, 4), pagination: page(n, 312, true) } })
   beforeEach(() => {
     api.getMyAttendance.mockImplementation((_limit?: number, n = 1) => Promise.resolve(pageOf(n)) as never)
   })
@@ -145,7 +143,7 @@ describe('hundreds of past nights', () => {
   })
 
   it('the last page leaves no row and no claim: the header goes back to a bare word', async () => {
-    api.getMyAttendance.mockResolvedValue({ success: true, data: { events: nights(0, 12), pagination: page(1, 12, false), lockedCount: 0 } } as never)
+    api.getMyAttendance.mockResolvedValue({ success: true, data: { events: nights(0, 12), pagination: page(1, 12, false) } } as never)
     await open()
     expect(await screen.findByText('Night 0')).toBeTruthy()
     expect(screen.queryByTestId('going-more-past')).toBeNull()
@@ -175,7 +173,7 @@ describe('Past: the places you went live at (Flow 4, frame 01)', () => {
   const visit = night(1, { id: 'v1', kind: 'venue_day', title: 'bookkeeping title', venue_name: 'Toit', stay_minutes: 100 })
 
   it('is the place\'s name, "Live here · date · how long", and a Venue tag, with no rating to ask for', async () => {
-    api.getMyAttendance.mockResolvedValue({ success: true, data: { events: [visit], pagination: page(1, 1, false), lockedCount: 0 } } as never)
+    api.getMyAttendance.mockResolvedValue({ success: true, data: { events: [visit], pagination: page(1, 1, false) } } as never)
     await open()
     expect(await screen.findByText('Toit')).toBeTruthy()
     expect(screen.queryByText('bookkeeping title')).toBeNull()
@@ -186,13 +184,13 @@ describe('Past: the places you went live at (Flow 4, frame 01)', () => {
   })
 
   it('without a place id it is read and not offered', async () => {
-    api.getMyAttendance.mockResolvedValue({ success: true, data: { events: [visit], pagination: page(1, 1, false), lockedCount: 0 } } as never)
+    api.getMyAttendance.mockResolvedValue({ success: true, data: { events: [visit], pagination: page(1, 1, false) } } as never)
     await open()
     expect((await screen.findByLabelText(/^Toit, live here/)).props.accessibilityRole).toBe('text')
   })
 
   it('with the place\'s id (when the server sends it) it opens the place', async () => {
-    api.getMyAttendance.mockResolvedValue({ success: true, data: { events: [{ ...visit, venue_id: 'v-toit' }], pagination: page(1, 1, false), lockedCount: 0 } } as never)
+    api.getMyAttendance.mockResolvedValue({ success: true, data: { events: [{ ...visit, venue_id: 'v-toit' }], pagination: page(1, 1, false) } } as never)
     await open()
     await fireEvent.press(await screen.findByLabelText(/^Toit, live here/))
     expect(router.push).toHaveBeenCalledWith({ pathname: '/venue/[id]', params: { id: 'v-toit' } })
@@ -315,7 +313,7 @@ describe('leaving Going (SCRUM-1074: ⋯ "Can’t go" on every card, the swipe, 
 describe('refreshing with more than one page held (Going, hundreds of nights)', () => {
   const pageOf = (n: number, all: string[]) => ({
     success: true,
-    data: { events: all.slice((n - 1) * 4, n * 4).map((id) => night(Number(id.slice(1)))), pagination: page(n, all.length, n * 4 < all.length), lockedCount: 0 },
+    data: { events: all.slice((n - 1) * 4, n * 4).map((id) => night(Number(id.slice(1)))), pagination: page(n, all.length, n * 4 < all.length) },
   })
   const ids = (n: number, from = 0) => Array.from({ length: n }, (_, i) => `p${from + i}`)
   let foreground: (state: string) => void
@@ -349,7 +347,7 @@ describe('refreshing with more than one page held (Going, hundreds of nights)', 
       const n = c ? Number(c.slice(1)) : 1
       const all = ids(10)
       const hasMore = n * 4 < all.length
-      return { success: true, data: { events: all.slice((n - 1) * 4, n * 4).map((id) => night(Number(id.slice(1)))), pagination: { ...page(n, all.length, hasMore), nextCursor: hasMore ? `c${n + 1}` : null }, lockedCount: 0 } }
+      return { success: true, data: { events: all.slice((n - 1) * 4, n * 4).map((id) => night(Number(id.slice(1)))), pagination: { ...page(n, all.length, hasMore), nextCursor: hasMore ? `c${n + 1}` : null } } }
     }
     api.getMyAttendance.mockImplementation((_l?: number, _n?: number, cursor?: string | null) => Promise.resolve(cursorPage(cursor ?? null)) as never)
     await open()
@@ -378,7 +376,7 @@ describe('refreshing with more than one page held (Going, hundreds of nights)', 
 describe('two triggers in one frame (the row pressed as the list ends)', () => {
   it('ask for the next page once, and count it once', async () => {
     const all = Array.from({ length: 10 }, (_, i) => i)
-    const pageOf = (n: number) => ({ success: true, data: { events: all.slice((n - 1) * 4, n * 4).map((i) => night(i)), pagination: page(n, 312, true), lockedCount: 0 } })
+    const pageOf = (n: number) => ({ success: true, data: { events: all.slice((n - 1) * 4, n * 4).map((i) => night(i)), pagination: page(n, 312, true) } })
     api.getMyAttendance.mockImplementation((_l?: number, n = 1) => Promise.resolve(pageOf(n)) as never)
     await open()
     const row = await screen.findByTestId('going-more-past')
@@ -412,7 +410,7 @@ describe('the row\'s ⋯ and the visit\'s art', () => {
   })
 
   it('a visit\'s thumb is its place\'s type when the server says it', async () => {
-    api.getMyAttendance.mockResolvedValue({ success: true, data: { events: [night(1, { id: 'v1', kind: 'venue_day', venue_type: 'cafe' })], pagination: page(1, 1, false), lockedCount: 0 } } as never)
+    api.getMyAttendance.mockResolvedValue({ success: true, data: { events: [night(1, { id: 'v1', kind: 'venue_day', venue_type: 'cafe' })], pagination: page(1, 1, false) } } as never)
     await open()
     expect(await screen.findByText('Toit')).toBeTruthy()
     const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'app', '(tabs)', 'going.tsx'), 'utf8') as string
@@ -461,13 +459,12 @@ describe('Next up, the rows and the lock (GO-14, audit C11/C13/C14)', () => {
     expect(row.props.accessibilityLabel).toMatch(/, \d+ [A-Z][a-z]{2} · /)
   })
 
-  it('the lock is Plus’s: violet, and spelt Blend’n+', async () => {
-    api.getMyAttendance.mockResolvedValue({ success: true, data: { events: [], pagination: page(1, 0, false), lockedCount: 45 } } as never)
+  it('no nights are kept behind Blend’n+ (launch gate 5): an old server’s lockedCount draws no row', async () => {
+    api.getMyAttendance.mockResolvedValue({ success: true, data: { events: nights(0, 3), pagination: page(1, 3, false), lockedCount: 45 } } as never)
     await open()
-    const lock = await screen.findByLabelText('45 more nights with Blend’n+')
-    expect(lock.props.accessibilityHint).toBe('Opens Blend’n+')
-    // A positive, lit as every one is (buttons board C), not Plus's violet card.
-    expect(isLitControl(lock)).toBe(true)
+    expect(await screen.findByText('Past')).toBeTruthy()
+    expect(screen.queryByLabelText(/more nights? with Blend’n\+/)).toBeNull()
+    expect(screen.queryByText(/Blend’n\+/)).toBeNull()
   })
 })
 
@@ -583,7 +580,7 @@ describe('the rows reflow on a spring only while the list is short (SCRUM-1001 M
     return node?.props?.layout
   }
   const past = (n: number) => {
-    api.getMyAttendance.mockResolvedValue({ success: true, data: { events: nights(0, n), pagination: page(1, n, false), lockedCount: 0 } } as never)
+    api.getMyAttendance.mockResolvedValue({ success: true, data: { events: nights(0, n), pagination: page(1, n, false) } } as never)
   }
 
   it('a few nights glide when one leaves or moves', async () => {

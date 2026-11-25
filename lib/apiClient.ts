@@ -11,8 +11,6 @@ import { emitEventStatusChanged } from './eventStatusSignal'
 import { markCheckIn } from './checkInTiming'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import type { AttendancePayload, RsvpEventsPayload, SavedEventsPayload } from './savedEvents'
-import type { PaywallEvent, PaywallTrigger } from './paywallPolicy'
-import type { PlusStatus } from './plus'
 import { noteBlocked } from './blockEpoch'
 import { forgetPersonalChats } from './queryCache'
 import { CONVERSATIONS_PAGE } from './conversationsPage'
@@ -3148,22 +3146,6 @@ class ApiClientClass {
   /** The events you attended, most recent first. `/me`-scoped, like the above. */
   async getMyAttendance(limit = 10, page = 1, cursor?: string | null): Promise<ApiResponse<AttendancePayload>> {
     return this.queuedRequest<AttendancePayload>(`/api/mobile/me/attendance?limit=${limit}&${pageQuery(page, cursor)}`)
-  }
-
-  /** Whether you have Blendn+ — the server's answer, the only one that unlocks anything. Never cached. */
-  async getMyPlus(): Promise<ApiResponse<PlusStatus>> {
-    return this.queuedRequest<PlusStatus>('/api/mobile/me/plus')
-  }
-
-  /** The paywall's analytics. Lowest priority; nothing waits on it. */
-  async logPaywallEvent(event: PaywallEvent, trigger: PaywallTrigger): Promise<ApiResponse<{ recorded: true }>> {
-    return this.queuedRequest<{ recorded: true }>(
-      '/api/mobile/me/plus/paywall-events',
-      { method: 'POST', body: JSON.stringify({ event, trigger }) },
-      true,
-      // Last in the queue: lower runs first, and nothing waits on this.
-      10
-    )
   }
 
   // === CHAT ENDPOINTS ===

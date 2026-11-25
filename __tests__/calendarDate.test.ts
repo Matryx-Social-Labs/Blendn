@@ -11,8 +11,6 @@ jest.mock('../lib/apiClient', () => ({ apiClient: {} }))
 /* eslint-disable import/first */
 import { blockedLine } from '../lib/blockedLine'
 import { validUntil } from '../lib/offers'
-import { plusStatusLine } from '../lib/plus'
-import { shortDate } from '../lib/plusManage'
 import { muteLabel } from '../lib/roomMembership'
 import { calendarDate, zonedDate } from '../lib/time'
 import { eventToday } from '../lib/eventDays'
@@ -117,12 +115,6 @@ describe('on an en_DE phone (its locale writes "23. Okt. 2027")', () => {
   afterEach(() => {
     spies.forEach((s) => s.mockRestore())
     jest.useRealTimers()
-  })
-
-  it('Settings and Manage say the same date (RC drive 3: "until 23. Oct 2027" beside "23 Oct 2027")', () => {
-    const expiresAt = new Date(2027, 9, 23, 12).toISOString()
-    expect(plusStatusLine({ active: true, gated: true, product: 'plus', source: 'apple', expiresAt } as never)).toBe('Blend’n+ until 23 Oct 2027')
-    expect(shortDate(expiresAt, NOW)).toBe('23 Oct 2027')
   })
 
   it('a mute, an offer and a block say it the same way', () => {

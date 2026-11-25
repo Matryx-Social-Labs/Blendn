@@ -306,9 +306,8 @@ describe('a refusal of Go Live, as the sheet draws it', () => {
     expect(sheetRefusal(refused('other'))).toEqual({ kind: 'other', title: 'Server title', message: 'Server words.' })
   })
 
-  it('an event that has the place is a hand-off to its check-in; Blend’n+ for a stay is its own sheet', () => {
+  it('an event that has the place is a hand-off to its check-in', () => {
     expect(sheetRefusal({ kind: 'handoff', eventId: 'e1', message: 'On.' })).toEqual({ kind: 'eventOn', eventId: 'e1', message: 'On.' })
-    expect(sheetRefusal({ kind: 'plus' })).toEqual({ kind: 'stay' })
   })
 
   it('the success toast writes 24-hour time and, for a stay, names no end (it rolls)', () => {

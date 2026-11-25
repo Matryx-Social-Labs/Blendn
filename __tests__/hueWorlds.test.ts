@@ -1,7 +1,7 @@
 /*
  * One hue per screen (foundations, direction C): rose for people and crews, violet for you, and ember (the default, no
  * provider) for going out. Source-shaped: each listed screen wraps its root in the named hue, no file nests a second
- * provider, and no screen outside this table sets one. Blendn+ (`app/plus.tsx`) is violet: it is yours, not an outing (visual QA R5 M29; the owner may rule otherwise). Onboarding is violet, set once at its stack's layout (its steps inherit).
+ * provider, and no screen outside this table sets one. Onboarding is violet, set once at its stack's layout (its steps inherit).
  */
 import fs from 'fs'
 import path from 'path'
@@ -37,13 +37,11 @@ const ROSE = [
   'app/chat-info/[id].tsx',
   'components/PresenceSheets.tsx',
 ]
-const VIOLET = ['app/plus.tsx', 'app/plus-manage.tsx', 'app/onboarding/_layout.tsx', 'app/edit-about-you.tsx', 'app/edit-profile.tsx', 'app/(tabs)/profile.tsx', 'app/settings.tsx', 'app/notification-settings.tsx', 'app/muted-rooms.tsx', 'app/blocked-users.tsx', 'app/tips.tsx', 'app/event-preferences/[eventId].tsx']
+const VIOLET = ['app/onboarding/_layout.tsx', 'app/edit-about-you.tsx', 'app/edit-profile.tsx', 'app/(tabs)/profile.tsx', 'app/settings.tsx', 'app/notification-settings.tsx', 'app/muted-rooms.tsx', 'app/blocked-users.tsx', 'app/tips.tsx', 'app/event-preferences/[eventId].tsx']
 /** Mounted app-level, outside every screen: they take the hue their caller names (`lib/sheet`'s `hue`), ember when none. */
 const CARRIED: Record<string, string> = {
   'components/SheetHost.tsx': "<HueProvider value={current.hue ?? 'ember'}>",
   'components/share/ShareHost.tsx': "<HueProvider value={target.kind === 'invite' ? 'rose' : 'ember'}>",
-  // Blend'n+ is yours, not an outing, wherever its sheet is raised from (the venue, Going, the expiry prompt).
-  'components/plus/TonightHost.tsx': '<HueProvider value="violet">',
   // A person's page is rose; your own is violet, you (rc7 D11). One provider, its value picked by whose page it is.
   'app/user/[id].tsx': '<HueProvider value={profileHue(own)}>',
   // The photo warning in the rose Lobby's compose sheet is about you (C-A `cA-anon`: violet, Use it lit violet).

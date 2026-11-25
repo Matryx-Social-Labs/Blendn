@@ -40,7 +40,6 @@ jest.mock('../lib/useAuth', () => ({
 jest.mock('../lib/apiClient', () => ({
   apiClient: {
     getProfile: jest.fn(async () => ({ success: true, data: { profile: {} } })),
-    getMyPlus: jest.fn(async () => ({ success: true, data: { active: false, gated: false, product: null, source: null, expiresAt: null } })),
   },
 }))
 jest.mock('../lib/notifications', () => ({

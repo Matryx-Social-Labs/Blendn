@@ -50,7 +50,7 @@ it('every link in BLENDN_LINKS is one of ours', () => {
 
 it('no screen opens one of our pages through Linking any more', () => {
   const read = (p: string) => require('fs').readFileSync(require('path').join(__dirname, '..', p), 'utf8')
-  for (const file of ['app/settings.tsx', 'app/about.tsx', 'app/support.tsx', 'app/chat-info/[id].tsx', 'components/LegalLine.tsx', 'components/chat/RoomGuidelinesBanner.tsx', 'app/plus.tsx']) {
+  for (const file of ['app/settings.tsx', 'app/about.tsx', 'app/support.tsx', 'app/chat-info/[id].tsx', 'components/LegalLine.tsx', 'components/chat/RoomGuidelinesBanner.tsx']) {
     expect(read(file)).not.toMatch(/Linking\.openURL\((BLENDN_LINKS|COMMUNITY_GUIDELINES_URL)/)
   }
 })

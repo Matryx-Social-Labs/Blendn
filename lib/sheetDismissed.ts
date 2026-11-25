@@ -3,14 +3,14 @@ import { Platform } from 'react-native'
 import { holdsTurn, onTurnRequested, releaseTurn, requestTurn, subscribeTurns, type Turn } from './modalTurn'
 
 /*
- * iOS cannot present a native modal (a router modal: the paywall) while an RN Modal is still leaving: the push silently
+ * iOS cannot present a native modal (a router modal: Make a crew) while an RN Modal is still leaving: the push silently
  * does nothing. Whoever closes a sheet and then opens such a screen waits for this first. Android has no such rule, so
  * there it resolves at once.
  *
  * On iOS it takes its place in the Modal turn (lib/modalTurn), ahead of anyone already waiting: it resolves once every
  * Modal ahead of it has gone, and then holds the screen for what the caller presents next, until that asks for the
  * screen itself (a router modal claims it on focus; a sheet asks as it opens) or `HANDOFF_MS` passes. So a sheet that
- * comes due on the same frame waits behind the paywall instead of racing its push (review MED-1). A leaving Modal's
+ * comes due on the same frame waits behind the router modal instead of racing its push (review MED-1). A leaving Modal's
  * `onDismiss` (`notifySheetDismissed`) and `fallbackMs` still resolve it, as before.
  */
 /** How long a waiter holds the screen for what its caller presents next, if that never asks. */

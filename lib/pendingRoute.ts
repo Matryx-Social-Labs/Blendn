@@ -116,7 +116,7 @@ export function resetPendingRoute(): void {
  * The root stack's modal routes: those with a modal `presentation` in `app/_layout.tsx` (`__tests__/linkOverModal.test.tsx`
  * reads it back).
  */
-export const ROOT_MODAL_ROUTES: readonly string[] = ['event-preferences/[eventId]', 'crews/new', 'waves/[eventId]', 'plus', 'f/[token]', 'c/[token]', 'sign-in', 'forgot-password']
+export const ROOT_MODAL_ROUTES: readonly string[] = ['event-preferences/[eventId]', 'crews/new', 'waves/[eventId]', 'f/[token]', 'c/[token]', 'sign-in', 'forgot-password']
 
 type LinkNavigator = Pick<ReturnType<typeof useNavigationContainerRef>, 'isReady' | 'getRootState' | 'dispatch' | 'addListener'>
 type NavigationState = ReturnType<LinkNavigator['getRootState']>
@@ -127,64 +127,21 @@ export function setLinkNavigator(next: LinkNavigator | null): void {
   linkNavigator = next
 }
 
-/** How long a link waits for a modal's hold (`holdLinks`) before it closes the modal anyway. */
-export const LINK_HOLD_MAX_MS = 30_000
-let holds = 0
-let released: (() => void)[] = []
-
-/**
- * Hold incoming links off the modal while something in it must finish (a purchase or a restore in flight on the
- * paywall). Returns the release; idempotent. A link that arrives meanwhile waits for the last release, or
- * `LINK_HOLD_MAX_MS`, whichever comes first.
- */
-export function holdLinks(): () => void {
-  holds += 1
-  let done = false
-  return () => {
-    if (done) return
-    done = true
-    holds -= 1
-    if (holds > 0) return
-    const waiting = released
-    released = []
-    waiting.forEach((resolve) => resolve())
-  }
-}
-
-function linkHoldsReleased(): Promise<void> {
-  if (holds === 0) return Promise.resolve()
-  return new Promise((resolve) => {
-    const timer = setTimeout(() => {
-      released = released.filter((r) => r !== settle)
-      resolve()
-    }, LINK_HOLD_MAX_MS)
-    const settle = () => {
-      clearTimeout(timer)
-      resolve()
-    }
-    released = [...released, settle]
-  })
-}
-
 /** How long a link waits for the modal it closed to leave the navigation state, if the state never says so. */
 const DISMISS_FALLBACK_MS = 1000
 
 /**
  * A link or a notification tap that arrives while a modal route is up closes it first, and opens over whatever presented
- * it (RC drive 5). A link is somewhere new to go, not a step inside the paywall or a sheet: pushed over the modal, the
+ * it (RC drive 5). A link is somewhere new to go, not a step inside a modal or a sheet: pushed over the modal, the
  * stack lays it out as part of the modal, a modal's own hold on the screen (`RouteModal`) stays up under it, and closing
  * the modal later takes the linked screen with it.
  *
- * Not while a modal is in the middle of something that must not be cut off (a purchase or a restore on the paywall:
- * `holdLinks`): the link waits for it to settle, at most `LINK_HOLD_MAX_MS`, then closes it and goes.
- *
  * Every route from the lowest modal up is popped, in one action on the stack that holds them. Resolves once the state
- * has taken it: a link's own navigation dispatched in the same tick was lost under the pop (measured in
- * `__tests__/plusManageOverPlus.test.tsx`), so `+native-intent` and `openWhenReady` both wait for it. Resolves at once
+ * has taken it: a link's own navigation dispatched in the same tick was lost under the pop, so `+native-intent` and
+ * `openWhenReady` both wait for it. Resolves at once
  * when nothing modal is up, or before the navigator is ready (a cold start's link has nothing to close).
  */
 export async function dismissModals(): Promise<void> {
-  await linkHoldsReleased()
   // Told first, whether or not a modal route is up: an open sheet, the Blend'n overlay and a waiting check-in are not
   // routes, and each closes or gives up here (`onClosingForLink`) before anything is popped or unmounts.
   tellLinkClosers()

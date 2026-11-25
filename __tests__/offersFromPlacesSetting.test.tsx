@@ -35,7 +35,7 @@ jest.mock('../lib/useAuth', () => ({
   deleteAccount: jest.fn(),
 }))
 jest.mock('../lib/apiClient', () => ({
-  apiClient: { getProfile: jest.fn(), updateProfile: jest.fn(), getMyPlus: jest.fn(), queuedRequest: jest.fn() },
+  apiClient: { getProfile: jest.fn(), updateProfile: jest.fn(), queuedRequest: jest.fn() },
 }))
 jest.mock('../lib/notifications', () => ({
   initializePushNotifications: jest.fn(async () => null),
@@ -52,21 +52,12 @@ import { apiClient } from '../lib/apiClient'
 import { deleteAccount, signOut } from '../lib/useAuth'
 
 const api = apiClient as jest.Mocked<typeof apiClient>
-const plusStatus = (o: Partial<{ active: boolean; gated: boolean; source: 'apple' | 'google' | 'grant' | null }> = {}) => ({
-  active: false,
-  gated: true,
-  product: o.active ? 'plus' : null,
-  source: null,
-  expiresAt: null,
-  ...o,
-})
 const permissions = Notifications.getPermissionsAsync as jest.Mock
 
 beforeEach(() => {
   jest.clearAllMocks()
   api.getProfile.mockResolvedValue({ success: true, data: { profile: { push_enabled: true } } } as never)
   api.updateProfile.mockResolvedValue({ success: true } as never)
-  api.getMyPlus.mockResolvedValue({ success: true, data: plusStatus() } as never)
   permissions.mockResolvedValue({ status: 'granted', canAskAgain: true })
   ;(api.queuedRequest as jest.Mock).mockImplementation((_url: string, init?: RequestInit) =>
     // A place has regulars on for this person: the row is drawn only then (D21, YOU-04).

@@ -15,7 +15,6 @@ import { StateScreen } from '../../components/ds/StateScreen'
 import FadeInUp from '../../components/motion/FadeInUp'
 import { Banner } from '../../components/ds/Banner'
 import { MeBadges } from '../../components/profile/MeBadges'
-import { MePlusRow } from '../../components/profile/MePlusRow'
 import { MeIdentity, MeSkeleton } from '../../components/profile/MeSections'
 import { SeeAsOthersSheet } from '../../components/profile/SeeAsOthersSheet'
 import { NightsOut } from '../../components/profile/NightsOut'
@@ -114,8 +113,8 @@ function ProfileInner() {
   const [error, setError] = useState<string | null>(null)
   // Empty until it loads; a failure keeps what was last good (Nights out says so, with Try again).
   const [attended, setAttended] = useState<PastEventRow[]>([])
-  // The nights behind the list: locked with Blend'n+ and the true total (D-H1). Null total until `/me/attendance` answers.
-  const [nightCounts, setNightCounts] = useState<NightsCounts>({ locked: 0, total: null, running: 0 })
+  // The nights behind the list: the true total (D-H1). Null total until `/me/attendance` answers.
+  const [nightCounts, setNightCounts] = useState<NightsCounts>({ total: null, running: 0 })
   const [nightsStatus, setNightsStatus] = useState<NightsStatus>('loading')
   const [nightsRetrying, setNightsRetrying] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
@@ -514,7 +513,6 @@ function ProfileInner() {
             onRetry={retryNights}
             retrying={nightsRetrying}
             onFirstNight={openWhatsOn}
-            lockedCount={nightCounts.locked}
             total={nightCounts.total}
             runningCount={nightCounts.running ?? 0}
             saved={stats ? (stats.savedCount ?? stats.eventsFavorited) : 0}
@@ -528,7 +526,7 @@ function ProfileInner() {
           </FadeInUp>
         ) : null}
 
-        {/* Your own bio, the thing others read first, above Blend'n+ (A 01): four lines, then More; Edit goes to change it. */}
+        {/* Your own bio, the thing others read first (A 01): four lines, then More; Edit goes to change it. */}
         {profile?.bio || interests.length > 0 || profile?.education || profile?.occupation ? (
           <FadeInUp {...next()}>
             <ProfileSection title="About" action={{ label: 'Edit', onPress: openEdit }} testID="about">
@@ -542,11 +540,6 @@ function ProfileInner() {
             </ProfileSection>
           </FadeInUp>
         ) : null}
-
-        {/* Where you stand with Blend'n+, last (A 01): the one place Me sells it (Nights out says what is held, never sells it again). */}
-        <FadeInUp {...next()}>
-          <MePlusRow />
-        </FadeInUp>
       </>
     )
   }

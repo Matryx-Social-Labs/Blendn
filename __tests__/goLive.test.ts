@@ -4,10 +4,8 @@ import {
   clearLiveSession,
   countdownLabel,
   goLiveRefusal,
-  hasGoneLiveBefore,
   liveEndedMessage,
   markLivePrompted,
-  noteGoLiveDay,
   noteLiveDayEnd,
   oneTapChoice,
   opensAtWords,
@@ -68,41 +66,11 @@ describe('the expiry prompt (PL-M02, Flow 11 · 11.4): asked once a night, when 
     await rememberLiveSession({ userId: 'u1', venueDayId: 'day-1', venueId: 'v1', venueName: 'X', choice: { minutes: 20 } })
     expect(await readLiveSession('u2')).toBeNull()
     expect(await readLiveSession(null)).toBeNull()
+    // The venue days an older build kept to time a Blend'n+ offer go too (launch gate 5: never read any more).
+    await AsyncStorage.setItem('blendn.goLive.days', JSON.stringify({ userId: 'u1', days: ['day-1'] }))
     await clearLiveSession()
     expect(await readLiveSession('u1')).toBeNull()
-    expect(await hasGoneLiveBefore('u1', 'day-9')).toBe(false)
-  })
-})
-
-describe('a first Go Live (the expiry prompt never sells Blendn+ on one)', () => {
-  /**
-   * Negative control: counting the same night's own day as "before" (dropping the `d !== venueDayId`
-   * filter) fails "an extension on the same night is still the first".
-   */
-  it('is the first venue day, not the first window: an extension on the same night is still the first', async () => {
-    await AsyncStorage.clear()
-    expect(await hasGoneLiveBefore('u1', 'day-1')).toBe(false)
-    await rememberLiveSession({ userId: 'u1', venueDayId: 'day-1', venueId: 'v1', venueName: 'X', choice: { minutes: 20 } })
-    await rememberLiveSession({ userId: 'u1', venueDayId: 'day-1', venueId: 'v1', venueName: 'X', choice: { minutes: 45 } })
-    expect(await hasGoneLiveBefore('u1', 'day-1')).toBe(false)
-  })
-
-  it('a later night has been preceded by an earlier one', async () => {
-    await AsyncStorage.clear()
-    await rememberLiveSession({ userId: 'u1', venueDayId: 'day-1', venueId: 'v1', venueName: 'X' })
-    await rememberLiveSession({ userId: 'u1', venueDayId: 'day-2', venueId: 'v1', venueName: 'X' })
-    expect(await hasGoneLiveBefore('u1', 'day-2')).toBe(true)
-    // Only the last two nights are kept, however many there were.
-    for (const d of ['day-3', 'day-4', 'day-5']) await noteGoLiveDay('u1', d)
-    expect(JSON.parse((await AsyncStorage.getItem('blendn.goLive.days')) as string).days).toEqual(['day-5', 'day-4'])
-  })
-
-  it("is one account's: another account on the phone is on its first", async () => {
-    await AsyncStorage.clear()
-    await noteGoLiveDay('u1', 'day-1')
-    await noteGoLiveDay('u1', 'day-2')
-    expect(await hasGoneLiveBefore('u1', 'day-2')).toBe(true)
-    expect(await hasGoneLiveBefore('u2', 'day-2')).toBe(false)
+    expect(await AsyncStorage.getItem('blendn.goLive.days')).toBeNull()
   })
 })
 
@@ -154,8 +122,14 @@ describe("a refused Go Live is read by its code, never its sentence (PL-CU01)", 
     })
   })
 
-  it('PLUS_REQUIRED is the paywall, not a failure', () => {
-    expect(goLiveRefusal('PLUS_REQUIRED', 'Staying live is part of Blendn+.')).toEqual({ kind: 'plus' })
+  it('PLUS_REQUIRED from an old server is a refusal like any other, in its own words (launch gate 5: nothing to buy)', () => {
+    expect(goLiveRefusal('PLUS_REQUIRED', 'Staying live isn’t open here right now.')).toEqual({
+      kind: 'refused',
+      reason: 'other',
+      title: 'Couldn’t go live',
+      message: 'Staying live isn’t open here right now.',
+      offerDirections: false,
+    })
   })
 
   it("keeps the server’s sentence and offers a map only when you are in the wrong place", () => {

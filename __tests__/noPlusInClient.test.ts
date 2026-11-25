@@ -20,9 +20,9 @@ function walk(dir: string, out: string[] = []): string[] {
 
 const sources = ['app', 'components', 'lib'].flatMap((dir) => walk(dir))
 
-/** An import (static, dynamic or require) of a Plus-layer module, by the module's last path segment. */
+/** A local import (static, dynamic or require) of a Plus-layer module, by its last path segment; packages (lucide's `icons/plus`) are not ours. */
 const PLUS_IMPORT =
-  /(?:from\s+|import\(\s*|require\(\s*)['"][^'"]*\/(?:paywall|paywallPolicy|plus|plusManage|mePlus|useMonthlyPrice|plus\/[^'"]+)['"]/
+  /(?:from\s+|import\(\s*|require\(\s*)['"](?:\.{1,2}|@)\/(?:[^'"]*\/)?(?:paywall|paywallPolicy|plus|plusManage|mePlus|useMonthlyPrice|plus\/[^'"]+)['"]/
 
 it('no route is named plus*', () => {
   expect(walk('app').filter((f) => /^plus/i.test(basename(f)))).toEqual([])
@@ -45,9 +45,14 @@ it('the guard regex catches each shape it is meant to catch (negative control)',
     "import TonightHost from '../plus/TonightHost'",
     "const m = require('../lib/paywallPolicy')",
     "await import('@/lib/useMonthlyPrice')",
+    "import { openTonight } from './paywall'",
   ])
     expect(line).toMatch(PLUS_IMPORT)
-  for (const line of ["import { purchases } from '../lib/purchases'", "import { Icon } from './ui/Icon'"])
+  for (const line of [
+    "import { syncPurchasesUser } from './purchases'",
+    "import { Icon } from './ui/Icon'",
+    "import Plus from 'lucide-react-native/icons/plus'",
+  ])
     expect(line).not.toMatch(PLUS_IMPORT)
 })
 

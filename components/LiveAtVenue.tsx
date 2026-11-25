@@ -7,14 +7,12 @@ import { isBlendnOpen } from '../lib/blendnOverlay'
 import { checkInChanged, subscribeCheckInChanged } from '../lib/checkIn'
 import {
   EXTEND_CHOICE,
-  hasGoneLiveBefore,
   opensAtWords,
   resetHourOf,
   liveEndedMessage,
   STAY_CHOICE,
   markLivePrompted,
   noteLiveDayEnd,
-  ownGoLiveWithin,
   readLiveSession,
   type GoLiveChoice,
   type LiveSession,
@@ -22,36 +20,27 @@ import {
 import { Logger } from '../lib/logger'
 import type { TrayButton } from '../lib/locationFix'
 import { trayKind } from '../lib/sheet'
-import { openTonight, subscribePaywallClosed } from '../lib/paywall'
-import { isQuietSurface } from '../lib/paywallPolicy'
-import { clearKnownPlus, notifyPlusChanged, usePlusStatus } from '../lib/plus'
 import { serverNow } from '../lib/serverClock'
 import { afterSheetDismissed } from '../lib/sheetDismissed'
 import { subscribeToLiveEnded } from '../lib/socketClient'
-import { lowestPrice } from '../lib/tonight'
-import { loadPlusOffers } from '../lib/purchases'
 import { useGoLive } from '../lib/useGoLive'
 import { useAuth } from '../lib/useAuth'
 import { useLatest } from '../lib/useLatest'
 import { usePresence } from '../lib/usePresence'
 import { ExpiryPrompt } from './ds/ExpiryPrompt'
 import { Sheet } from './ds/Sheet'
-import { TonightHost } from './plus/TonightHost'
 import { useToast } from './Toast'
 import { clockTime } from '../lib/time'
 
 type ActiveLive = { venueDayId: string; expiresAt: string | null; stay: boolean; venueName: string | null }
 
 /** A window that ended: the sheet that asks "Still here?" (or says the room closed) and the place it is about. */
-type Ended = { kind: 'ended' | 'reset'; venueDayId: string; venueId: string; venueName: string; visible: boolean; firstGoLive: boolean; opensAt?: string }
+type Ended = { kind: 'ended' | 'reset'; venueDayId: string; venueId: string; venueName: string; visible: boolean; opensAt?: string }
 
 type Tray = { title: string; message: string; buttons: TrayButton[] }
 
 /** A failed read of `/checkins/active` is tried again this soon — it is not "not live" (H1). */
 export const LIVE_READ_RETRY_MS = 15_000
-
-/** A window that stopped being a "stay" this soon after a Go Live of ours was our own doing. */
-const OWN_GO_LIVE_MS = 15_000
 
 /** An end found this long after it happened (the app was away) is old news: no toast for it (review LOW-5). */
 export const STALE_END_MS = 10 * 60_000
@@ -67,6 +56,9 @@ export function endedByReset(session: Pick<LiveSession, 'dayEndsAt'> | null, now
   return Number.isFinite(dayEnd) && now >= dayEnd - RESET_SLACK_MS
 }
 
+/** Where the expiry prompt offers no Stay row, only Extend and Done: onboarding, an event's door, a chat, the room. */
+const NO_STAY_ROW_PATHS = /^\/(onboarding|chat|private-chat|room|event)(\/|$)/
+
 /**
  * Your Go Live, wherever you are in the app (plan v2 step 5). Mounted at the
  * root beside `PresenceMonitor`, because the window ends whether or not the
@@ -76,14 +68,11 @@ export function endedByReset(session: Pick<LiveSession, 'dayEndsAt'> | null, now
  *   a "stay" window on while you are inside, and tells the server you left.
  * - **The expiry prompt** (`ExpiryPrompt`, Flow 11 · 11.4), when a fixed window
  *   has run out, at most once a night: "Your live time at ‹place› is up · Still
- *   here?" — extend 45 minutes for free, stay while you're here (Blendn+'s
- *   where the server gates it: the row opens the Tonight sheet, never the
- *   paywall page, and never on a person's first Go Live), or done for now.
+ *   here?" — extend 45 minutes for free, stay while you're here, or done for now.
  *   At the 06:00 reset it says the room closed. The warning five minutes
  *   before is the pill's last-5 state (and, later, a local notification).
  * - **`live:ended`**: says what happened (the prompt for `expired`, a toast for
  *   the rest), and tells the tab bar (`checkInChanged`).
- * - **The Tonight sheet** (`TonightHost`): drawn here, once, for every lock.
  *
  * Only a successful read says you are not live: a failed one keeps what is
  * known and tries again (H1), and an older read that answers last is dropped
@@ -98,8 +87,6 @@ export function LiveAtVenue() {
   const [session, setSession] = useState<LiveSession | null>(null)
   const [tray, setTray] = useState<Tray | null>(null)
   const [ended, setEnded] = useState<Ended | null>(null)
-  /** What the store would charge least: "from ₹49" on the Stay row. Null until the store has said. */
-  const [from, setFrom] = useState<string | null>(null)
   const closeTray = useCallback(() => setTray(null), [])
   /** The ended sheet away, kept drawn while it leaves (`ended` stays: it is what the sheet is saying). */
   const hideEnded = useCallback(() => setEnded((e) => (e ? { ...e, visible: false } : e)), [])
@@ -117,13 +104,10 @@ export function LiveAtVenue() {
   )
   const nameRef = useLatest(active?.venueName ?? session?.venueName ?? null)
   const pathRef = useLatest(pathname)
-  const { status: plus } = usePlusStatus()
   /** Which of the prompt's Go Live buttons was pressed: its spinner, not the other's. */
   const [pressed, setPressed] = useState<'extend' | 'stay' | null>(null)
   /** Seen on this run (the prompt's onShown) — before the asking is on disk. */
   const askedRef = useRef(new Set<string>())
-  // The last answer about Blend'n+ was this account's: another account (or none) on this phone starts with nothing.
-  useEffect(() => () => clearKnownPlus(), [userId])
 
   useEffect(() => {
     let cancelled = false
@@ -148,11 +132,10 @@ export function LiveAtVenue() {
       const askKey = `${reset ? 'reset' : 'ended'}:${eventId}`
       const ask = reason === 'expired' && here !== null && !askedRef.current.has(askKey) && (reset ? !inRoom : !here.prompted)
       if (!ask || !here) return { asked: false, reset, inRoom }
-      const firstGoLive = userId ? !(await hasGoneLiveBefore(userId, eventId)) : true
       const resetHour = resetHourOf(here)
       // Tonight's one prompt is spent when it is on screen (`onShown` below), not when it is asked for: a prompt that
       // waited for another sheet and was withdrawn, or that iOS refused, was never seen (review MED-2).
-      if (!cancelled) setEnded({ kind: reset ? 'reset' : 'ended', venueDayId: eventId, venueId: here.venueId, venueName: here.venueName, visible: true, firstGoLive, opensAt: reset && resetHour !== null ? opensAtWords(resetHour) : undefined })
+      if (!cancelled) setEnded({ kind: reset ? 'reset' : 'ended', venueDayId: eventId, venueId: here.venueId, venueName: here.venueName, visible: true, opensAt: reset && resetHour !== null ? opensAtWords(resetHour) : undefined })
       return { asked: true, reset, inRoom }
     }
     /**
@@ -193,12 +176,6 @@ export function LiveAtVenue() {
         setSession(remembered)
         const before = last
         last = next
-        // Blend'n+ lapsed during a Stay (D-11): the window goes back to minutes, said once, inline, never a paywall (Flow 12 · 12.4).
-        const lapsed = before?.stay && next && !next.stay && next.venueDayId === before.venueDayId && !ownGoLiveWithin(OWN_GO_LIVE_MS)
-        if (lapsed && next.expiresAt) {
-          const left = Math.round((Date.parse(next.expiresAt) - serverNow()) / 60_000)
-          if (left > 0) showToast(`Your Blend’n+ ended, so you’re live for ${left} more minute${left === 1 ? '' : 's'}.`, 'info')
-        }
         // The window ran out while the socket was away: `live:ended` never came, and the read is what finds out.
         if (!next && before && !before.stay && before.expiresAt && Date.parse(before.expiresAt) <= serverNow()) {
           void sayEnded(before.venueDayId, 'expired', remembered, windowOf(before.venueDayId, before.expiresAt), before.expiresAt)
@@ -250,26 +227,6 @@ export function LiveAtVenue() {
       ? { id: ended.venueId, name: ended.venueName, latitude: null, longitude: null }
       : null
 
-  /*
-   * "Stay" refused as Blendn+'s (a stale status): the Tonight sheet opens for it,
-   * and the ended sheet comes back after it unless something was done there —
-   * declining Plus must not cost the free extension for the night.
-   */
-  const reshowAfterTonight = useCallback(() => {
-    const off = subscribePaywallClosed((how) => {
-      off()
-      if (how === 'dismissed') setEnded((e) => (e ? { ...e, visible: true } : e))
-    })
-  }, [])
-  const onPlusRequired = useCallback(
-    (paywallOpened: boolean) => {
-      // The server refused what the status said was free: the status is stale, so everything that reads it re-reads now.
-      notifyPlusChanged()
-      if (!paywallOpened) return setEnded((e) => (e ? { ...e, visible: true } : e))
-      reshowAfterTonight()
-    },
-    [reshowAfterTonight]
-  )
   const { goLive, busy } = useGoLive({
     place,
     showTray,
@@ -277,7 +234,6 @@ export function LiveAtVenue() {
       closeTray()
       hideEnded()
     },
-    onPlusRequired,
     onLive: (result) => {
       showToast(result.stay ? "You’re live for as long as you’re here" : `You’re live until ${timeOf(result.expiresAt)}`, 'success')
     },
@@ -292,45 +248,9 @@ export function LiveAtVenue() {
       .finally(() => setPressed(null))
   }
 
-  /** Blendn+ is sold to this person (their city is gated, they have none): Stay is the Tonight sheet's, not the server's. */
-  const sold = plus?.gated === true && !plus.active
-  // The store's lowest price, only when the row would show it: once the prompt is up and Plus is for sale.
-  const wantsPrice = sold && ended?.kind === 'ended' && ended.visible
-  useEffect(() => {
-    if (!wantsPrice) return
-    let cancelled = false
-    void loadPlusOffers()
-      .then((offers) => !cancelled && setFrom(lowestPrice(offers)))
-      .catch(() => {})
-    return () => {
-      cancelled = true
-    }
-  }, [wantsPrice])
-
-  /**
-   * The row: Blendn+'s with a price from the store; plain "Stay" where staying is free; none where Plus is sold but the
-   * store has no price to name, and none over a chat or the room (never a paywall there, MN-CU01): Extend and Done only.
-   */
-  const stayRow = (() => {
-    if (!ended || ended.kind !== 'ended' || isQuietSurface(pathname, isBlendnOpen())) return undefined
-    if (!sold) return { onPress: goLiveWith(STAY_CHOICE, 'stay') }
-    if (!from) return undefined
-    return {
-      from,
-      onPress: () => {
-        const e = endedRef.current
-        if (!e) return
-        hideEnded()
-        void afterSheetDismissed().then(() => {
-          reshowAfterTonight()
-          void openTonight(
-            { trigger: 'expiry', venue: e.venueName, onFree: () => void goLive(EXTEND_CHOICE), onUnlocked: () => void goLive(STAY_CHOICE) },
-            { userInitiated: true }
-          )
-        })
-      },
-    }
-  })()
+  /** The Stay row, once a window has run out: none at the 06:00 reset, nor over a chat, the room or an event's door. */
+  const stayRow =
+    ended?.kind === 'ended' && !isBlendnOpen() && !NO_STAY_ROW_PATHS.test(pathname ?? '') ? { onPress: goLiveWith(STAY_CHOICE, 'stay') } : undefined
 
   /*
    * The tray (a location refusal, a weak fix) holds what it last said while it slides out, so closing does not blank its
@@ -348,8 +268,7 @@ export function LiveAtVenue() {
         visible={ended?.visible === true}
         venue={ended?.venueName ?? ''}
         onExtend={goLiveWith(EXTEND_CHOICE, 'extend')}
-        plus={stayRow}
-        firstGoLiveTonight={ended?.firstGoLive ?? true}
+        stay={stayRow}
         opensAt={ended?.opensAt}
         extending={busy && pressed === 'extend'}
         staying={busy && pressed === 'stay'}
@@ -375,7 +294,6 @@ export function LiveAtVenue() {
           onPress: b.onPress,
         }))}
       />
-      <TonightHost />
     </>
   )
 }

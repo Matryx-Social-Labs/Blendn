@@ -28,7 +28,7 @@ const OWN_ARRIVAL: Record<string, string> = {
 }
 
 /** A spinner or a "Loading…" line rather than a skeleton, the audit's M8 all the same. */
-const NOT_A_SKELETON = ['app/plus-manage.tsx', 'app/crews/invite/[crewId].tsx']
+const NOT_A_SKELETON = ['app/crews/invite/[crewId].tsx']
 
 /** The crossfade is computed and put on an `entering`: a hook whose result goes nowhere fades nothing. */
 const crossfades = (s: string) => {

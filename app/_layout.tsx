@@ -24,7 +24,6 @@ import { readOnboarding } from '../lib/onboardingStorage';
 import { mayPromptAtStartUp } from '../lib/pushDecline';
 import { PresenceMonitor } from '../components/PresenceMonitor';
 import { LiveAtVenue } from '../components/LiveAtVenue';
-import { notePathname } from '../lib/paywall';
 import { SheetHost } from '../components/SheetHost';
 import { ShareHost } from '../components/share/ShareHost';
 import { useAuth } from '../lib/useAuth';
@@ -88,8 +87,6 @@ function RootLayout() {
   const pathname = usePathname();
   // The route as a pattern (`/f/[token]`), for the crash report: the pathname itself carries tokens and ids.
   const segments = useSegments();
-  // The paywall never arrives by itself over onboarding, a check-in or a chat (lib/paywall.ts).
-  useEffect(() => notePathname(pathname), [pathname]);
   const lastRedirectRef = useRef<string | null>(null);
   // No redirect before the root navigator can take it: an Android font-size relaunch mounts this signed in (RC drive 2 D-1).
   const navigationReady = useNavigationReady();
@@ -768,18 +765,6 @@ function RootLayout() {
       <Stack.Screen name="venue/[id]" options={{ headerShown: false }} />
       {/* An offer from a place and its door pass (step 12). Placeholder design (docs/PLACEHOLDER_SCREENS.md §16). */}
       <Stack.Screen name="offer/[id]" options={{ headerShown: false }} />
-      {/* The Blendn+ paywall, a modal with "Not now" (step 11). Placeholder design (docs/PLACEHOLDER_SCREENS.md §13). */}
-      <Stack.Screen
-        name="plus"
-        options={{ headerShown: false, presentation: 'fullScreenModal', animation: reduceMotion ? 'fade' : Platform.OS === 'ios' ? 'default' : 'slide_from_bottom' }}
-      />
-      {/*
-        Manage (Settings › Blend'n+). Declared here, not by the screen: it said `<Stack.Screen options={{ headerShown: false }} />`
-        itself, a new object every render. From the tabs that settled; over the paywall (a modal, which makes the stack lay
-        out every route above it as one too) each `setOptions` re-rendered it into the next, and "Maximum update depth
-        exceeded" took the app down to the root boundary (RC drive 5; `__tests__/plusManageOverPlus.test.tsx`).
-      */}
-      <Stack.Screen name="plus-manage" options={{ headerShown: false }} />
       <Stack.Screen name="c/[token]" options={{ headerShown: false, presentation: 'modal', animation: reduceMotion ? 'fade' : 'slide_from_bottom' }} />
       <Stack.Screen name="f/[token]" options={{ headerShown: false, presentation: 'modal', animation: reduceMotion ? 'fade' : 'slide_from_bottom' }} />
           </Stack>

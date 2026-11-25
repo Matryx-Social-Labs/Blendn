@@ -27,7 +27,7 @@ jest.mock('../lib/useAuth', () => ({ useAuth: () => mockAuth, refreshAuthUser: j
 const mockMethod = jest.fn()
 jest.mock('../lib/authMethod', () => ({ useAuthMethod: (fromServer?: unknown) => mockMethod(fromServer) }))
 jest.mock('../lib/apiClient', () => ({
-  apiClient: { getProfile: jest.fn(), updateProfile: jest.fn(), getMyPlus: jest.fn(), queuedRequest: jest.fn(), forgotPassword: jest.fn() },
+  apiClient: { getProfile: jest.fn(), updateProfile: jest.fn(), queuedRequest: jest.fn(), forgotPassword: jest.fn() },
 }))
 jest.mock('../lib/notifications', () => ({
   initializePushNotifications: jest.fn(async () => null),
@@ -77,7 +77,6 @@ beforeEach(() => {
   mockMethod.mockReturnValue('password')
   mockOffline.mockReturnValue(false)
   api.getProfile.mockResolvedValue({ success: true, data: { profile: { push_enabled: true } } } as never)
-  api.getMyPlus.mockResolvedValue({ success: true, data: { active: false, gated: true, product: null, source: null, expiresAt: null } } as never)
   ;(api.queuedRequest as jest.Mock).mockResolvedValue({ success: true, data: { enabled: true } })
 })
 

@@ -41,7 +41,6 @@ const landsOnceEnded = (n: number) => `${n === 1 ? 'it lands' : 'they land'} her
 
 /** D-H1: a count above 0 with nothing the list may show yet. Never "your first night". */
 export const NIGHTS_HELD = {
-  locked: (total: number) => `${nightsCount(total)} · the older ones are with Blend’n+`,
   pending: (total: number) => `${nightsCount(total)} · ${landsOnceEnded(total)}`,
   /** Beside the ended tiles: the count's nights the grid doesn't draw yet, so the stat and the section add up (RC 7). */
   running: (n: number) => `${nightsCount(n)} still running · ${landsOnceEnded(n)}`,
@@ -60,7 +59,6 @@ export function NightsOut({
   onRetry,
   retrying = false,
   onFirstNight,
-  lockedCount = 0,
   total = null,
   runningCount = 0,
   saved = 0,
@@ -75,9 +73,7 @@ export function NightsOut({
   retrying?: boolean
   /** What the first-night card's button does (open what's on). */
   onFirstNight: () => void
-  /** Nights the server kept behind Blend'n+ (`/me/attendance` `lockedCount`). */
-  lockedCount?: number
-  /** Every night you have, the locked ones included; null when the server didn't say. */
+  /** Every night you have; null when the server didn't say. */
   total?: number | null
   /** Nights in `total` that haven't ended, so aren't tiles yet (`nightsCounts().running`). */
   runningCount?: number
@@ -88,7 +84,7 @@ export function NightsOut({
 }) {
   const bold = useBoldText()
   const { width } = useWindowDimensions()
-  const view = nightsView(status, events, lockedCount, total, runningCount)
+  const view = nightsView(status, events, total, runningCount)
   // The tiles cross from their skeleton (DS #17, motion audit M27).
   const arrive = useSkeletonCrossfade(view.kind === 'loading')
   // Three across, two 8 pt gaps between them, inside the screen's gutters.
@@ -128,10 +124,10 @@ export function NightsOut({
         /></BannerPresence>
       ) : null}
 
-      {view.kind === 'locked' || view.kind === 'pending' ? (
+      {view.kind === 'pending' ? (
         <View testID={`nights-${view.kind}`} style={styles.held}>
           <Text style={[font('meta', bold), styles.muted]} maxFontSizeMultiplier={MAX_FONT_SCALE.meta}>
-            {view.kind === 'locked' ? NIGHTS_HELD.locked(view.total) : NIGHTS_HELD.pending(view.total)}
+            {NIGHTS_HELD.pending(view.total)}
           </Text>
         </View>
       ) : null}
@@ -153,7 +149,6 @@ export function NightsOut({
         </>
       ) : null}
 
-      {/* Blend'n+ is sold once on Me, by its own row at the foot: the held nights above are said, never sold again here. */}
       {[savedLine(saved), hostedLine(hosted)].filter(Boolean).map((line) => (
         <Text key={line} testID="nights-foot" maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.muted]}>
           {line}

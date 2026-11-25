@@ -1,8 +1,7 @@
 /*
  * <GoLiveSheet> (guidelines/components/GoLiveSheet.html, Flow 11 · 11.2,
- * Delta R2-D7): dial, then hold. 20 / 45 min / 1 hour / Stay while I’m here;
- * Stay locked behind Blend'n+ shows the server's sentence and the Plus mark
- * and opens the Tonight sheet; the one hold (900 ms); the five refusals are
+ * Delta R2-D7): dial, then hold. 20 / 45 min / 1 hour / Stay while I’m here,
+ * free for everyone (launch gate 5); the one hold (900 ms); the five refusals are
  * the server's sentence in the sheet, with no haptic.
  */
 import { act, fireEvent, render, screen } from '@testing-library/react-native'
@@ -105,17 +104,15 @@ describe('<GoLiveSheet>', () => {
     expect(spies.success).not.toHaveBeenCalled()
   })
 
-  it('Stay locked: the server’s sentence and the Plus mark; a tap opens the Tonight sheet, silently', async () => {
-    const onStayLocked = jest.fn()
+  it('Stay is free for everyone: its own sentence and "free today", no Plus mark; a tap picks it', async () => {
     const onChoice = jest.fn()
-    await render(sheet({ stay: 'locked', onStayLocked, onChoice }))
+    await render(sheet({ onChoice }))
     const stay = screen.getAllByRole('radio')[3]
-    expect(stay.props.accessibilityLabel).toBe('Stay while I’m here, Staying live is part of Blend’n+., Blend’n+')
-    expect(stay.props.accessibilityHint).toBe('Opens Blend’n+')
+    expect(stay.props.accessibilityLabel).toBe('Stay while I’m here, Keeps you live while you’re here, up to 4 hours, free today')
+    expect(stay.props.accessibilityHint).toBeUndefined()
+    expect(screen.queryByText('Plus')).toBeNull()
     await fireEvent.press(stay)
-    expect(onStayLocked).toHaveBeenCalledTimes(1)
-    expect(onChoice).not.toHaveBeenCalled()
-    expect(spies.select).not.toHaveBeenCalled()
+    expect(onChoice).toHaveBeenCalledWith('stay')
   })
 
   it.each([
@@ -152,17 +149,6 @@ describe('<GoLiveSheet>', () => {
     await fireEvent.press(screen.getByRole('button', { name: action }))
     expect(action === 'Close' ? onClose : onRefusalAction).toHaveBeenCalledTimes(1)
     for (const k of Object.keys(spies)) expect(spies[k]).not.toHaveBeenCalled()
-  })
-
-  it('"Staying live is part of Blend’n+": Pick a time is the strong way back, See Blend’n+ the second', async () => {
-    const onRefusalAction = jest.fn()
-    const onRefusalAlt = jest.fn()
-    await render(sheet({ refusal: 'stay', onRefusalAction, onRefusalAlt }))
-    expect(screen.getByRole('header', { name: 'Staying live is part of Blend’n+' })).toBeTruthy()
-    await fireEvent.press(screen.getByRole('button', { name: 'Pick a time' }))
-    await fireEvent.press(screen.getByRole('button', { name: 'See Blend’n+' }))
-    expect(onRefusalAction).toHaveBeenCalledTimes(1)
-    expect(onRefusalAlt).toHaveBeenCalledTimes(1)
   })
 
   it('a refusal with no sheet of its own takes the server’s title and words; an event with no known title is still named', async () => {

@@ -96,29 +96,17 @@ describe('at the accessibility sizes', () => {
 })
 
 // Board remaining-screens 04 A: a topic first; it becomes the email's subject, so the right person reads it first.
-const mockPlus = { gated: false }
-const mockGetMyPlus = jest.fn(async () => ({ success: true, data: { gated: mockPlus.gated, active: false } }))
-jest.mock('../lib/apiClient', () => ({ apiClient: { getMyPlus: () => mockGetMyPlus() } }))
 
 describe('the topic', () => {
   const subjectOf = (open: jest.SpyInstance) => decodeURIComponent(String(open.mock.calls[0][0])).match(/subject=([^&]*)/)?.[1]
 
-  it('asks what it is about, with five topics where Blend’n+ is sold, none picked', async () => {
-    mockPlus.gated = true
+  it('asks what it is about, with four topics, none picked, and never names Blend’n+ (launch gate 5)', async () => {
     await render(<SupportScreen />)
-    await screen.findByRole('button', { name: 'Blend’n+ or a payment' })
     expect(screen.getByText('What is it about?')).toBeTruthy()
-    for (const t of ['My account', 'A person or a room', 'Blend’n+ or a payment', 'Something broke', 'Something else'])
+    for (const t of ['My account', 'A person or a room', 'Something broke', 'Something else'])
       expect(screen.getByRole('button', { name: t, selected: false })).toBeTruthy()
-    expect(screen.getByText('Your email includes these')).toBeTruthy()
-  })
-
-  it('never names Blend’n+ where it is not sold (the free app): four topics', async () => {
-    mockPlus.gated = false
-    await render(<SupportScreen />)
-    await waitFor(() => expect(mockGetMyPlus).toHaveBeenCalled())
     expect(screen.queryByRole('button', { name: 'Blend’n+ or a payment' })).toBeNull()
-    expect(screen.getByRole('button', { name: 'Something else' })).toBeTruthy()
+    expect(screen.getByText('Your email includes these')).toBeTruthy()
   })
 
   it('a picked topic is the subject line; tapping it again clears it back to the plain subject', async () => {
