@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "351182775231",
+    "project_id": "blend-n",
+    "storage_bucket": "blend-n.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:351182775231:android:6215c4bc6af16dac35f70a",
+        "android_client_info": {
+          "package_name": "com.matryxsociallabs.blendn"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBasYXauuagEPZN6gutp5HA0LDy2JwUROY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
