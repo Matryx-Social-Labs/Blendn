@@ -1,11 +1,10 @@
 /**
  * The links Blend'n sends and the links it opens (Flow 16 · 16.1 and 16.7), in one place.
  *
- * Outbound: `https://www.blendn.app/event/<event id>` and `/f/<invite token>` for now (`WEB_PAGES_LIVE`), and a venue's
- * share points at the site's front page: the live site's associated-domain file lists only `/f/*` and `/event/*`, and
- * `/e/` and `/v/` serve the homepage, so a link on them opens nothing (SCRUM-738). The host is `www` because
- * that is the host the iOS associated domain and the Android intent filters verify (`app.json`); the bare domain
- * redirects, and a redirect hands the tap to the browser instead of the app. The id is the event's id, never its slug:
+ * Outbound: `https://<SITE_HOST>/event/<event id>` and `/f/<invite token>` for now (`WEB_PAGES_LIVE`), and a venue's
+ * share points at the site's front page (SCRUM-738). The host is the build's site, `www` in production and `staging.`
+ * in a staging build (`SITE_HOST`): hosts the iOS associated domains and the Android intent filters verify; the bare
+ * domain redirects, and a redirect hands the tap to the browser instead of the app. The id is the event's id, never its slug:
  * a link is a frozen snapshot forwarded to strangers, and a slug names the thing.
  *
  * Inbound: `/e/`, `/v/`, `/f/` and `/c/` (a crew's link, S7: the server mints its whole URL) AND `/event/` / `/venue/`, whatever `WEB_PAGES_LIVE` says (links already sent, the Android
@@ -14,11 +13,36 @@
  * `app/+native-intent.tsx` before the router sees them.
  */
 
+import { Logger } from './logger'
 import { pseudonymFromParam } from './roomState'
 
-export const SHARE_HOST = 'www.blendn.app'
-export const SHARE_ORIGIN = `https://${SHARE_HOST}`
-const OUR_HOSTS: ReadonlySet<string> = new Set([SHARE_HOST, 'blendn.app'])
+const PRODUCTION_SITE_HOST = 'www.blendn.app'
+/** blendn.app or a subdomain of it: nothing else is ever our site. */
+const BLENDN_HOST = /^([a-z0-9-]+\.)*blendn\.app$/
+
+/**
+ * The build's own site (SCRUM-1364): `www.blendn.app` in a production build, `staging.blendn.app` in a staging one
+ * (`EXPO_PUBLIC_SITE_HOST`, inlined from the EAS environment at build time). Every link the app sends, the pages it
+ * opens and the links it places derive from this one value. Only blendn.app or a subdomain of it is taken: a typo
+ * falls back to production rather than pointing links at someone else's domain.
+ */
+function siteHostFrom(value: string | undefined): string {
+  const host = (value ?? '').trim().toLowerCase()
+  if (!host) return PRODUCTION_SITE_HOST
+  if (BLENDN_HOST.test(host)) return host
+  Logger.warn('general', 'EXPO_PUBLIC_SITE_HOST is not a blendn.app host; links use production', { host })
+  return PRODUCTION_SITE_HOST
+}
+
+export const SITE_HOST = siteHostFrom(process.env.EXPO_PUBLIC_SITE_HOST)
+export const SITE_ORIGIN = `https://${SITE_HOST}`
+
+/**
+ * The hosts this build places: its own, and the apex in production (it redirects to www). Both binaries claim www and
+ * staging natively (one bundle id, committed native folders), so the other build's link reaches the app too; it is not
+ * placed here (its id belongs to the other API) and `siblingSiteUrl` hands it to the browser.
+ */
+export const OUR_HOSTS: ReadonlySet<string> = new Set(SITE_HOST === PRODUCTION_SITE_HOST ? [SITE_HOST, 'blendn.app'] : [SITE_HOST])
 
 /** An id or token as it may appear in a path: what the server mints, nothing that could climb out of one segment. */
 const SEGMENT = /^[A-Za-z0-9_-]{1,64}$/
@@ -43,9 +67,9 @@ export const WEB_PAGES_LIVE = false
  */
 export const venueTextOnly = (name: string): string | null => (WEB_PAGES_LIVE ? null : `${name} on Blend’n`)
 
-export const eventLink = (id: string): string => `${SHARE_ORIGIN}/${WEB_PAGES_LIVE ? 'e' : 'event'}/${id}`
-export const venueLink = (id: string): string => (WEB_PAGES_LIVE ? `${SHARE_ORIGIN}/v/${id}` : SHARE_ORIGIN)
-export const inviteLink = (token: string): string => `${SHARE_ORIGIN}/f/${token}`
+export const eventLink = (id: string): string => `${SITE_ORIGIN}/${WEB_PAGES_LIVE ? 'e' : 'event'}/${id}`
+export const venueLink = (id: string): string => (WEB_PAGES_LIVE ? `${SITE_ORIGIN}/v/${id}` : SITE_ORIGIN)
+export const inviteLink = (token: string): string => `${SITE_ORIGIN}/f/${token}`
 
 /** The file route a target opens in the app. */
 export function routeFor({ kind, id }: LinkTarget): string {
@@ -127,6 +151,18 @@ export function nativeIntentPath(path: string): string {
   const target = targetOf(n)
   if (target) return routeFor(target)
   return lobbyPostPath(n.segments) ?? wavesPath(n.segments) ?? `/${n.segments.join('/')}${linkQuery(n.segments, path)}`
+}
+
+/**
+ * An https link on a blendn.app site that is not this build's (a www link in a staging build, a staging link in
+ * production), rebuilt as the page to open in the browser; null for anything else. Both builds claim both hosts natively,
+ * so such a link reaches the app, and the other environment's page is where it can be read. Path only: the query and
+ * fragment go, as for every link (`normalise`).
+ */
+export function siblingSiteUrl(path: string): string | null {
+  const { host, segments } = normalise(path)
+  if (host === null || OUR_HOSTS.has(host) || !BLENDN_HOST.test(host)) return null
+  return `https://${host}/${segments.join('/')}`
 }
 
 /** An id as a link carries it: the shape the server mints, checked before it rides into a route. */

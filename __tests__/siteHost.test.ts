@@ -152,7 +152,7 @@ describe('the native claim: both hosts, in every binary', () => {
   it('app.json says the same, so a future prebuild agrees', () => {
     const app = JSON.parse(read('app.json')).expo
     expect([...app.ios.associatedDomains].sort()).toEqual(HOSTS.map((h) => `applinks:${h}`).sort())
-    const hosts = new Set(app.android.intentFilters.flatMap((f: { data: { host?: string }[] }) => f.data.map((d) => d.host).filter(Boolean)))
+    const hosts = new Set(app.android.intentFilters.flatMap((f: { data: { scheme?: string; host?: string }[] }) => f.data.filter((d) => d.scheme === 'https').map((d) => d.host)))
     expect([...hosts].sort()).toEqual([...HOSTS].sort())
   })
 })

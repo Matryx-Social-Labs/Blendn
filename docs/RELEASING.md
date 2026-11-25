@@ -717,6 +717,7 @@ prefix**. Everything below is stored `plaintext` in EAS:
 | `EXPO_PUBLIC_DISABLE_DEBUG_LOGS` | no | |
 | `EXPO_PUBLIC_SENTRY_DSN` | no | A DSN only permits *writing* events; it is meant to ship in clients |
 | `EXPO_PUBLIC_APP_ENV` | no | A label on Sentry events |
+| `EXPO_PUBLIC_SITE_HOST` | no | The build's own site (`lib/shareLinks.ts`): `staging.blendn.app` on `development` and `preview`, **unset** on `production` (www). Share links, policy pages and the links the app opens follow it; both binaries claim both hosts natively, and a link on the other host opens in the browser |
 | `EXPO_PUBLIC_SUPABASE_IMAGE_TRANSFORMS_ENABLED` | no | Dead — the app has no Supabase dependency. Listed so it reads as a leftover, not a mystery |
 | `EXPO_PUBLIC_MAP_STYLE_URL` | no | Optional: moves the home map's style off OpenFreeMap (`lib/mapStyleEmber.ts`) |
 | `EXPO_PUBLIC_BUILDINGS_TILES_URL` | no | Our building tiles for the home map: an https `{z}/{x}/{y}` template, **per environment** — the staging bucket for `development` and `preview`, the production bucket for `production` (after its upload; Blendn-Admin `scripts/map-buildings/README.md`). Unset or unusable: OpenFreeMap's buildings, with a warning in the log when set but unusable |
@@ -850,6 +851,10 @@ done
 
 npx eas-cli env:set --environment preview    --name EXPO_PUBLIC_APP_ENV --value staging    --visibility plaintext
 npx eas-cli env:set --environment production --name EXPO_PUBLIC_APP_ENV --value production --visibility plaintext
+
+# The build's site host (SCRUM-1364): staging builds share and open staging.blendn.app. Never set on production.
+npx eas-cli env:set --environment development --name EXPO_PUBLIC_SITE_HOST --value staging.blendn.app --visibility plaintext
+npx eas-cli env:set --environment preview     --name EXPO_PUBLIC_SITE_HOST --value staging.blendn.app --visibility plaintext
 ```
 
 `.env.example` is the manifest — eight variables, cross-checked against the
