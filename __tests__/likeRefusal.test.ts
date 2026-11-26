@@ -29,8 +29,12 @@ describe("a refused like", () => {
 
   it("treats a lapsed check-in as information, not an error", () => {
     // Auto-checkout makes this ordinary: step outside, come back, likes stop.
-    expect(likeRefusal("FORBIDDEN", "Check in before liking anyone here").variant).toBe("info")
+    expect(likeRefusal("FORBIDDEN", "Check in before you wave here.").variant).toBe("info")
     expect(likeRefusal("NOT_CHECKED_IN", undefined).variant).toBe("info")
+  })
+
+  it("with no sentence, a lapsed check-in says the server's own (admin #1029: the wave is the gesture)", () => {
+    expect(likeRefusal("NOT_CHECKED_IN", undefined).message).toBe("Check in before you wave here.")
   })
 
   it("does not shout at somebody for liking quickly", () => {
@@ -41,9 +45,7 @@ describe("a refused like", () => {
   })
 
   it("passes the server’s sentence through when it has one", () => {
-    expect(likeRefusal("FORBIDDEN", "Check in before liking anyone here").message).toBe(
-      "Check in before liking anyone here"
-    )
+    expect(likeRefusal("FORBIDDEN", "Check in before you wave here.").message).toBe("Check in before you wave here.")
     expect(likeRefusal("SOMETHING_NEW", "A reason from a newer server").message).toBe(
       "A reason from a newer server"
     )

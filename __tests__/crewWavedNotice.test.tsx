@@ -3,16 +3,15 @@
  * with one text action, Wave back; after it "Waved back" and no action; a crew or person who has gone, "They've left the
  * room", never an error. A crewmate's own "waved at Orbit for the crew" stays a centred line naming who.
  */
-import { act, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react-native'
+import { act, fireEvent, render, renderHook, screen } from '@testing-library/react-native'
 
-jest.mock('expo-router', () => ({ useFocusEffect: (effect: () => void) => { const { useEffect } = require('react'); useEffect(effect, [effect]) } }))
-jest.mock('../lib/crewsApi', () => ({ crewsApi: { waveCrew: jest.fn(), wavePersonAsCrew: jest.fn(), hiddenCrews: jest.fn() } }))
+jest.mock('../lib/crewsApi', () => ({ crewsApi: { waveCrew: jest.fn(), wavePersonAsCrew: jest.fn() } }))
 
 import { CrewWavedNotice } from '../components/chat/CrewWavedNotice'
 import { crewLikeLine } from '../lib/crews'
-import { useHiddenCrewIds, waveBackFromChat, withoutBlockedCrews } from '../lib/crewWaveBack'
+import { noteCrewBlocked, noteCrewUnblocked, useCrewsBlockedNow, waveBackFromChat, withoutBlockedCrews } from '../lib/crewWaveBack'
 import { crewsApi } from '../lib/crewsApi'
-import { roomMessagesFrom } from '../lib/roomMessages'
+import { roomMessageFromSocket, roomMessagesFrom } from '../lib/roomMessages'
 
 const api = crewsApi as jest.Mocked<typeof crewsApi>
 beforeEach(() => jest.clearAllMocks())
@@ -30,6 +29,31 @@ describe('reading crew_waved off the history', () => {
     expect(roomMessagesFrom(raw({ kind: 'crew_wave' }), 'me', 'crew')[0].crewWave).toBeUndefined()
     expect(roomMessagesFrom(raw({ kind: 'crew_waved', eventId: 'e1' }), 'me', 'crew')[0].crewWave).toBeUndefined()
     expect(roomMessagesFrom(raw(null), 'me', 'crew')[0].crewWave).toBeUndefined()
+  })
+  it('answered (admin #1029): this crew waved or liked back, so the line starts as Waved back', () => {
+    const answered = (value: unknown) => roomMessagesFrom([{ ...raw({ kind: 'crew_waved', eventId: 'e1', occurrenceId: 'o1', fromCrewId: 'c9' })[0], answered: value }], 'me', 'crew')[0]
+    expect(answered(true).crewWaveAnswered).toBe(true)
+    // Controls: not answered, an older server (absent), or junk.
+    expect(answered(false).crewWaveAnswered).toBeUndefined()
+    expect(answered(undefined).crewWaveAnswered).toBeUndefined()
+    expect(answered('yes').crewWaveAnswered).toBeUndefined()
+  })
+  it('answered on any other line is not read', () => {
+    expect(roomMessagesFrom([{ ...raw({ kind: 'crew_wave' })[0], answered: true }], 'me', 'crew')[0].crewWaveAnswered).toBeUndefined()
+  })
+})
+
+describe('reading crew_waved off the socket (admin #1029 sends its metadata)', () => {
+  const live = (metadata?: unknown, extra: object = {}) =>
+    roomMessageFromSocket({ id: 'm9', userId: 'sys', userName: 'Blendn', content: 'Nebula waved at your crew', type: 'system', createdAt: '2026-11-25T10:00:00Z', metadata, ...extra }, 'me', 'crew')
+
+  it('a live line is whole at once: who waved, and what Wave back answers', () => {
+    expect(live({ kind: 'crew_waved', eventId: 'e1', occurrenceId: 'o1', fromCrewId: 'c9' }).crewWave).toEqual({ eventId: 'e1', fromCrewId: 'c9' })
+    expect(live({ kind: 'crew_waved', eventId: 'e1', fromUserId: 'rh_1' }).crewWave).toEqual({ eventId: 'e1', fromUserId: 'rh_1' })
+  })
+  it('a live wave is never answered yet; with no metadata (an older server) it names nobody', () => {
+    expect(live({ kind: 'crew_waved', eventId: 'e1', fromCrewId: 'c9' }, { answered: true }).crewWaveAnswered).toBeUndefined()
+    expect(live().crewWave).toBeUndefined()
   })
 })
 
@@ -63,10 +87,9 @@ describe('Wave back from the chat', () => {
     api.wavePersonAsCrew.mockResolvedValue({ success: false, errorCode: 'NOT_FOUND', error: 'x' } as never)
     expect(await waveBackFromChat({ eventId: 'e1', fromUserId: 'rh_1' }, 'mine')).toEqual({ kind: 'gone' })
   })
-  it('checked out: the server’s “liking” is said as a wave, the only gesture left', async () => {
-    api.waveCrew.mockResolvedValue({ success: false, errorCode: 'FORBIDDEN', error: 'Check in before liking anyone here.' } as never)
+  it('a refusal keeps the server’s own sentence (admin #1029 says wave)', async () => {
+    api.waveCrew.mockResolvedValue({ success: false, errorCode: 'FORBIDDEN', error: 'Check in before you wave here.' } as never)
     expect(await waveBackFromChat({ eventId: 'e1', fromCrewId: 'c9' }, 'mine')).toEqual({ kind: 'error', text: 'Check in before you wave here.' })
-    // Control: any other refusal keeps the server's own sentence.
     api.waveCrew.mockResolvedValue({ success: false, errorCode: 'FORBIDDEN', error: 'Your crew isn’t here yet.' } as never)
     expect(await waveBackFromChat({ eventId: 'e1', fromCrewId: 'c9' }, 'mine')).toEqual({ kind: 'error', text: 'Your crew isn’t here yet.' })
   })
@@ -106,51 +129,46 @@ describe('<CrewWavedNotice>', () => {
     await render(<CrewWavedNotice id="m-d" text="Nebula waved at your crew" onWaveBack={onWaveBack} />)
     expect(screen.getByText('Waved back')).toBeTruthy()
   })
-  it('without a way to answer (a live line with no metadata): the sentence alone', async () => {
+  it('answered before (after a restart): Waved back from the start, no action', async () => {
+    const onWaveBack = jest.fn()
+    await render(<CrewWavedNotice id="m-f" text="Nebula waved at your crew" wavedBack onWaveBack={onWaveBack} />)
+    expect(screen.getByText('Waved back')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Wave back' })).toBeNull()
+    // Control: not answered offers Wave back.
+    await render(<CrewWavedNotice id="m-g" text="Nebula waved at your crew" wavedBack={false} onWaveBack={onWaveBack} />)
+    expect(screen.getByRole('button', { name: 'Wave back' })).toBeTruthy()
+  })
+  it('answered somewhere else while on screen: the next read turns it to Waved back', async () => {
+    const view = await render(<CrewWavedNotice id="m-h" text="Nebula waved at your crew" onWaveBack={jest.fn()} />)
+    expect(screen.getByRole('button', { name: 'Wave back' })).toBeTruthy()
+    await view.rerender(<CrewWavedNotice id="m-h" text="Nebula waved at your crew" wavedBack onWaveBack={jest.fn()} />)
+    expect(screen.getByText('Waved back')).toBeTruthy()
+  })
+  it('without a way to answer (a line naming nobody): the sentence alone', async () => {
     await render(<CrewWavedNotice id="m-e" text="Nebula waved at your crew" />)
     expect(screen.queryByRole('button', { name: 'Wave back' })).toBeNull()
   })
 })
 
-describe('a crew you blocked draws no notice (advisor Q2), and it fails closed', () => {
+describe('a crew you blocked draws no notice (advisor Q2)', () => {
   const line = (id: string, extra: object = {}) => ({ message_id: id, sender_id: 's', sender_name: 'x', message_text: 'Orbit waved at your crew', message_type: 'system', reply_to_message_id: null, created_at: '2026-11-25T10:00:00Z', ...extra }) as never
   const from = (fromCrewId: string) => ({ crewWave: { eventId: 'e', fromCrewId } })
   const person = { crewWave: { eventId: 'e', fromUserId: 'rh' }, message_text: 'Lunar Fox waved at the crew' }
   const ids = (list: { message_id: string }[]) => list.map((m) => m.message_id)
-  const pageOf = (crewIds: string[], hasMore: boolean) => ({ success: true, data: { crews: crewIds.map((crewId) => ({ crewId })), pagination: { hasMore } } }) as never
 
   it('drops only that crew’s line; a person’s wave, and everything else, stay', () => {
     const list = [line('a', from('blocked')), line('b', from('ok')), line('c', person), line('d', { message_type: 'text' })]
     expect(ids(withoutBlockedCrews(list, new Set(['blocked'])))).toEqual(['b', 'c', 'd'])
   })
-  it('not known yet, or the read failed: every crew’s line is withheld', () => {
-    expect(ids(withoutBlockedCrews([line('a', from('ok')), line('c', person)], null))).toEqual(['c'])
+  it('the server leaves out a crew blocked before the chat opened, so nothing is withheld on a guess', () => {
+    expect(ids(withoutBlockedCrews([line('a', from('ok')), line('c', person), line('live')], new Set()))).toEqual(['a', 'c', 'live'])
   })
-  it('a live line with no metadata names no crew, so it waits for the history; a typed message with the same words does not', () => {
-    expect(ids(withoutBlockedCrews([line('live'), line('typed', { message_type: 'text' })], new Set()))).toEqual(['typed'])
-  })
-  it('reads every page, for a crew chat only', async () => {
-    api.hiddenCrews.mockResolvedValueOnce(pageOf(['c1'], true)).mockResolvedValueOnce(pageOf(['c2'], false))
-    const { result, rerender } = await renderHook(({ on }: { on: boolean }) => useHiddenCrewIds(on), { initialProps: { on: false } })
-    expect(api.hiddenCrews).not.toHaveBeenCalled()
-    await rerender({ on: true })
-    await waitFor(() => expect([...(result.current ?? [])]).toEqual(['c1', 'c2']))
-    expect(api.hiddenCrews.mock.calls).toEqual([[1, 50], [2, 50]])
-  })
-  it('a re-read that fails makes a known list unknown again, never yesterday’s', async () => {
-    api.hiddenCrews.mockResolvedValueOnce(pageOf(['c1'], false)).mockResolvedValue({ success: false, error: 'x' } as never)
-    const { result, rerender } = await renderHook(({ on }: { on: boolean }) => useHiddenCrewIds(on), { initialProps: { on: true } })
-    await waitFor(() => expect(result.current?.has('c1')).toBe(true))
-    await rerender({ on: false })
-    expect(result.current).toBeNull()
-    await rerender({ on: true })
-    await waitFor(() => expect(api.hiddenCrews).toHaveBeenCalledTimes(2))
-    expect(result.current).toBeNull()
-  })
-  it('a later page that fails leaves it unknown', async () => {
-    api.hiddenCrews.mockResolvedValueOnce(pageOf(['c1'], true)).mockResolvedValueOnce({ success: false, error: 'x' } as never)
-    const { result } = await renderHook(() => useHiddenCrewIds(true))
-    await waitFor(() => expect(api.hiddenCrews).toHaveBeenCalledTimes(2))
-    expect(result.current).toBeNull()
+  it('a block made on this phone reaches a chat already open; unblocking lets it back', async () => {
+    const { result } = await renderHook(() => useCrewsBlockedNow())
+    expect(result.current.has('c7')).toBe(false)
+    await act(async () => noteCrewBlocked('c7'))
+    expect(result.current.has('c7')).toBe(true)
+    await act(async () => noteCrewUnblocked('c7'))
+    expect(result.current.has('c7')).toBe(false)
   })
 })

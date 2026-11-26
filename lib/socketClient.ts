@@ -79,6 +79,10 @@ export interface ServerToClientEvents {
       userImage?: string
       createdAt: string
       parentId?: string
+      /** On a poll: the poll to read and vote on. */
+      pollId?: string
+      /** A system line's own, as the history has it (admin #1029): a crew chat's `crew_waved` names who waved. */
+      metadata?: unknown
     }
   }) => void
   "chat:typing": (data: {

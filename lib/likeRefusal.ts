@@ -7,7 +7,7 @@
  * the row and the heart reverted to unliked — **with nothing said**. The two
  * refusals that actually happen are invisible:
  *
- *   403  "Check in before liking anyone here"   a lapsed check-in
+ *   403  "Check in before you wave here."       a lapsed check-in
  *   429  rate limited                            liking fast in a busy room
  *
  * Auto-checkout makes the first ordinary rather than exotic: step outside for
@@ -54,12 +54,12 @@ export function likeRefusal(
 
     /*
      * FORBIDDEN is almost always the lapsed check-in. The server's sentence —
-     * "Check in before liking anyone here" — already says the useful thing,
+     * "Check in before you wave here." — already says the useful thing,
      * and it is about the room rather than about them.
      */
     case "FORBIDDEN":
     case "NOT_CHECKED_IN":
-      return { message: message || "Check in before liking anyone here.", variant: "info", checkIn: true }
+      return { message: message || "Check in before you wave here.", variant: "info", checkIn: true }
 
     /*
      * A like's 404 and a wave's "They're not in the room right now" are the

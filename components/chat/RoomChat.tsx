@@ -40,7 +40,7 @@ import { subscribeCheckInChanged } from '../../lib/checkIn'
 import { notOpenYetAt, opensInSpoken } from '../../lib/preEventRoom'
 import { useOpensAt, usePreEventRoom } from '../../lib/usePreEventRoom'
 import { newClientId } from '../../lib/clientId'
-import { isCrewsWave, isCrewWavedLine, useHiddenCrewIds, waveBackFromChat, withoutBlockedCrews, type WaveBackOutcome } from '../../lib/crewWaveBack'
+import { useCrewsBlockedNow, waveBackFromChat, withoutBlockedCrews, type WaveBackOutcome } from '../../lib/crewWaveBack'
 import { openBlend } from '../crews/CrewsView'
 import { BLEND_CLOSED_LINE, defaultRoomName, roomClosedLine, roomKindParam, UNKNOWN_ROOM_NAME } from '../../lib/crews'
 import { crewsApi } from '../../lib/crewsApi'
@@ -501,8 +501,6 @@ function RoomChatInner({ params, embedded }: { params: RoomChatParams; embedded?
         // At the bottom, somebody else's message rises as it arrives (#13); read back, the list never moves (the chip counts it).
         if (fresh && isAtBottomRef.current && data.message.userId !== currentUser?.id) markArriving(incoming.message_id)
         seenIds.current.add(incoming.message_id)
-        // The socket names no crew on a wave: the history does (who waved, and what Wave back answers).
-        if (fresh && isCrewWavedLine(incoming)) void loadMessagesRef.current(true)
         setMessages((prev) =>
           prev.some((m) => m.message_id === incoming.message_id)
             ? prev
@@ -850,10 +848,11 @@ function RoomChatInner({ params, embedded }: { params: RoomChatParams; embedded?
     else router.push(`/venue/${venueId}` as never)
   }
 
-  const hiddenCrews = useHiddenCrewIds(messages.some(isCrewsWave))
+  // The server leaves out a crew blocked before this read; a block made since, while this chat is open, is this.
+  const blockedCrews = useCrewsBlockedNow()
   const visible = useMemo(
-    () => withoutBlockedCrews(messages.filter((m) => !blocked.has(m.sender_id)), hiddenCrews),
-    [messages, blocked, hiddenCrews]
+    () => withoutBlockedCrews(messages.filter((m) => !blocked.has(m.sender_id)), blockedCrews),
+    [messages, blocked, blockedCrews]
   )
   const chatItems: ChatListItem[] = useMemo(() => withDaySeparators(visible, (m) => m.created_at), [visible])
   /* The skeleton is the list's empty slot, so the first messages fade in as cells; later ones arrive as they do (the hook's window). */

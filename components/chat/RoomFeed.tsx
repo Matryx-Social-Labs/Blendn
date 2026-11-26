@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { broadcastParts } from '../../lib/chatFeed'
 import { crewLikeLine } from '../../lib/crews'
-import { isCrewWavedLine, type WaveBackOutcome } from '../../lib/crewWaveBack'
+import type { WaveBackOutcome } from '../../lib/crewWaveBack'
 import { CrewWavedNotice } from './CrewWavedNotice'
 import { goneKindFor } from '../../lib/chatGone'
 import { liveEndedState, type LiveEndedAction } from '../../lib/chatLiveEnded'
@@ -114,11 +114,16 @@ export const RoomMessageRow = memo(function RoomMessageRow({
     )
   }
   // Another crew (or a person) waved at this crew: a notice with Wave back, never a bubble (advisor L-A).
-  if (isCrewWavedLine(item)) {
-    const answer = item.crewWave ? handlers.crewWaveBack : undefined
+  if (item.crewWave) {
+    const answer = handlers.crewWaveBack
     return (
       <View testID={`row-${item.message_id}`} style={runStart}>
-        <CrewWavedNotice id={item.message_id} text={item.message_text} onWaveBack={answer ? () => answer(item) : undefined} />
+        <CrewWavedNotice
+          id={item.message_id}
+          text={item.message_text}
+          wavedBack={item.crewWaveAnswered}
+          onWaveBack={answer ? () => answer(item) : undefined}
+        />
       </View>
     )
   }

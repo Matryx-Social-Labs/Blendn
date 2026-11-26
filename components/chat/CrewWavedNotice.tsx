@@ -16,10 +16,23 @@ const NOTE = {
 /**
  * "Nebula waved at your crew" in the crew chat (advisor L-A 2026-11-25): the DS SystemNotice with the hand and one text
  * action, Wave back. Answered, "Waved back" in the action's place; gone, "They've left the room"; an error keeps the action
- * and says why. No `onWaveBack` (a live line the socket sent without its metadata): the sentence alone.
+ * and says why. `wavedBack` (admin #1029): answered before, after a restart too, so "Waved back" from the start. No
+ * `onWaveBack`: the sentence alone.
  */
-export function CrewWavedNotice({ id, text, onWaveBack }: { id: string; text: string; onWaveBack?: () => Promise<WaveBackOutcome> }) {
-  const [state, setState] = useState<'idle' | 'busy' | 'done' | 'gone'>(() => answered.get(id) ?? 'idle')
+export function CrewWavedNotice({
+  id,
+  text,
+  wavedBack,
+  onWaveBack,
+}: {
+  id: string
+  text: string
+  wavedBack?: boolean
+  onWaveBack?: () => Promise<WaveBackOutcome>
+}) {
+  const [tapped, setState] = useState<'idle' | 'busy' | 'done' | 'gone'>(() => answered.get(id) ?? 'idle')
+  // The server's answer wins over a Wave back not yet tapped here, including one made elsewhere since this row mounted.
+  const state = tapped === 'idle' && wavedBack ? 'done' : tapped
   const [error, setError] = useState<string | null>(null)
   useAnnounced(error)
 
