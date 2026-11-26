@@ -1,12 +1,13 @@
 import { validAccuracy } from './geo'
 import type { Href } from 'expo-router'
 import { Platform } from 'react-native'
-import { apiClient, type LeftRoom } from './apiClient'
+import { apiClient, currentSession, type LeftRoom } from './apiClient'
 import { getLiveEventId, setLiveHint } from './blendnOverlay'
 import { CHECK_IN_CODES, checkInRefusal, type CheckInRefusal } from './checkInRefusal'
 import { forgetEventDetailCache } from './eventDetailCache'
 import { reasonOf } from './sessionEnd'
 import { leftNames } from './leftRooms'
+import { Logger } from './logger'
 import { revealPromptText, revealReadiness } from './reveal'
 import { forgetRoster } from './rosterMemory'
 import { PUBLIC_CHECKIN_WARNING, shouldWarnBeforePublicCheckIn } from './roomVisibility'
@@ -108,20 +109,31 @@ export async function submitCheckIn(
   const timeout = new Promise<'timeout'>((resolve) => {
     timer = setTimeout(() => resolve('timeout'), CHECK_IN_TIMEOUT_MS)
   })
-  const result = await Promise.race([
-    apiClient.checkIn(eventId, {
-      latitude: at.latitude,
-      longitude: at.longitude,
-      // `gpsAccuracy` is the key the route reads — `deviceInfo?.gpsAccuracy` —
-      // not a top-level field. Unknown is sent as absent, which the server
-      // reads as "assume the usual", never as a number we made up.
-      deviceInfo: { platform: Platform.OS, gpsAccuracy: validAccuracy(at.accuracy) ?? undefined },
-      ...(withCrewId ? { withCrewId } : {}),
-    }),
-    timeout,
-  ]).finally(() => clearTimeout(timer))
+  const session = currentSession()
+  const request = apiClient.checkIn(eventId, {
+    latitude: at.latitude,
+    longitude: at.longitude,
+    // `gpsAccuracy` is the key the route reads — `deviceInfo?.gpsAccuracy` —
+    // not a top-level field. Unknown is sent as absent, which the server
+    // reads as "assume the usual", never as a number we made up.
+    deviceInfo: { platform: Platform.OS, gpsAccuracy: validAccuracy(at.accuracy) ?? undefined },
+    ...(withCrewId ? { withCrewId } : {}),
+  })
+  const result = await Promise.race([request, timeout]).finally(() => clearTimeout(timer))
 
-  if (result === 'timeout') return { kind: 'timeout' }
+  if (result === 'timeout') {
+    /*
+     * Nothing aborts the request, and a queued one is sent after this: a yes that lands later must still bring both doors
+     * to "in", even after Cancel (a re-read on Cancel runs before it lands; audit client-feedback Verification 3). Only in
+     * the session that sent it. A late no changes nothing: the tray already said we stopped waiting.
+     */
+    request
+      .then((late) => {
+        if (late.success && session === currentSession()) checkInChanged(eventId, Array.isArray(late.data?.left) ? late.data.left : [])
+      })
+      .catch((error: unknown) => Logger.error('events', 'checkin:late:failed', { eventId, error }))
+    return { kind: 'timeout' }
+  }
 
   if (!result.success) {
     // Dispatch on the server's code, never on its sentence (lib/checkInRefusal.ts).
