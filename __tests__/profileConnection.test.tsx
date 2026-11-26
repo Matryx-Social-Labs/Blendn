@@ -266,7 +266,7 @@ describe('Message, as a request', () => {
     api.createMessageRequest.mockResolvedValue({ success: false, error: 'exists', errorCode: 'CONFLICT' })
     await render(<UserProfile />)
 
-    expect(await screen.findByText('Slow Kite, 27')).toBeTruthy()
+    expect(await screen.findByText('Slow Kite')).toBeTruthy()
     fireEvent.press(await screen.findByLabelText(ASK))
     fireEvent.press(await screen.findByText('Send request'))
 
@@ -508,20 +508,21 @@ describe('one profile body', () => {
     expect(screen.queryByText(PROFILE_EMPTY)).toBeNull()
   })
 
-  it('the work field is a label, never the stored code (MED-1, OD-3 keeps it on an unrevealed profile)', async () => {
+  it('the work field is a label, never the stored code (MED-1, OD-3 keeps it on an unrevealed profile; the city goes, D-030)', async () => {
     api.getWorkFields.mockResolvedValue({ success: true, data: { workFields: [{ slug: 'data_ai', label: 'Data & AI' }] } } as never)
     api.getPublicProfile.mockResolvedValue({ success: true, data: { id: 'rh_ben', identityVisible: false, work_field: 'data_ai', location: 'Bengaluru' } } as never)
     await render(<UserProfile />)
-    expect(await screen.findByText('Data & AI · Bengaluru')).toBeTruthy()
-    expect(screen.queryByText(/data_ai/)).toBeNull()
+    expect(await screen.findByText('Data & AI')).toBeTruthy()
+    expect(screen.queryByText(/data_ai|Bengaluru/)).toBeNull()
   })
 
-  it('when GET /users/:id fails the /profiles/:id fallback still shows age and location, which it nests under profile (YOU-13)', async () => {
+  it('when GET /users/:id fails the /profiles/:id fallback (nested under profile, YOU-13) fails closed: no age, no location (D-030)', async () => {
     api.getPublicProfile.mockResolvedValue({ success: false, error: 'boom' } as never)
     api.getProfile.mockResolvedValue({ success: true, data: { name: 'Ben', interests: [], profile: { age: 29, location: 'Bengaluru', photos: ['https://cdn/ben.jpg'] } } } as never)
     await render(<UserProfile />)
-    expect(await screen.findByText(/, 29$/)).toBeTruthy()
-    expect(screen.getByTestId('hero-subtitle').props.children).toBe('Bengaluru')
+    expect(await screen.findByText('Someone')).toBeTruthy()
+    expect(screen.queryByText(/29|Bengaluru/)).toBeNull()
+    expect(screen.queryByTestId('hero-subtitle')).toBeNull()
   })
 
   it('an unrevealed profile opened by id draws no interest chips, whatever the payload carries (YOU-03)', async () => {

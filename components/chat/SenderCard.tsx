@@ -9,7 +9,6 @@ import { likeRefusal } from '../../lib/likeRefusal'
 import { shouldSendWave, waveRefusal, waveStateAfter, waveStatusFor, WAVE_SETTLE_MS, type WaveStatus } from '../../lib/waves'
 import { lensView, parseLens, type RoomLens } from '../../lib/roomLens'
 import { markSeed } from '../../lib/creatureSeed'
-import { attendeeFromMatch } from '../../lib/roomLive'
 import { showUserSafetyActions } from '../../lib/safetyUtils'
 import { PersonCard, type PersonState } from '../ds/PersonCard'
 import { ConnectSheet } from '../grid/ConnectSheet'
@@ -92,7 +91,6 @@ export function SenderCard({
 
   const who = sender ?? shown
   if (!who) return null
-  const attendee = card ? attendeeFromMatch(card) : null
 
   // This card's own mutual first, then the deck's (one from before a restart).
   const mutualConversation = opened ?? card?.conversationId ?? null
@@ -146,7 +144,6 @@ export function SenderCard({
           // The creature their bubble draws: the one seed rule (`markSeed`).
           face: { kind: 'creature', pseudonym: markSeed(who.name, `${chatGroupId}:${who.id}`) },
           name: who.name,
-          age: attendee?.age,
           // P-A: their deck card through the room's lens (the sheet draws only what the deck sent for them).
           ...(card && lensPerson
             ? lensView(

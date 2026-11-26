@@ -79,13 +79,13 @@ describe('mePreviewFrom', () => {
 })
 
 describe('the sheet', () => {
-  it('opens on Anonymous: the pseudonym, "Anonymous · 27", and shows nothing of you', async () => {
+  it('opens on Anonymous: the pseudonym, "Anonymous" with no age (D-030), and shows nothing of you', async () => {
     await open()
     expect(screen.getByText('Velvet Otter')).toBeTruthy()
-    expect(screen.getByText('Anonymous · 27')).toBeTruthy()
+    expect(screen.getByTestId('see-as-card-meta', { includeHiddenElements: true }).props.children).toBe('Anonymous')
     expect(screen.queryByText(/Marc-André|karaoke|Karaoke|designer/)).toBeNull()
-    // The server sends your city with an anonymous card: said, so the preview never understates what a room sees.
-    expect(screen.getByText(/your city/)).toBeTruthy()
+    // A room no longer sees your age or city before you show who you are (D-030), so the preview never says it does.
+    expect(screen.queryByText(/27|your city|your age|Toronto/)).toBeNull()
   })
 
   it('Shown: first name, "Shown to you · 27", bio, interests and work', async () => {

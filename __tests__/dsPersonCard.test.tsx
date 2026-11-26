@@ -49,8 +49,7 @@ const text = (t: string | RegExp) => screen.queryByText(t, { includeHiddenElemen
 const PRIYA: PersonCardPerson = {
   face: { kind: 'photo', uri: 'https://example.com/priya.jpg', name: 'Priya' },
   name: 'Priya',
-  age: 27,
-  meta: 'Anonymous · 27',
+  meta: 'Shown to you · 27',
   lead: [{ icon: 'users', label: 'Here for friends', lit: true }],
   common: { label: 'In common', items: ['Vinyl', 'Techno'] },
 }
@@ -86,8 +85,8 @@ describe('a · here now (P-A)', () => {
   it('the 72 face, the name and the meta line, read as one head', async () => {
     await draw()
     expect(flat('p-face')).toMatchObject({ width: 72, height: 72 })
-    expect(screen.getByLabelText('Priya, Anonymous, 27')).toBeTruthy()
-    expect(text('Anonymous · 27')).toBeTruthy()
+    expect(screen.getByLabelText('Priya, Shown to you, 27')).toBeTruthy()
+    expect(text('Shown to you · 27')).toBeTruthy()
   })
 
   it('the lead pills and In common, the shared ones said as shared', async () => {
@@ -219,7 +218,7 @@ describe('the variants', () => {
     await draw({ variant: 'was' })
     expect(screen.queryByRole('button', { name: /Wave/ })).toBeNull()
     expect(screen.queryByRole('button', { name: /^Like/ })).toBeNull()
-    expect(screen.getByLabelText('Priya, Anonymous, 27, was here')).toBeTruthy()
+    expect(screen.getByLabelText('Priya, Shown to you, 27, was here')).toBeTruthy()
   })
 
   it('b · was here and waved at you: Wave back still answers it until the room closes', async () => {
@@ -249,9 +248,9 @@ describe('the variants', () => {
 
   it('matched and friend: the head says who they are to you, and P-A draws no presence line', async () => {
     await draw({ variant: 'matched' })
-    expect(screen.getByLabelText('Priya, Anonymous, 27')).toBeTruthy()
+    expect(screen.getByLabelText('Priya, Shown to you, 27')).toBeTruthy()
     await draw({ variant: 'friend', here: true })
-    expect(screen.getByLabelText('Priya, Anonymous, 27, friend')).toBeTruthy()
+    expect(screen.getByLabelText('Priya, Shown to you, 27, friend')).toBeTruthy()
   })
 
   it('f · friend: “Friend”, no Like, Message opens your chat', async () => {
@@ -272,10 +271,10 @@ describe('the variants', () => {
     expect(onClose).toHaveBeenCalledTimes(1)
   })
 
-  it('h · thin: the pseudonym, age and city; Message and ⋯; never why', async () => {
-    await draw({ variant: 'thin', person: { face: { kind: 'creature', pseudonym: 'Cosmic Panda' }, name: 'Cosmic Panda', age: 27, city: 'Bengaluru', lead: [{ icon: 'users', label: 'x', lit: true }], common: { label: 'In common', items: ['y'] }, tonight: { question: 'q', answer: 'z' } } })
+  it('h · thin: the pseudonym and its meta line; Message and ⋯; never why', async () => {
+    await draw({ variant: 'thin', person: { face: { kind: 'creature', pseudonym: 'Cosmic Panda' }, name: 'Cosmic Panda', meta: 'Anonymous', lead: [{ icon: 'users', label: 'x', lit: true }], common: { label: 'In common', items: ['y'] }, tonight: { question: 'q', answer: 'z' } } })
     expect(text('z')).toBeNull()
-    expect(text('27 · Bengaluru')).toBeTruthy()
+    expect(text('Anonymous')).toBeTruthy()
     expect(text('x')).toBeNull()
     expect(text('y')).toBeNull()
     expect(screen.queryByRole('button', { name: 'Like' })).toBeNull()
@@ -330,7 +329,7 @@ it('<PersonCard> presents it in the sheet, with no title of its own', async () =
   )
   await act(async () => {})
   expect(screen.getByTestId('s-modal', { includeHiddenElements: true }).props.visible).toBe(true)
-  expect(screen.getByLabelText('Priya, Anonymous, 27')).toBeTruthy()
+  expect(screen.getByLabelText('Priya, Shown to you, 27')).toBeTruthy()
 })
 
 it('<PersonCard> sends a screen reader to the person, not the handle, as it opens', async () => {

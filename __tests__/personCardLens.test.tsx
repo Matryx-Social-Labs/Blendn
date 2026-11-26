@@ -31,7 +31,6 @@ const work = { key: 'work', question: 'What are you working on?' }
 const bison = (lens: { key: string; question: string | null } | null = work, extra: Partial<typeof deck> = {}): PersonCardPerson => ({
   face: { kind: 'creature', pseudonym: 'Gentle Bison' },
   name: 'Gentle Bison',
-  age: 31,
   ...lensView({ ...deck, ...extra }, lens, { title: 'Junction Tech Mixer: Founders, Designers & the Curious' }, false),
 })
 const q = (id: string) => screen.queryByTestId(id, { includeHiddenElements: true })
@@ -57,7 +56,7 @@ describe('the sheet, through the work lens', () => {
     await draw(bison())
     const t = tree()
     const at = (x: string) => t.indexOf(x)
-    const seq = ['In the room at Junction', 'Gentle Bison', 'Anonymous · 31', 'Product design', 'Here to hire', 'What are you working on?', 'A map of every quiet café', 'In common', 'Cycling', 'Wave', 'Message']
+    const seq = ['In the room at Junction', 'Gentle Bison', 'Anonymous', 'Product design', 'Here to hire', 'What are you working on?', 'A map of every quiet café', 'In common', 'Cycling', 'Wave', 'Message']
     const idx = seq.map(at)
     expect(idx.every((i) => i >= 0)).toBe(true)
     expect([...idx].sort((a, b) => a - b)).toEqual(idx)
@@ -127,7 +126,7 @@ describe('anonymity on the sheet', () => {
   it('shows a creature and the pseudonym, never the photo or a real name, while anonymous', async () => {
     await draw(bison())
     expect(tree()).not.toContain('"uri"')
-    expect(screen.getByText('Anonymous · 31')).toBeTruthy()
+    expect(screen.getByText('Anonymous')).toBeTruthy()
   })
 })
 
@@ -138,17 +137,16 @@ describe('state 1 A (SCRUM-1042): a venue night, anonymous, nothing in common', 
   const owl = (extra: object = {}): PersonCardPerson => ({
     face: { kind: 'creature', pseudonym: 'Fierce Owl' },
     name: 'Fierce Owl',
-    age: 31,
     ...lensView({ ...deck, ...empty, arrivedAt: new Date(at - 40 * 60_000).toISOString(), ...extra }, venue, { title: 'Live at Counter Kitchen', venueName: 'Counter Kitchen' }, false, at),
   })
 
   it('the time here joins the meta line, and the openers are chips over the actions', async () => {
     const onOpener = jest.fn()
     await draw(owl(), { onOpener })
-    expect(screen.getByText('Anonymous · 31 · Here 40 min')).toBeTruthy()
+    expect(screen.getByText('Anonymous · Here 40 min')).toBeTruthy()
     expect(screen.getByText('Nothing in common yet. Start with tonight:')).toBeTruthy()
     const t = tree()
-    const seq = ['At Counter Kitchen', 'Fierce Owl', 'Anonymous · 31 · Here 40 min', 'First time here?', 'What’s good here?', 'Who are you here with?', 'Wave', 'Message']
+    const seq = ['At Counter Kitchen', 'Fierce Owl', 'Anonymous · Here 40 min', 'First time here?', 'What’s good here?', 'Who are you here with?', 'Wave', 'Message']
     const idx = seq.map((x) => t.indexOf(x))
     expect(idx.every((i) => i >= 0)).toBe(true)
     expect([...idx].sort((a, b) => a - b)).toEqual(idx)

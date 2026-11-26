@@ -1247,7 +1247,6 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
         person={{
           face: cardPerson ? faceOf(cardPerson) : personFace({ named: false, name: card?.name ?? '' }),
           name: cardPerson?.name ?? card?.name ?? '',
-          age: cardPerson?.age,
           // P-A: their deck card through the room's lens; a photo arrives only once they have shown you who they are.
           ...(cardPerson ? lensView(cardPerson, room.lens, room.event, !!cardPerson.photo, now) : {}),
           shared: cardPerson?.photo && sharedLine?.id === cardPerson.id ? sharedLine.line : null,

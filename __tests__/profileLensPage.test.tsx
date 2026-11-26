@@ -119,13 +119,13 @@ beforeEach(() => {
   handRoomPerson('nobody', card())
 })
 
-it('anonymous: the centred hero says Anonymous · 31, then the lens blocks in order, and the dock is Wave and Message', async () => {
+it('anonymous: the centred hero says Anonymous (no age, D-030), then the lens blocks in order, and the dock is Wave and Message', async () => {
   handRoomPerson('rh_bison', card())
   await open(ANON)
   expect(screen.getByTestId('profile-lens-hero')).toBeTruthy()
-  expect(screen.getByText('Anonymous · 31')).toBeTruthy()
+  expect(screen.getByText('Anonymous')).toBeTruthy()
   const t = tree()
-  const seq = ['Gentle Bison', 'Anonymous · 31', 'Product design', 'Here to hire', 'What are you working on?', 'A map of every quiet café in Toronto', 'In common', 'Cycling', 'Wave', 'Message']
+  const seq = ['Gentle Bison', 'Anonymous', 'Product design', 'Here to hire', 'What are you working on?', 'A map of every quiet café in Toronto', 'In common', 'Cycling', 'Wave', 'Message']
   const idx = seq.map((x) => t.indexOf(x))
   expect(idx.every((i) => i >= 0)).toBe(true)
   expect([...idx].sort((a, b) => a - b)).toEqual(idx)
@@ -315,9 +315,11 @@ describe('Wave dock A on the page, from the room (SCRUM-1042)', () => {
 })
 
 it('outside a room, or with no lens anywhere, it is the profile page it always was', async () => {
-  await open({ ...ANON, tonight: undefined }, {}, 'Gentle Bison, 31')
+  await open({ ...ANON, tonight: undefined })
   expect(screen.queryByTestId('profile-lens-hero')).toBeNull()
-  expect(screen.getByText('Gentle Bison, 31')).toBeTruthy()
+  // The pseudonym alone: no age before a reveal (D-030).
+  expect(screen.getByText('Gentle Bison')).toBeTruthy()
+  expect(screen.queryByText('Gentle Bison, 31')).toBeNull()
 })
 
 describe('state 1 A (SCRUM-1042): a venue night, anonymous, nothing in common', () => {
@@ -332,7 +334,7 @@ describe('state 1 A (SCRUM-1042): a venue night, anonymous, nothing in common', 
     handRoomPerson('rh_bison', venueCard())
     await open(VENUE, { pseudonym: 'Fierce Owl', roomSeed: 'e1:rh_bison' }, 'Fierce Owl')
     const t = tree()
-    const seq = ['Fierce Owl', 'Anonymous · 31', 'At Counter Kitchen', 'Here 40 min', 'Nothing on your profiles in common yet.', 'Start with tonight instead.', 'First time here?', 'What’s good here?', 'Who are you here with?', 'An opener goes into Message.', 'profile-wave']
+    const seq = ['Fierce Owl', 'Anonymous', 'At Counter Kitchen', 'Here 40 min', 'Nothing on your profiles in common yet.', 'Start with tonight instead.', 'First time here?', 'What’s good here?', 'Who are you here with?', 'An opener goes into Message.', 'profile-wave']
     const idx = seq.map((x) => t.indexOf(x))
     expect(seq.filter((_, i) => idx[i] < 0)).toEqual([])
     expect([...idx].sort((a, b) => a - b)).toEqual(idx)
