@@ -1,5 +1,6 @@
 import type { MapRef } from '@maplibre/maplibre-react-native'
 import { useEffect, useRef, useState, type RefObject } from 'react'
+import { useWindowDimensions } from 'react-native'
 
 import { BUILDING_SEARCH_PX, LIGHT_MIN_ZOOM, lightCandidates, lightSignature, litPlaceFor, type Bounds, type Pin } from '../../lib/homeMap'
 import { Logger } from '../../lib/logger'
@@ -25,17 +26,15 @@ import {
   type LngLat,
 } from '../../lib/mapLit'
 import { BUILDING_LAYER_ID, OWN_BUILDINGS_LAYER_ID } from '../../lib/mapStyleEmber'
-import { edgeMarker, staleCalloutBox } from '../../lib/mapPresence'
+import { staleCalloutBox } from '../../lib/mapPresence'
 import type { DistanceReading } from '../../lib/placesPane'
 import { MAP_THEME } from '../../lib/mapTheme'
-import { SIZE, SPACE } from '../../lib/design/tokens'
+import { SPACE } from '../../lib/design/tokens'
 
 export type Segment = 'events' | 'places'
 export type Collection<F> = { type: 'FeatureCollection'; features: F[] }
 /** A name above a lit roof. */
 /** `count`: the events the lit place stands for (several at one venue: its name and the count, pulse-map 12 A). */
-/** The room an edge marker may take (its widest, and its height with air): names keep out of it. */
-const EDGE_BLOCK = { width: MAP_THEME.chip.maxWidthPx, height: SIZE.targetIos }
 
 export type Chip = { id: string; kind: Pin['kind']; live: boolean; title: string; line: string; speech: string; at: LngLat; lift: number; count: number }
 /** A building in our tiles lit through feature-state: its id, and the pin it stands for (a tap on it opens that). */
@@ -114,8 +113,11 @@ export function useMapLighting({
   visible?: { top: number; bottom: number }
   /** Where the person is, so no name covers their dot. */
   userAt?: LngLat | null
-  /** The lap's venue and the box its edge marker keeps to (`EdgeMarker`): no name is drawn under the marker. */
-  edge?: { at: LngLat; box: Box } | null
+  /**
+   * The edge marker as drawn (`EdgeMarker`'s `onPlaced`): no name is drawn under it. Its real box, not a guessed size
+   * (SCRUM-1096: at AX5 the box was too short for a guessed 44 pt marker, so nothing was kept off the 30 pt one drawn).
+   */
+  edge?: Box | null
   /** The stale callout while your dot is grey (`StaleCallout`), its room and the side it hangs: no name is drawn under it. */
   stale?: { room: { width: number; height: number; gap: number }; below: boolean } | null
   /** A distance the screen already shows for one event (the lead card's): its chip says the same number. */
@@ -124,6 +126,8 @@ export function useMapLighting({
   reading?: DistanceReading
 }): { lit: Lit; onFrame: () => void; relight: () => void; passes: number } {
   const [litFor, setLitFor] = useState<{ segment: Segment; lit: Lit; key: string }>({ segment, lit: NO_LIT, key: '' })
+  // The OS text size: a chip's words grow with it, so its box does (SCRUM-1096).
+  const { fontScale } = useWindowDimensions()
   const needsLight = useRef(false)
   const lastLit = useRef('')
   const pass = useRef(0)
@@ -160,7 +164,7 @@ export function useMapLighting({
     const tiles = featureIds ? 'own' : 'openfreemap'
     // The lookup reads the layer the buildings are drawn in: ours has its own id, so OpenFreeMap's merged ids never come back here.
     const layer = featureIds ? OWN_BUILDINGS_LAYER_ID : BUILDING_LAYER_ID
-    const signature = `${tiles}|${lightSignature(candidates, { centre: v.centre, zoom: v.zoom, pitch: v.pitch })}|${visible ? `${visible.top}:${visible.bottom}` : ''}|${userAt ? userAt.join(',') : ''}|${edge ? `${edge.at.join(',')}@${Object.values(edge.box).join(',')}` : ''}|${stale ? `stale:${stale.below}` : ''}|${knownDistance ? `${knownDistance.id}=${knownDistance.km}` : ''}|${reading}`
+    const signature = `${tiles}|${lightSignature(candidates, { centre: v.centre, zoom: v.zoom, pitch: v.pitch })}|${visible ? `${visible.top}:${visible.bottom}` : ''}|${userAt ? userAt.join(',') : ''}|${edge ? Object.values(edge).join(',') : ''}|${stale ? `stale:${stale.below}` : ''}|${knownDistance ? `${knownDistance.id}=${knownDistance.km}` : ''}|${reading}|${fontScale}`
     if (signature === lastLit.current) {
       setPasses((n) => n + 1)
       return
@@ -242,16 +246,14 @@ export function useMapLighting({
     if (visible) {
       const projected = await Promise.all(nearest.map((c) => m.project(c.at).then((s) => s as [number, number]).catch(() => null)))
       const dot = userAt ? await m.project(userAt).then((s) => s as [number, number]).catch(() => null) : null
-      const edgeAt = edge ? await m.project(edge.at).then((s) => s as [number, number]).catch(() => null) : null
       if (token !== pass.current) return
       if (projected.every((s) => s !== null)) {
         const zone = { left: SIDE_GUTTER, right: size.width - SIDE_GUTTER, top: visible.top, bottom: visible.bottom }
         const blocked = dot ? [{ left: dot[0] - USER_DOT_HALF_PX, right: dot[0] + USER_DOT_HALF_PX, top: dot[1] - USER_DOT_HALF_PX, bottom: dot[1] + USER_DOT_HALF_PX }] : []
-        const marker = edgeAt ? edgeMarker(edgeAt, edge?.box ?? zone, EDGE_BLOCK) : null
-        if (marker) blocked.push({ left: marker.left, right: marker.left + EDGE_BLOCK.width, top: marker.top, bottom: marker.top + EDGE_BLOCK.height })
+        if (edge) blocked.push(edge)
         if (stale && dot) blocked.push(staleCalloutBox(dot, stale.room, stale.below))
         chips = pickChips(
-          nearest.map((c, i) => ({ item: c, box: chipBox(projected[i] as [number, number], c.lift, chipSizePx(c)) })),
+          nearest.map((c, i) => ({ item: c, box: chipBox(projected[i] as [number, number], c.lift, chipSizePx(c, fontScale)) })),
           zone,
           blocked,
           MAP_THEME.chip.max

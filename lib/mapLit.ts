@@ -19,7 +19,7 @@
  * `MAP_THEME`. Nothing here knows where anybody may check in
  * (`__tests__/homeMap.test.ts` reads it to be sure).
  */
-import { DURATION, REDUCE_MOTION } from './design/tokens'
+import { DURATION, MAX_FONT_SCALE, REDUCE_MOTION } from './design/tokens'
 import { liveNowLabel, type LiveNow } from './home'
 import { featureIdOf } from './mapStyleEmber'
 import { MAP_THEME } from './mapTheme'
@@ -214,18 +214,24 @@ const CHIP_PAD_PX = 2 * 8 + 2
 const CHIP_GLYPH_PX = 16 + 4
 /** A count badge (several events at one venue) and its gap: `CountBadge`'s 18 pt minimum plus 6. */
 const CHIP_COUNT_PX = 18 + 6
-/** Two caption lines and the 4 pt padding above and below; the stem under it is `STEM_PX`. */
-const CHIP_BODY_PX = 2 * 16 + 2 * 4
+/** Two caption lines, and the 4 pt padding above and below; the stem under it is `STEM_PX`. */
+const CHIP_LINES_PX = 2 * 16
+const CHIP_PAD_Y_PX = 2 * 4
 const CHIP_STEM_PX = 12
 /** Air kept between two chips, and between a chip and anything else on the map. */
 export const CHIP_AIR_PX = 6
 
-/** The size a chip will draw at, from its words: the name and the line, the glyph a venue has, never past `maxWidthPx`. */
-export function chipSizePx(chip: { title: string; line: string; kind: string; count?: number }): { width: number; height: number } {
-  const title = chip.title.length * CHIP_CHAR_PX + ((chip.count ?? 1) > 1 ? CHIP_COUNT_PX : 0)
-  const text = Math.max(title, chip.line.length * CHIP_CHAR_PX)
+/**
+ * The size a chip will draw at, from its words: the name and the line, the glyph a venue has, never past `maxWidthPx`.
+ * `fontScale` is the OS text size: the chip's captions grow with it up to their cap (SCRUM-1096: at AX5 a chip drew 8 pt
+ * taller than this said, under the edge marker).
+ */
+export function chipSizePx(chip: { title: string; line: string; kind: string; count?: number }, fontScale: number): { width: number; height: number } {
+  const scale = Math.min(Math.max(fontScale, 1), MAX_FONT_SCALE.caption)
+  const title = chip.title.length * CHIP_CHAR_PX * scale + ((chip.count ?? 1) > 1 ? CHIP_COUNT_PX : 0)
+  const text = Math.max(title, chip.line.length * CHIP_CHAR_PX * scale)
   const width = Math.min(MAP_THEME.chip.maxWidthPx, text + CHIP_PAD_PX + (chip.kind === 'venue' ? CHIP_GLYPH_PX : 0))
-  return { width: Math.ceil(width), height: CHIP_BODY_PX + CHIP_STEM_PX }
+  return { width: Math.ceil(width), height: Math.ceil(CHIP_LINES_PX * scale) + CHIP_PAD_Y_PX + CHIP_STEM_PX }
 }
 
 /** Where a chip draws: centred on the roof's point, standing `lift` above it (the marker's bottom anchor and offset). */
