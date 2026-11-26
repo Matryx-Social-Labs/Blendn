@@ -195,16 +195,16 @@ describe('DS-13 (B-T1, B-T2, B-T3): the venue named once, the lit pick, the lit 
     expect(JSON.stringify(screen.getByTestId('g-hold').props.style)).not.toContain(COLOR.selectionEmberFill)
   })
 
-  it('no “Blendn+” anywhere on the sheet, locked or not', async () => {
-    await render(sheet({ stay: 'locked' }))
-    expect(allText()).not.toMatch(/Blendn\+/)
+  it('no Blend’n+ anywhere on the sheet, in either spelling (launch gate 5)', async () => {
+    await render(sheet())
+    expect(allText()).not.toMatch(/Blend’?n\+/)
   })
 
   it('at AX XXXL every line on the sheet is capped', async () => {
     const window = Dimensions.get('window')
     try {
       await act(async () => Dimensions.set({ window: { ...window, fontScale: AX_XXXL }, screen: { ...window, fontScale: AX_XXXL } }))
-      await render(sheet({ stay: 'locked' }))
+      await render(sheet())
       expect(uncapped(screen.toJSON())).toEqual([])
     } finally {
       Dimensions.set({ window, screen: window })
