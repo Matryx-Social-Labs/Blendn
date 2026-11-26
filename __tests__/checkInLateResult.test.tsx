@@ -50,6 +50,8 @@ let off: () => void
 beforeEach(() => {
   jest.useFakeTimers({ doNotFake: ['setImmediate', 'nextTick'] })
   jest.clearAllMocks()
+  // clearMocks keeps a once-value a test left unconsumed: none may leak into the next.
+  api.checkIn.mockReset()
   mockSession = 1
   heard = jest.fn()
   // The other door and the tab bar: anything listening for "check-in state changed".
@@ -80,6 +82,14 @@ describe('submitCheckIn, after it stopped waiting', () => {
     expect(api.forgetEvent.mock.calls.map((c) => c[0])).toEqual(['e1', 'e0'])
   })
 
+  it('"already checked in" landing late is a yes too, as it is on time', async () => {
+    const request = await timedOut()
+    request.resolve({ success: false, errorCode: 'ALREADY_CHECKED_IN', error: 'x' })
+    await settle()
+    expect(heard).toHaveBeenCalledTimes(1)
+    expect(api.forgetEvent).toHaveBeenCalledWith('e1')
+  })
+
   it('a refusal that lands late changes nothing (control)', async () => {
     const request = await timedOut()
     request.resolve({ success: false, errorCode: 'OUT_OF_RANGE', error: '120 m outside' })
@@ -88,22 +98,16 @@ describe('submitCheckIn, after it stopped waiting', () => {
     expect(api.forgetActiveCheckins).not.toHaveBeenCalled()
   })
 
+  // An unhandled rejection fails the test by itself (jest-circus): without the catch this one does.
   it('a request that throws late is logged, changes nothing, and leaves no unhandled rejection', async () => {
-    const unhandled = jest.fn()
-    process.on('unhandledRejection', unhandled)
-    try {
-      const request = await timedOut()
-      request.reject(new Error('queue gone'))
-      await settle()
-      await settle()
-      expect(unhandled).not.toHaveBeenCalled()
-      expect(heard).not.toHaveBeenCalled()
-      expect(Logger.error).toHaveBeenCalledWith('events', 'checkin:late:failed', expect.objectContaining({ eventId: 'e1' }))
-    } finally {
-      process.off('unhandledRejection', unhandled)
-    }
+    const request = await timedOut()
+    request.reject(new Error('queue gone'))
+    await settle()
+    expect(heard).not.toHaveBeenCalled()
+    expect(Logger.error).toHaveBeenCalledWith('events', 'checkin:late:failed', expect.objectContaining({ eventId: 'e1' }))
   })
 
+  // A control on dev (nothing reconciled then); it bites once the session check is taken out.
   it('a success that lands after a sign-out (or another sign-in) touches nothing of the next session', async () => {
     const request = await timedOut()
     mockSession = 2
@@ -111,6 +115,7 @@ describe('submitCheckIn, after it stopped waiting', () => {
     await settle()
     expect(heard).not.toHaveBeenCalled()
     expect(api.forgetActiveCheckins).not.toHaveBeenCalled()
+    expect(api.forgetEvent).not.toHaveBeenCalled()
   })
 })
 
@@ -167,6 +172,8 @@ describe('the door, around a late answer', () => {
     first.resolve(yes)
     await settle()
     expect(heard).toHaveBeenCalledTimes(1)
+    // The door that left plays nothing.
+    expect(props.onCheckedIn).not.toHaveBeenCalled()
   })
 
   it('Retry got in first, then the first request lands too: one pour, one check-in, still in', async () => {
@@ -182,6 +189,8 @@ describe('the door, around a late answer', () => {
     expect(heard).toHaveBeenCalledTimes(2)
     expect(props.onCheckedIn).toHaveBeenCalledTimes(1)
     expect(flow.pours).toBe(1)
+    // No tray comes back over the pour (only the timeout's was ever shown), and the hold stays full under "You're in".
+    expect(props.showTray).toHaveBeenCalledTimes(1)
     expect(flow.checkingIn).toBe(true)
   })
 

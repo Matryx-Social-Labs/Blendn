@@ -125,11 +125,13 @@ export async function submitCheckIn(
     /*
      * Nothing aborts the request, and a queued one is sent after this: a yes that lands later must still bring both doors
      * to "in", even after Cancel (a re-read on Cancel runs before it lands; audit client-feedback Verification 3). Only in
-     * the session that sent it. A late no changes nothing: the tray already said we stopped waiting.
+     * the session that sent it. "Already checked in" is a yes here as on time. Any other late no changes nothing: the
+     * person is left at the door they see, which is the true state.
      */
     request
       .then((late) => {
-        if (late.success && session === currentSession()) checkInChanged(eventId, Array.isArray(late.data?.left) ? late.data.left : [])
+        const isIn = late.success || late.errorCode === CHECK_IN_CODES.ALREADY_CHECKED_IN
+        if (isIn && session === currentSession()) checkInChanged(eventId, Array.isArray(late.data?.left) ? late.data.left : [])
       })
       .catch((error: unknown) => Logger.error('events', 'checkin:late:failed', { eventId, error }))
     return { kind: 'timeout' }
