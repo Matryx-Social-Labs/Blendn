@@ -339,10 +339,10 @@ export const uploadPhoto = async (
 export const PHOTO_DID_NOT_FINISH = 'That photo did not finish uploading. Try again.'
 
 /**
- * A DM photo (R9, ROUND3 D 5.9). Re-encoded on the phone first, as profile
+ * A Lobby board photo (DM photos are off at 1.0, D-024). Re-encoded on the phone first, as profile
  * photos are: `processImage` writes a fresh JPEG, which carries none of the
  * original's metadata, so no location leaves the phone. Then uploaded to the
- * chat folder with its progress, for the bubble's determinate ring.
+ * chat folder with its progress, for the compose sheet's determinate ring.
  */
 export const uploadChatPhoto = async (
   uri: string,

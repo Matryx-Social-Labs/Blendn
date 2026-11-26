@@ -3792,9 +3792,8 @@ class ApiClientClass {
   async sendPrivateMessage(
     conversationId: string,
     data: {
+      /** Text only: photos in a DM are off at 1.0 (D-024). */
       text?: string
-      mediaUrl?: string
-      mediaType?: 'image' | 'video'
       /** The message this one replies to (SCRUM-409). */
       replyToId?: string
       /** This send's own id: a retry with it returns the first write (SCRUM-410). */

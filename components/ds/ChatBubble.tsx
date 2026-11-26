@@ -80,8 +80,8 @@ export type ChatBubbleProps = {
   first?: boolean
   last?: boolean
   text?: string
-  /** A photo message: tapping it opens the viewer from the bubble's frame. `progress` (0–1) while it uploads: a determinate ring, never a spinner (R3-D5 5.9). */
-  photo?: { uri: string; onPress: (from: Rect) => void; progress?: number }
+  /** A photo message: tapping it opens the viewer from the bubble's frame. */
+  photo?: { uri: string; onPress: (from: Rect) => void }
   replyTo?: { name: string; text: string; onPress?: () => void }
   reactions?: BubbleReaction[]
   onReactionPress?: (emoji: string) => void
@@ -492,10 +492,7 @@ function Message({
           </Text>
         </>
       ) : photo && !removed ? (
-        <View>
-          <Image source={{ uri: photo.uri }} style={styles.photo} contentFit="cover" accessible={false} />
-          {photo.progress !== undefined ? <UploadRing progress={photo.progress} /> : null}
-        </View>
+        <Image source={{ uri: photo.uri }} style={styles.photo} contentFit="cover" accessible={false} />
       ) : (
         <Text
           // Reading text grows to body's cap; a 32 pt emoji-only message is already large, so it stops at display's.
@@ -522,10 +519,10 @@ function Message({
 }
 
 /**
- * The upload's determinate ring over a 35% veil (R3-D5 5.9 #33): a fraction, read as a percentage. A photo message's, and the
- * onboarding photo tile's (`label`: what a screen reader says it is doing).
+ * The upload's determinate ring over a 35% veil (R3-D5 5.9 #33): a fraction, read as a percentage. The Lobby photo's and
+ * the onboarding photo tile's (`label`: what a screen reader says it is doing).
  */
-export function UploadRing({ progress, label = 'Sending photo' }: { progress: number; label?: string }) {
+export function UploadRing({ progress, label }: { progress: number; label: string }) {
   const r = (RING.size - RING.stroke) / 2
   const around = 2 * Math.PI * r
   const done = Math.max(0, Math.min(1, progress))
