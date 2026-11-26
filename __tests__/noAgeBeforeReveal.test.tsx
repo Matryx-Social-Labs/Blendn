@@ -47,6 +47,8 @@ import UserProfile from '../app/user/[id]'
 
 const api = apiClient as jest.Mocked<typeof apiClient>
 const LEAKY = { id: 'rh_bison', name: 'Gentle Bison', age: 31, location: 'Toronto' }
+/** A deck card that carries an age, as the roster sends today. */
+const DECK = { workField: null, sharedIntents: [], interests: [], overlaps: [], badges: [], age: 31 }
 const tree = () => JSON.stringify(screen.toJSON())
 
 const open = async (ready: RegExp) => {
@@ -67,12 +69,12 @@ describe('the card meta line (`metaLine`, every person sheet and the lens page)'
   it('an unrevealed person: "Anonymous", never their age, even when the deck sent one', () => {
     expect(metaLine(false, 31)).toBe('Anonymous')
     expect(metaLine(false, 31, 'Here 40 min')).toBe('Anonymous · Here 40 min')
-    expect(lensView({ workField: null, age: 31 }, null, null, false).meta).toBe('Anonymous')
+    expect(lensView(DECK, null, null, false).meta).toBe('Anonymous')
   })
 
   it('a person shown to you keeps the age', () => {
     expect(metaLine(true, 31, 'Here 40 min')).toBe('Shown to you · 31 · Here 40 min')
-    expect(lensView({ workField: null, age: 31 }, null, null, true).meta).toBe('Shown to you · 31')
+    expect(lensView(DECK, null, null, true).meta).toBe('Shown to you · 31')
   })
 })
 
