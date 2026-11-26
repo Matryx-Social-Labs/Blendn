@@ -45,7 +45,7 @@ import { join } from 'path'
 
 process.env.EXPO_PUBLIC_API_BASE_URL = 'https://api.test'
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const { apiClient, nextSession, TokenStorage } = require('../lib/apiClient') as typeof import('../lib/apiClient')
+const { apiClient, nextSession, REFRESH_DEADLINE_MS, TokenStorage } = require('../lib/apiClient') as typeof import('../lib/apiClient')
 
 const jwt = (expiresInSeconds: number) => {
   const payload = Buffer.from(JSON.stringify({ exp: Math.floor(Date.now() / 1000) + expiresInSeconds })).toString('base64url')
@@ -220,6 +220,42 @@ describe('around the refresh', () => {
 
     expect(outcome).toBe('failed')
     expect(seen.filter((u) => u === '/api/mobile/auth/refresh')).toHaveLength(1)
+  })
+
+  /*
+   * SCRUM-1187: one cold start, one refresh. The launch's session read refreshes first (the token has expired), and that
+   * refresh fails; the read itself then takes up to its own deadline. The launch path asked for another refresh once the
+   * failure was 10 s old, shorter than a refresh may take, so a slow venue network sent a second (and the background retry a
+   * third). Asked within REFRESH_DEADLINE_MS of the failure it answers 'failed' without a POST.
+   */
+  it.each([
+    ['inside the window: the launch path sends no second refresh', REFRESH_DEADLINE_MS - 1, 1],
+    ['negative control, past the window: it asks the server again', REFRESH_DEADLINE_MS + 1, 2],
+  ])('one cold start, one refresh (%s)', async (_, readTakesMs, refreshes) => {
+    // The background retry (2 s after a failure) is not the launch path's: held so it cannot land inside this count.
+    jest.useFakeTimers({ doNotFake: ['Date', 'nextTick', 'setImmediate', 'queueMicrotask'] })
+    try {
+      await TokenStorage.setTokens(jwt(10), 'refresh-1')
+      const seen: string[] = []
+      global.fetch = jest.fn(async (input: RequestInfo | URL) => {
+        const url = String(input).replace(/^https?:\/\/[^/]+/, '')
+        seen.push(url)
+        if (url === '/api/mobile/auth/refresh') return json(503, { success: false })
+        // The session read goes quiet until its deadline: a timeout, which is not retried.
+        clock += readTakesMs
+        throw Object.assign(new Error('Request timed out'), { name: 'AbortError' })
+      }) as typeof fetch
+
+      const session = await apiClient.getSession()
+      const outcome = await apiClient.refreshSessionOutcome()
+
+      expect(session.success).toBe(false)
+      expect(seen.filter((u) => u === '/api/mobile/auth/refresh')).toHaveLength(refreshes)
+      if (refreshes === 1) expect(outcome).toBe('failed')
+    } finally {
+      jest.clearAllTimers()
+      jest.useRealTimers()
+    }
   })
 
   it('a request held up by the 30 s guard still sends the token the other request just fetched', async () => {

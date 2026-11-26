@@ -12,6 +12,8 @@ jest.mock('../lib/apiClient', () => ({
     getSession: jest.fn(),
     refreshSessionOutcome: jest.fn(),
     refreshSession: jest.fn(),
+    signOut: jest.fn().mockResolvedValue({ success: true }),
+    signInWithEmail: jest.fn(),
   },
   TokenStorage: {
     getAccessToken: jest.fn(),
@@ -57,13 +59,33 @@ const comeToForeground = () => {
 import { apiClient, TokenStorage } from '../lib/apiClient'
 import { queryCache } from '../lib/queryCache'
 import { markSessionExpired } from '../lib/sessionEvents'
-import { cleanupAuth, reinitializeAuth, retryAuth } from '../lib/useAuth'
+import { cleanupAuth, getCurrentUser, reinitializeAuth, retryAuth, signInWithEmail, signOut } from '../lib/useAuth'
 
 const api = apiClient as jest.Mocked<typeof apiClient>
 const store = TokenStorage as jest.Mocked<typeof TokenStorage>
 
 const STORED = { id: 'u1', email: 'a@b.c', name: 'Asha' } as never
 const OFFLINE = { success: false, error: 'No internet connection. Check your network and try again.' }
+const TIMED_OUT = { success: false, error: 'This is taking too long. Check your connection and try again.' }
+const REFUSED = { success: false, error: 'Session expired. Please sign in again.' }
+
+/** Every mocked answer is already settled: one macrotask lets the launch's session check run to its end. */
+const settle = () => new Promise((resolve) => setTimeout(resolve, 0))
+/** Reads still out at the end of a test: answered then, so a failed test leaves no launch in flight for the next. */
+const outstanding: (() => void)[] = []
+/** A session read the test answers when it chooses: the check still out. */
+const held = <T,>() => {
+  let answer!: (value: T) => void
+  const promise = new Promise<T>((resolve) => (answer = resolve))
+  outstanding.push(() => answer(OFFLINE as T))
+  return { promise, answer }
+}
+afterEach(async () => {
+  outstanding.splice(0).forEach((answer) => answer())
+  await settle()
+})
+/** The launch's state, or 'waiting' while it is still on the logo. */
+const launch = () => Promise.race([reinitializeAuth(), settle().then(() => 'waiting' as const)])
 
 beforeEach(() => {
   jest.clearAllMocks()
@@ -82,10 +104,12 @@ describe('a launch that cannot reach the server', () => {
     store.getUser.mockResolvedValue(STORED)
 
     const state = await reinitializeAuth()
+    await settle()
 
     expect(state.user).toBe(STORED)
     expect(state.unreachable).toBe(false)
     expect(state.loading).toBe(false)
+    expect(await getCurrentUser()).toBe(STORED)
     expect(store.clearAll).not.toHaveBeenCalled()
     expect(markSessionExpired).not.toHaveBeenCalled()
   })
@@ -120,9 +144,10 @@ describe('a launch that cannot reach the server', () => {
     api.refreshSessionOutcome.mockResolvedValue('ok')
     store.getUser.mockResolvedValue(STORED)
 
-    const state = await reinitializeAuth()
+    await reinitializeAuth()
+    await settle()
 
-    expect(state.user).toBe(STORED)
+    expect(await getCurrentUser()).toBe(STORED)
     expect(store.clearAll).not.toHaveBeenCalled()
   })
 })
@@ -133,10 +158,10 @@ describe('a session the server refused', () => {
     api.refreshSessionOutcome.mockResolvedValue('rejected')
     store.getUser.mockResolvedValue(STORED)
 
-    const state = await reinitializeAuth()
+    await reinitializeAuth()
+    await settle()
 
-    expect(state.user).toBeNull()
-    expect(state.unreachable).toBe(false)
+    expect(await getCurrentUser()).toBeNull()
     expect(store.clearAll).toHaveBeenCalled()
     expect(markSessionExpired).toHaveBeenCalled()
   })
@@ -148,6 +173,7 @@ describe('a session the server refused', () => {
     store.getUser.mockResolvedValue(STORED)
 
     await reinitializeAuth()
+    await settle()
 
     expect(queryCache.get('private_messages_u1_c1')).toBeNull()
   })
@@ -156,10 +182,11 @@ describe('a session the server refused', () => {
     api.getSession.mockResolvedValue({ success: false, error: 'Session expired. Please sign in again.' } as never)
     store.accessTokenOrUnknown.mockResolvedValueOnce('access').mockResolvedValue(null)
 
-    const state = await reinitializeAuth()
+    await reinitializeAuth()
+    await settle()
 
     expect(api.refreshSessionOutcome).not.toHaveBeenCalled()
-    expect(state.user).toBeNull()
+    expect(await getCurrentUser()).toBeNull()
     expect(store.clearAll).toHaveBeenCalled()
   })
 })
@@ -173,11 +200,15 @@ describe('a launch whose keychain is locked', () => {
     store.accessTokenOrUnknown.mockResolvedValueOnce(undefined)
     store.refreshTokenOrUnknown.mockResolvedValueOnce(undefined)
     api.getSession.mockResolvedValue({ success: true, data: STORED } as never)
+    // A user stored from the last sign-in does not open the app past a keychain that cannot say whether the session is there.
+    store.getUser.mockResolvedValue(STORED)
 
     const first = await reinitializeAuth()
     expect(first.initialized).toBe(false)
     expect(first.user).toBeNull()
+    expect(first.loading).toBe(true)
     expect(api.getSession).not.toHaveBeenCalled()
+    expect(store.getUser).not.toHaveBeenCalled()
 
     comeToForeground()
     await new Promise((resolve) => setTimeout(resolve, 0))
@@ -197,10 +228,156 @@ describe('a launch whose keychain is locked', () => {
     api.refreshSessionOutcome.mockResolvedValue('failed')
     store.getUser.mockResolvedValue(STORED)
 
-    const state = await reinitializeAuth()
+    await reinitializeAuth()
+    await settle()
 
     expect(store.clearAll).not.toHaveBeenCalled()
     expect(markSessionExpired).not.toHaveBeenCalled()
-    expect(state.user).toBe(STORED)
+    expect(await getCurrentUser()).toBe(STORED)
+  })
+})
+
+/*
+ * SCRUM-1187: a returning person opens straight into the app. With a user stored from the last sign-in and a refresh token
+ * to renew the session, the launch signs in from them at once, and the session check runs behind it. Only the server
+ * refusing the session signs out; every answer that says nothing about it keeps the person signed in.
+ */
+describe('a stored sign-in opens the app before the session check answers (SCRUM-1187)', () => {
+  const SERVER = { id: 'u1', email: 'a@b.c', name: 'Asha R' } as never
+
+  beforeEach(() => store.getUser.mockResolvedValue(STORED))
+
+  it('is signed in as the stored user, off the logo, while the session read is still out', async () => {
+    api.getSession.mockReturnValue(held<unknown>().promise as never)
+
+    const state = await launch()
+
+    expect(state).not.toBe('waiting')
+    expect(state).toMatchObject({ user: STORED, loading: false, initialized: true, unreachable: false })
+    expect(store.clearAll).not.toHaveBeenCalled()
+  })
+
+  it("accepted: the server's copy of the user replaces the stored one when it lands", async () => {
+    const session = held<unknown>()
+    api.getSession.mockReturnValue(session.promise as never)
+    expect(await launch()).toMatchObject({ user: STORED, loading: false })
+
+    session.answer({ success: true, data: SERVER })
+    await settle()
+
+    expect(await getCurrentUser()).toBe(SERVER)
+    expect(store.setUser).toHaveBeenCalledWith(SERVER)
+    expect(markSessionExpired).not.toHaveBeenCalled()
+  })
+
+  it("rejected: signed out with the expiry notice once the server refuses the session, and by nothing else", async () => {
+    const session = held<unknown>()
+    api.getSession.mockReturnValue(session.promise as never)
+    api.refreshSessionOutcome.mockResolvedValue('rejected')
+    expect(await launch()).toMatchObject({ user: STORED, loading: false })
+    expect(store.clearAll).not.toHaveBeenCalled()
+
+    session.answer({ success: false, error: 'Unauthorized' })
+    await settle()
+
+    expect(await getCurrentUser()).toBeNull()
+    expect(markSessionExpired).toHaveBeenCalledTimes(1)
+    expect(store.clearAll).toHaveBeenCalledTimes(1)
+  })
+
+  it('rejected after a refresh that landed: a re-read the 401 path ended is a sign-out too', async () => {
+    api.getSession.mockResolvedValueOnce(TIMED_OUT as never).mockResolvedValueOnce(REFUSED as never)
+    api.refreshSessionOutcome.mockResolvedValue('ok')
+    // Read at the launch, before the refresh; after the re-read's 401 the client has dropped the tokens.
+    store.accessTokenOrUnknown.mockResolvedValueOnce('access').mockResolvedValueOnce('access').mockResolvedValue(null)
+
+    expect(await launch()).toMatchObject({ user: STORED, loading: false })
+    await settle()
+
+    expect(await getCurrentUser()).toBeNull()
+    expect(markSessionExpired).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([
+    ['a network error', OFFLINE],
+    ['a timeout', TIMED_OUT],
+  ])('%s: stays signed in as the stored user, signs nobody out, and asks once, not in a loop', async (_, failure) => {
+    jest.useFakeTimers()
+    try {
+      const session = held<unknown>()
+      api.getSession.mockReturnValueOnce(session.promise as never)
+      api.refreshSessionOutcome.mockResolvedValue('failed')
+      const opened = reinitializeAuth()
+      await jest.advanceTimersByTimeAsync(0)
+      expect(await opened).toMatchObject({ user: STORED, loading: false })
+
+      session.answer(failure)
+      await jest.advanceTimersByTimeAsync(10 * 60_000)
+
+      expect(await getCurrentUser()).toBe(STORED)
+      expect(store.clearAll).not.toHaveBeenCalled()
+      expect(markSessionExpired).not.toHaveBeenCalled()
+      expect(api.getSession).toHaveBeenCalledTimes(1)
+      expect(api.refreshSessionOutcome).toHaveBeenCalledTimes(1)
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
+  it('no stored user: waits on the session read as before, then says it cannot reach Blend’n', async () => {
+    store.getUser.mockResolvedValue(null)
+    const session = held<unknown>()
+    api.getSession.mockReturnValue(session.promise as never)
+    api.refreshSessionOutcome.mockResolvedValue('failed')
+
+    const opening = reinitializeAuth()
+    expect(await Promise.race([opening, settle().then(() => 'waiting')])).toBe('waiting')
+
+    session.answer(OFFLINE)
+    expect(await opening).toMatchObject({ user: null, unreachable: true, loading: false })
+    expect(store.clearAll).not.toHaveBeenCalled()
+  })
+
+  it('a stored user but no refresh token: no sign-in from it, the launch waits for the server as before', async () => {
+    store.refreshTokenOrUnknown.mockResolvedValue(null)
+    const session = held<unknown>()
+    api.getSession.mockReturnValue(session.promise as never)
+
+    const opening = reinitializeAuth()
+    expect(await Promise.race([opening, settle().then(() => 'waiting')])).toBe('waiting')
+
+    session.answer({ success: true, data: SERVER })
+    expect(await opening).toMatchObject({ user: SERVER, loading: false })
+  })
+
+  it('a sign-out while the check is out is not undone by its late answer', async () => {
+    const session = held<unknown>()
+    api.getSession.mockReturnValue(session.promise as never)
+    expect(await launch()).toMatchObject({ user: STORED })
+
+    await signOut()
+    session.answer({ success: true, data: SERVER })
+    await settle()
+
+    expect(await getCurrentUser()).toBeNull()
+    expect(store.setUser).not.toHaveBeenCalledWith(SERVER)
+  })
+
+  it("a late refusal of the last session does not sign out the account that signed in after it", async () => {
+    const OTHER = { id: 'u2', email: 'b@b.c', name: 'Bo' } as never
+    const session = held<unknown>()
+    api.getSession.mockReturnValue(session.promise as never)
+    api.refreshSessionOutcome.mockResolvedValue('rejected')
+    api.signInWithEmail.mockResolvedValue({ success: true, data: { user: OTHER } } as never)
+    expect(await launch()).toMatchObject({ user: STORED })
+
+    await signOut()
+    await signInWithEmail('b@b.c', 'not-a-real-password')
+    session.answer({ success: false, error: 'Unauthorized' })
+    await settle()
+
+    expect(await getCurrentUser()).toBe(OTHER)
+    expect(markSessionExpired).not.toHaveBeenCalled()
+    expect(store.clearAll).not.toHaveBeenCalled()
   })
 })
