@@ -87,6 +87,8 @@ describe('Nights out chooses its state (Me 04 · 05 · 06)', () => {
   })
   it('reads the total as the server’s count of nights, every one of them free (launch gate 5)', () => {
     expect(nightsCounts({ pagination: { totalCount: 48 } })).toEqual({ total: 48, running: 0 })
+    // An old server still sends `lockedCount`: nothing is held back any more, so it adds nothing to the total.
+    expect(nightsCounts({ pagination: { totalCount: 3 }, lockedCount: 45 } as never)).toEqual({ total: 3, running: 0 })
     expect(nightsCounts({})).toEqual({ total: null, running: 0 })
     expect(nightsCounts(null)).toEqual({ total: null, running: 0 })
   })

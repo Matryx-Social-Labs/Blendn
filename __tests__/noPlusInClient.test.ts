@@ -5,7 +5,7 @@
  * `lib/purchases.ts` (the RevenueCat SDK wrapper) stays until task 04's native rebuild, so it is not listed here.
  */
 import { readdirSync, readFileSync, statSync } from 'fs'
-import { basename, join } from 'path'
+import { join } from 'path'
 
 const root = join(__dirname, '..')
 
@@ -24,8 +24,16 @@ const sources = ['app', 'components', 'lib'].flatMap((dir) => walk(dir))
 const PLUS_IMPORT =
   /(?:from\s+|import\(\s*|require\(\s*)['"](?:\.{1,2}|@)\/(?:[^'"]*\/)?(?:paywall|paywallPolicy|plus|plusManage|mePlus|useMonthlyPrice|plus\/[^'"]+)['"]/
 
+/** A route file or a route folder (`app/plus/index.tsx`) named plus*. */
+const isPlusRoute = (path: string) => path.split('/').slice(1).some((segment) => /^plus/i.test(segment))
+
 it('no route is named plus*', () => {
-  expect(walk('app').filter((f) => /^plus/i.test(basename(f)))).toEqual([])
+  expect(walk('app').filter(isPlusRoute)).toEqual([])
+})
+
+it('the route check sees a file and a folder (negative control)', () => {
+  expect(['app/plus.tsx', 'app/plus-manage.tsx', 'app/plus/index.tsx', 'app/(tabs)/plus/[id].tsx'].every(isPlusRoute)).toBe(true)
+  expect(['app/settings.tsx', 'app/onboarding/details.tsx'].some(isPlusRoute)).toBe(false)
 })
 
 it('no Stack.Screen registers a plus route', () => {
