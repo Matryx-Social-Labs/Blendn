@@ -71,7 +71,7 @@ export function previousStep(step: OnboardingStep): OnboardingStep | null {
  * The Figma frames disagree with each other about this and cannot all be
  * right: one header reads "STEP 02/05", another "Step 2 of 4", another
  * "Step 4 of 5", and the percentages run 30 / 70 / 80 / 100 across four
- * screens of eight. Those are mock values from separate design passes. One
+ * of the frames. Those are mock values from separate design passes. One
  * honest computation is better than reproducing four contradictory ones, and
  * it stays right when a step is added.
  */
