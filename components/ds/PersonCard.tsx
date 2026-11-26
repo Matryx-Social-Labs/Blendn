@@ -98,8 +98,9 @@ const PRE_EVENT = 'You can only message people from an event you have both atten
 /**
  * The person sheet (Flow 5 P-A, `pA-*` in element-boxes.json): one sheet from every entry point (a grid face, Meet
  * next, a chat name, a long-press, a room member, the wave row and banner), the same person through the room's lens.
- * In reading order: the context line, the 72 pt face with the name and its meta line ("Anonymous", "Shown to you · 31") (the head, which opens their
- * profile) and ⋯ (Block / Report), the lead pills, Tonight's question with their answer, In common, then the actions.
+ * In reading order: the context line, the 72 pt face with the name and its meta line ("Anonymous", "Shown to you · 31")
+ * (the head, which opens their profile) and ⋯ (Block / Report), the lead pills, Tonight's question with their answer,
+ * In common, then the actions.
  * What the row offers depends on who they are to you, never on why the roster didn't list them (the thin card).
  *
  * - Wave dock A (SCRUM-1042): Wave + Message, level at 52 (the board's `.db`). Wave is lit, `H.select` on the press;
