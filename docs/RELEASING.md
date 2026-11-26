@@ -310,11 +310,19 @@ Android app must be registered with Firebase (project `blend-n`):
   FCM V1 service account key, and Expo's push service uses it at send time.
 - If the `api_key` in `google-services.json` is restricted in Google Cloud
   Console, it must allow the FCM Registration API and the Firebase
-  Installations API, and an app restriction must use the Play **app signing**
-  SHA-1, not the upload key's; otherwise the device never gets a token.
+  Installations API, and an Android app restriction must list **both** the Play
+  **app signing** SHA-1 (every build installed from Play) **and** the upload
+  key's SHA-1 (the `preview` and `development` profiles are
+  `distribution: internal` APKs signed with the upload key); with either
+  missing, the builds it signs never get a token.
 
 Without either half, `getExpoPushTokenAsync` throws on Android and no token is
-stored. iOS needs no Firebase file; there is no `GoogleService-Info.plist`.
+stored. A real phone with permission granted that gets no token reports it to
+Sentry once per launch, as `[notifications] Push token unavailable: <code>`
+with the platform, the code and whether the EAS project id was present
+(`lib/notifications.ts`, SCRUM-1312); nothing is registered in its place.
+
+iOS needs no Firebase file; there is no `GoogleService-Info.plist`.
 
 ### Building a branch other than `stage` or `prod`
 

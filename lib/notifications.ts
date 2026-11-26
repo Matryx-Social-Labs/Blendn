@@ -170,8 +170,6 @@ export async function ensureNotificationChannels(): Promise<void> {
 export async function registerForPushNotificationsAsync(
   { prompt = true }: { prompt?: boolean } = {}
 ): Promise<string | null> {
-  let token: string | null = null
-
   if (Platform.OS === 'android') {
     // `default` carries a push with no payload (the server's `deliveryFor`), so it stays, and installs already have it
     // (its importance can no longer be lowered). Its name is what Android lists in the app's settings: it was the bare
@@ -186,56 +184,64 @@ export async function registerForPushNotificationsAsync(
     await ensureNotificationChannels()
   }
 
-  if (Device.isDevice) {
-    const existing = await readPushPermission()
-    // The read did not answer (D1): the native queue is stuck, and asking or registering would only queue behind it.
-    if (existing === 'unavailable') {
-      Logger.warn('notifications', 'Push permission unavailable; registering when it answers')
-      // When it does answer (M3), register then. Never with the OS dialog: a prompt minutes later, out of context, is not one.
-      whenPermissionReadable('register', () => void initializePushNotifications({ prompt: false }))
+  // A simulator or emulator gets no push token: nothing to register, and nothing to report.
+  if (!Device.isDevice) return null
+
+  const existing = await readPushPermission()
+  // The read did not answer (D1): the native queue is stuck, and asking or registering would only queue behind it.
+  if (existing === 'unavailable') {
+    Logger.warn('notifications', 'Push permission unavailable; registering when it answers')
+    // When it does answer (M3), register then. Never with the OS dialog: a prompt minutes later, out of context, is not one.
+    whenPermissionReadable('register', () => void initializePushNotifications({ prompt: false }))
+    return null
+  }
+  const existingStatus = existing.status
+  let finalStatus = existingStatus
+
+  if (existingStatus !== 'granted') {
+    if (!prompt) {
+      Logger.info('notifications', 'Push declined or deferred; not asking')
       return null
     }
-    const existingStatus = existing.status
-    let finalStatus = existingStatus
-
-    if (existingStatus !== 'granted') {
-      if (!prompt) {
-        Logger.info('notifications', 'Push declined or deferred; not asking')
-        return null
-      }
-      const answer = await Notifications.requestPermissionsAsync()
-      notePushPermission(answer)
-      finalStatus = answer.status
-    }
-
-    if (finalStatus !== 'granted') {
-      Logger.warn('notifications', 'Push notification permission not granted')
-      return null
-    }
-
-    try {
-      const projectId = Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId
-      if (!projectId) {
-        Logger.warn('notifications', 'Project ID not found - using dev token')
-        return 'development-token-' + Math.random().toString(36).substr(2, 9)
-      }
-
-      token = (await Notifications.getExpoPushTokenAsync({
-        projectId,
-      })).data
-
-      Logger.info('notifications', 'Got push token', { token: token.substring(0, 20) + '...' })
-    } catch (error) {
-      // This is expected if APS entitlement is missing (dev builds without push capability)
-      Logger.warn('notifications', 'Push token unavailable (expected in dev builds)', { error: String(error).substring(0, 100) })
-      return 'development-token-' + Math.random().toString(36).substr(2, 9)
-    }
-  } else {
-    Logger.debug('notifications', 'Using simulator token')
-    return 'simulator-token-' + Math.random().toString(36).substr(2, 9)
+    const answer = await Notifications.requestPermissionsAsync()
+    notePushPermission(answer)
+    finalStatus = answer.status
   }
 
-  return token
+  // A no is the person's answer, not a failure: nothing is reported.
+  if (finalStatus !== 'granted') {
+    Logger.warn('notifications', 'Push notification permission not granted')
+    return null
+  }
+
+  const projectId = Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId
+  if (!projectId) {
+    reportNoPushToken('NO_PROJECT_ID', false)
+    return null
+  }
+  try {
+    const token = (await Notifications.getExpoPushTokenAsync({ projectId })).data
+    Logger.info('notifications', 'Got push token', { token: token.substring(0, 20) + '...' })
+    return token
+  } catch (error) {
+    // The code, or the error's name, only: Expo's message carries the server's response body and Firebase's can carry the key.
+    const code = (error as { code?: unknown } | null)?.code
+    reportNoPushToken(typeof code === 'string' ? code : error instanceof Error ? error.name : 'unknown', true)
+    return null
+  }
+}
+
+/** Failures already reported this launch, by code: one Sentry event per kind, not one per retry or screen. */
+const reportedPushFailures = new Set<string>()
+
+/**
+ * A real phone, permission granted, and no token: push cannot reach this person, so say so once (SCRUM-1312).
+ * `Logger.error` is the path that sends an event (a warn is a breadcrumb only); the event's environment says which build.
+ */
+function reportNoPushToken(code: string, hasProjectId: boolean): void {
+  if (reportedPushFailures.has(code)) return
+  reportedPushFailures.add(code)
+  Logger.error('notifications', `Push token unavailable: ${code}`, { platform: Platform.OS, code, hasProjectId })
 }
 
 // Save push token to backend
@@ -634,11 +640,7 @@ export async function initializePushNotifications(
     if (token) {
       // Store token for removal on logout
       setPushTokenRef(token)
-
-      // Only register real tokens with the backend
-      if (!token.startsWith('development-token-') && !token.startsWith('simulator-token-')) {
-        await savePushTokenToProfile(token)
-      }
+      await savePushTokenToProfile(token)
     }
 
     return token
