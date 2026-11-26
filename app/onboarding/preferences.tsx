@@ -85,9 +85,10 @@ export default function PreferencesScreen() {
       ctaBusy={saving}
       onContinue={() =>
         void commit({
-          // Always present, so a stale draft value (an old 'dating') is overwritten rather than carried: stepPayload drops undefined.
-          // Everything taken off is an answer too: an empty list withdraws what was stored. Untouched and empty, nothing is sent.
-          intent_default: intents.length ? intents : picked ? [] : undefined,
+          // Always what the screen shows once there was anything to show, so a stale draft value (an old 'dating') is overwritten
+          // rather than carried: stepPayload drops undefined. Everything taken off is an answer too: an empty list withdraws what
+          // was stored. Nothing stored and nothing touched: nothing is sent.
+          intent_default: intents.length || picked || draft.intent_default?.length ? intents : undefined,
           reveal_by_default: !anonymous,
         })
       }

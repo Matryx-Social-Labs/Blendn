@@ -18,7 +18,7 @@
  */
 
 import { PROFILE_LIMITS } from './profileLimits'
-import type { Intent } from './intents'
+import { normaliseIntents, type Intent } from './intents'
 
 /** One step, in order. The key is what gets stored, so it outlives a reorder. */
 export const ONBOARDING_STEPS = [
@@ -543,14 +543,21 @@ export function parseStoredOnboarding(raw: string | null): StoredOnboarding | nu
 
     return {
       progress: { step, completed },
-      draft:
-        record.draft && typeof record.draft === 'object'
-          ? (record.draft as OnboardingDraft)
-          : {},
+      draft: record.draft && typeof record.draft === 'object' ? cleanDraft(record.draft as Record<string, unknown>) : {},
     }
   } catch {
     return null
   }
+}
+
+/**
+ * A draft written before 1.0, made what this build would have written (register D-002). Cleaned where it is read because
+ * `finish` sends the whole draft: gender, orientation, its consent and interested-in went with dating and are dropped, and
+ * `dating` leaves the intents. A draft holding only dating keeps an empty list, so finishing leaves what the step showed.
+ */
+function cleanDraft(raw: Record<string, unknown>): OnboardingDraft {
+  const { gender: _gender, orientations: _orientations, show_orientation: _consent, interested_in: _interestedIn, ...draft } = raw
+  return (Array.isArray(draft.intent_default) ? { ...draft, intent_default: normaliseIntents(draft.intent_default) } : draft) as OnboardingDraft
 }
 
 /**

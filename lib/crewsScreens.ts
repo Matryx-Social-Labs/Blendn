@@ -378,7 +378,9 @@ export function crewPatch(
   if (name !== crew.name) patch.name = name
   const bio = edit.bio.trim()
   if (bio !== (crew.bio ?? '')) patch.bio = bio || null
-  if (edit.choice && edit.choice !== intentChoice(crew.intent)) patch.intent = intentOf(edit.choice)
+  // A stored `dating` (D-002) goes on any save: the crew is left as the sheet shows it, the pick or nothing.
+  if (crew.intent.includes('dating')) patch.intent = edit.choice ? intentOf(edit.choice) : []
+  else if (edit.choice && edit.choice !== intentChoice(crew.intent)) patch.intent = intentOf(edit.choice)
   if (!sameSet(edit.tags, crew.tags.map(tagText))) patch.tags = [...edit.tags]
   if (edit.openToSolo !== crew.openToSolo) patch.openToSolo = edit.openToSolo
   return Object.keys(patch).length ? patch : null

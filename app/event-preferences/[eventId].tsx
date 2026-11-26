@@ -21,7 +21,7 @@ import { useToast } from '../../components/Toast'
 import { apiClient } from '../../lib/apiClient'
 import { checkInChanged, intentAnswered } from '../../lib/checkIn'
 import { COLOR, MAX_FONT_SCALE, SPACE, SPRING } from '../../lib/design/tokens'
-import { toggleIntent, type Intent } from '../../lib/intents'
+import { normaliseIntents, toggleIntent, type Intent } from '../../lib/intents'
 import { Logger } from '../../lib/logger'
 import { firstNameOf } from '../../lib/profileIdentity'
 import { personFace } from '../../lib/personFace'
@@ -154,6 +154,8 @@ function EventPreferencesContent() {
    * is only sent once somebody has expressed one here.
    */
   const [intentTouched, setIntentTouched] = useState(false)
+  /** The event's intent as stored. Only read for a `dating` from before 1.0 (D-002), which the next save takes off. */
+  const [storedIntent, setStoredIntent] = useState<readonly string[]>([])
   const [revealed, setRevealed] = useState(initialRevealed === '1')
   const [rememberReveal, setRememberReveal] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -186,6 +188,7 @@ function EventPreferencesContent() {
       .then((res) => {
         if (cancelled || !res.success || !res.data) return
         const said = res.data.tonightAnswer ?? ''
+        setStoredIntent(Array.isArray(res.data.intent) ? res.data.intent : [])
         setLens(parseLens(res.data.lens))
         setSavedAnswer(said)
         setAnswer(said)
@@ -248,8 +251,8 @@ function EventPreferencesContent() {
     setSaving(true)
     try {
       const res = await apiClient.setMatchPreferences(String(eventId), {
-        // Only when they actually chose something here. See `intentTouched`.
-        intent: intentTouched ? intent : undefined,
+        // Only when they actually chose something here (see `intentTouched`), or to take a stored dating off, the rest kept.
+        intent: intentTouched ? intent : storedIntent.includes('dating') ? normaliseIntents(storedIntent) : undefined,
         // The first-door answer is the default from now on; that is the point.
         ...(askIntent && intentTouched ? { rememberIntent: true } : {}),
         revealed,
@@ -284,7 +287,7 @@ function EventPreferencesContent() {
     } finally {
       setSaving(false)
     }
-  }, [answer, answerChanged, workIntent, workIntentChanged, askIntent, eventId, intent, intentTouched, leave, rememberReveal, revealed, saving, setAnswerRefused, showToast])
+  }, [answer, answerChanged, workIntent, workIntentChanged, askIntent, eventId, intent, intentTouched, leave, rememberReveal, revealed, saving, setAnswerRefused, showToast, storedIntent])
 
   const lookingIntents = INTENTS.filter((i) => i.value !== 'just_here')
   const justHere = INTENTS.find((i) => i.value === 'just_here')

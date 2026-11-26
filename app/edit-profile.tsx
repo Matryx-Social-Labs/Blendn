@@ -150,7 +150,8 @@ function EditProfileContent() {
   }, [])
   /* What the server had, so the save can send only what actually moved. */
   const [matchingAtLoad, setMatchingAtLoad] = useState<{
-    intents: Intent[]
+    /** As stored, so a stored `dating` the form does not show still counts as a change to save. */
+    intents: readonly string[]
     workField: string | null
     expertise: string[]
   }>({ intents: [], workField: null, expertise: [] })
@@ -298,17 +299,19 @@ function EditProfileContent() {
         /*
          * Pre-filled, which the old screen never did: it read only name and age,
          * so every chip opened blank and you could not tell "networking" from
-         * "nothing chosen". A stored `dating` is dropped here (D-002), and the save compares with this, so it is never sent back.
+         * "nothing chosen". A stored `dating` is dropped from what is shown (D-002); the save compares with what is stored, so any
+         * save leaves the server holding what the screen shows, dating gone.
          */
         const p2 = profileData.profile
-        const loadedIntents = normaliseIntents(p2?.intent_default ?? [])
+        const storedIntents = p2?.intent_default ?? []
+        const loadedIntents = normaliseIntents(storedIntents)
         const loadedWorkField = p2?.work_field ?? null
         const loadedExpertise = Array.isArray(p2?.expertise) ? (p2.expertise as string[]) : []
         setIntents(loadedIntents)
         setWorkField(loadedWorkField)
         setExpertise(loadedExpertise)
         setMatchingAtLoad({
-          intents: loadedIntents,
+          intents: storedIntents,
           workField: loadedWorkField,
           expertise: loadedExpertise,
         })
