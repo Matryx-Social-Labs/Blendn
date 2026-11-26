@@ -285,13 +285,7 @@ function SettingsScreenContent() {
     persistPreference(next, previous, key)
   }, [persistPreference, savePreferencesLocal, preferencesRef])
 
-  /*
-   * Our own pages open in the in-app browser; a store's page (Manage
-   * subscription) is not ours and opens in the store, through `openURL` alone
-   * with no `canOpenURL` first (on iOS that answers false for any scheme not
-   * declared in `LSApplicationQueriesSchemes`). A failure is a toast, the same
-   * sentence About uses.
-   */
+  /* Our own pages open in the in-app browser. A failure is a toast, the same sentence About uses. */
   const openPage = useCallback(
     (url: string) => {
       openInApp(url).catch(() => showToast("That page didn’t open. Try again.", 'error'))
