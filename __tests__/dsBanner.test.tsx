@@ -53,11 +53,11 @@ describe('<Banner>', () => {
 
   it('its action is a lit Button in the screen’s hue, with the glyph the caller names; busy holds it', async () => {
     const onPress = jest.fn()
-    await render(<Banner kind="info" text="Dating is on for this event." action={{ label: 'Change', onPress }} />)
+    await render(<Banner kind="info" text="Reveal is on for this room." action={{ label: 'Change', onPress }} />)
     await fireEvent.press(screen.getByRole('button', { name: 'Change' }))
     expect(onPress).toHaveBeenCalledTimes(1)
 
-    await render(<Banner kind="info" text="Dating is on for this event." action={{ label: 'Change', onPress }} busy />)
+    await render(<Banner kind="info" text="Reveal is on for this room." action={{ label: 'Change', onPress }} busy />)
     const action = screen.getByRole('button', { name: 'Change' })
     expect(action.props.accessibilityState).toMatchObject({ busy: true })
     await fireEvent.press(action)
@@ -110,7 +110,7 @@ describe('<Banner>', () => {
     // The React Native jest preset starts at fontScale 2.
     const window = Dimensions.get('window')
     Dimensions.set({ window: { ...window, fontScale: 1 } })
-    await render(<Banner kind="info" text="Dating is on." action={{ label: 'Change', onPress: jest.fn() }} testID="b" />)
+    await render(<Banner kind="info" text="Reveal is on." action={{ label: 'Change', onPress: jest.fn() }} testID="b" />)
     expect(flat('b-body').flexWrap).toBe('wrap')
     expect(flat('b-slot')?.flexBasis).toBeUndefined()
     await act(async () => Dimensions.set({ window: { ...window, fontScale: 2 } }))

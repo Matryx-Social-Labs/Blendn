@@ -51,15 +51,6 @@ describe('there is one profile editor', () => {
     expect(src).toContain('if (!same(savedIntents, matchingAtLoad.intents))')
   })
 
-  it('stops writing the dating fields once dating is unticked', () => {
-    /*
-     * Gender and orientation are special-category data. Untick dating and they
-     * stop being asked, so continuing to write them would keep that data
-     * current for somebody who just opted out of it.
-     */
-    expect(codeOnly(read('app/edit-profile.tsx'))).toContain("if (savedIntents.includes('dating'))")
-  })
-
   it('edits the matching fields in one place', () => {
     // About you was the second copy; it was unreachable and is gone.
     expect(codeOnly(read('app/edit-profile.tsx'))).toContain('<MatchingFields')

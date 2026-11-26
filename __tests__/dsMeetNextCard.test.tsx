@@ -15,7 +15,7 @@ import { isLitControl } from './helpers/lit'
 
 const flat = (id: string) => StyleSheet.flatten(screen.getByTestId(id, { includeHiddenElements: true }).props.style)
 const query = (id: string) => screen.queryByTestId(id, { includeHiddenElements: true })
-const PRIYA = { face: { kind: 'photo', uri: 'https://example.com/priya.jpg', name: 'Priya' } as const, name: 'Priya', reason: 'Both open to dating', width: 110 }
+const PRIYA = { face: { kind: 'photo', uri: 'https://example.com/priya.jpg', name: 'Priya' } as const, name: 'Priya', reason: 'Both here to make friends', width: 110 }
 
 it('is a surface card at radius 20 (RADIUS.tile), 110 wide, with a 64 pt face and a 40 pt Wave pill; name and reason take two lines', async () => {
   await render(<MeetNextCard {...PRIYA} testID="m" />)
@@ -25,7 +25,7 @@ it('is a surface card at radius 20 (RADIUS.tile), 110 wide, with a 64 pt face an
   expect(flat('m-wave')).toMatchObject({ minHeight: 40, borderRadius: RADIUS.capsule, alignSelf: 'stretch' })
   expect(screen.getByText('Wave', { includeHiddenElements: true })).toBeTruthy()
   expect(screen.getByText('Priya', { includeHiddenElements: true }).props.numberOfLines).toBe(2)
-  for (const t of ['Priya', 'Both open to dating']) {
+  for (const t of ['Priya', 'Both here to make friends']) {
     expect(screen.getByText(t, { includeHiddenElements: true }).props.maxFontSizeMultiplier).toBe(1.3)
   }
 })
@@ -33,7 +33,7 @@ it('is a surface card at radius 20 (RADIUS.tile), 110 wide, with a 64 pt face an
 it('is a button, “{name}, {reason}”, with Wave as its named action', async () => {
   const onWave = jest.fn()
   await render(<MeetNextCard {...PRIYA} onWave={onWave} />)
-  const card = screen.getByRole('button', { name: 'Priya, Both open to dating' })
+  const card = screen.getByRole('button', { name: 'Priya, Both here to make friends' })
   expect(card.props.accessibilityActions).toEqual([{ name: 'activate' }, { name: 'wave', label: 'Wave' }])
   await fireEvent(card, 'accessibilityAction', { nativeEvent: { actionName: 'wave' } })
   expect(onWave).toHaveBeenCalledTimes(1)
@@ -55,7 +55,7 @@ it('they waved at you: the rim lights, the reason is “Waved at you” and how 
   expect(screen.getByText('Wave back', { includeHiddenElements: true })).toBeTruthy()
   expect(screen.getByText('Waved at you', { includeHiddenElements: true })).toBeTruthy()
   expect(screen.getByText('4 min ago', { includeHiddenElements: true })).toBeTruthy()
-  expect(screen.queryByText('Both open to dating', { includeHiddenElements: true })).toBeNull()
+  expect(screen.queryByText('Both here to make friends', { includeHiddenElements: true })).toBeNull()
   expect(flat('m')).toMatchObject({ borderColor: COLOR.brandRose })
   // Wave back is a yes too: the lit look (board C), with the card's rim lit as well; no screen hue on the pill.
   expect(isLitControl(screen.getByTestId('m-wave', { includeHiddenElements: true }))).toBe(true)
@@ -84,7 +84,7 @@ it('you waved: a still ✓ Waved that does nothing, and no Wave again', async ()
   expect(flat('m-wave')).toMatchObject({ backgroundColor: 'transparent', borderColor: COLOR.brandRose })
   await fireEvent.press(screen.getByTestId('m-wave', { includeHiddenElements: true }))
   expect(onWave).not.toHaveBeenCalled()
-  expect(screen.getByRole('button', { name: 'Priya, Both open to dating, waved' }).props.accessibilityActions).toBeUndefined()
+  expect(screen.getByRole('button', { name: 'Priya, Both here to make friends, waved' }).props.accessibilityActions).toBeUndefined()
 })
 
 it('in flight the hand swings and a second press sends nothing', async () => {
@@ -122,13 +122,13 @@ it('Increase Contrast: the 50% hairline and the reason in white', async () => {
   await render(<MeetNextCard {...PRIYA} testID="m" />)
   await act(async () => {})
   expect(flat('m')).toMatchObject({ borderWidth: 1, borderColor: MATERIAL.hairlineIncreaseContrast })
-  expect(StyleSheet.flatten(screen.getByText('Both open to dating', { includeHiddenElements: true }).props.style).color).toBe(COLOR.textPrimary)
+  expect(StyleSheet.flatten(screen.getByText('Both here to make friends', { includeHiddenElements: true }).props.style).color).toBe(COLOR.textPrimary)
 })
 
 it('says Matching v2’s sentence as the reason when the server sent one (R7)', async () => {
   await render(<MeetNextCard {...PRIYA} overlap="Both CSK, in RCB country" />)
   expect(screen.getByText('Both CSK, in RCB country', { includeHiddenElements: true }).props.numberOfLines).toBe(2)
-  expect(screen.queryByText('Both open to dating', { includeHiddenElements: true })).toBeNull()
+  expect(screen.queryByText('Both here to make friends', { includeHiddenElements: true })).toBeNull()
   expect(screen.getByRole('button', { name: 'Priya, Both CSK, in RCB country' })).toBeTruthy()
 })
 

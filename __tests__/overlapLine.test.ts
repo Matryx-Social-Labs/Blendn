@@ -15,7 +15,7 @@ describe('overlapOf', () => {
 
   it('says the intent when the server sent no sentence, never empty when something is shared', () => {
     expect(overlapOf({ sharedIntents: ['friends'] }).line).toBe('Both here to make friends')
-    expect(overlapOf({ sharedIntents: ['networking', 'dating'] }).line).toBe('Both open to dating')
+    expect(overlapOf({ sharedIntents: ['networking'] }).line).toBe('Both here to network')
   })
 
   it('draws nothing when nothing is shared', () => {

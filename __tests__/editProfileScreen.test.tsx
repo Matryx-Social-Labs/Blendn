@@ -460,9 +460,6 @@ describe('a profile that fails to load (YOU-05, Edit profile 6-1)', () => {
 })
 
 describe('who sees each field on Edit profile (YOU-07, 14.0)', () => {
-  const dating = (profile: Record<string, unknown>) =>
-    api.getProfile.mockResolvedValue({ success: true, data: { name: 'Sam', interests: [], profile: { age: 28, location: 'Bengaluru', bio: 'Records.', goals: [], looking_for: [], intent_default: ['dating'], ...profile } } } as never)
-
   it('names the tier under intent, interests and the college', async () => {
     await render(<EditProfile />)
     await screen.findByDisplayValue('Sam')
@@ -474,21 +471,58 @@ describe('who sees each field on Edit profile (YOU-07, 14.0)', () => {
     await fireEvent.press(screen.getByText('Done'))
     expect(screen.getByTestId('who-sees-college').props.accessibilityLabel).toBe('Shown only after you reveal yourself.')
   })
+})
 
-  it('orientation reads Nobody but you while show_orientation is off', async () => {
-    dating({ show_orientation: false })
+describe('dating is not an intent (D-002, SCRUM-1192)', () => {
+  /** A profile written before 1.0: dating ticked, with the gender, orientation and interested-in it opened. */
+  const storedDating = () =>
+    api.getProfile.mockResolvedValue({
+      success: true,
+      data: {
+        name: 'Sam',
+        interests: [],
+        profile: {
+          age: 28, location: 'Bengaluru', bio: 'Records.', goals: [], looking_for: [],
+          intent_default: ['friendship', 'dating'], gender: 'woman', orientations: ['queer'], interested_in: ['woman'], show_orientation: true,
+        },
+      },
+    } as never)
+
+  it('offers no Dating chip, and opens no gender or orientation questions, even for a stored dating', async () => {
+    storedDating()
     await render(<EditProfile />)
     await screen.findByDisplayValue('Sam')
     await openRow('open')
-    expect((await screen.findByTestId('who-sees-orientation')).props.accessibilityLabel).toBe('Nobody but you sees this.')
+    await screen.findByTestId('matching-intents')
+    expect(screen.queryByText('Dating')).toBeNull()
+    expect(screen.getByLabelText('Friendship').props.accessibilityState).toMatchObject({ selected: true })
+    for (const id of ['matching-gender', 'matching-orientations', 'matching-interested-in', 'who-sees-orientation']) expect(screen.queryByTestId(id)).toBeNull()
+    expect(within(screen.getByTestId('edit-profile-matching-open')).queryByText(/dating/i)).toBeNull()
   })
 
-  it('orientation reads the reveal tier when the profile says show_orientation is on', async () => {
-    dating({ show_orientation: true })
+  it('a changed intent sends exactly what is picked: a stored dating is never sent again', async () => {
+    storedDating()
     await render(<EditProfile />)
     await screen.findByDisplayValue('Sam')
     await openRow('open')
-    expect((await screen.findByTestId('who-sees-orientation')).props.accessibilityLabel).toBe('Shown only after you reveal yourself.')
+    await fireEvent.press(await screen.findByText('Networking'))
+    await fireEvent.press(screen.getByText('Done'))
+    await fireEvent.press(screen.getByText('Save'))
+    await waitFor(() => expect(api.updateProfile).toHaveBeenCalled())
+    expect(api.updateProfile.mock.calls[0][1]).toMatchObject({ intent_default: ['friendship', 'networking'] })
+  })
+
+  // A guard rather than a reproducer (today's code already holds it): the save compares with the sanitised load.
+  it('a bio-only save sends no intent and none of the dating fields', async () => {
+    storedDating()
+    await render(<EditProfile />)
+    await screen.findByDisplayValue('Sam')
+    await fireEvent.changeText(screen.getByDisplayValue('Records.'), 'Records and riso.')
+    await fireEvent.press(screen.getByText('Save'))
+    await waitFor(() => expect(api.updateProfile).toHaveBeenCalled())
+    const sent = api.updateProfile.mock.calls[0][1] as Record<string, unknown>
+    expect(sent).toMatchObject({ bio: 'Records and riso.' })
+    for (const key of ['intent_default', 'gender', 'orientations', 'interested_in', 'show_orientation']) expect(sent).not.toHaveProperty(key)
   })
 })
 
