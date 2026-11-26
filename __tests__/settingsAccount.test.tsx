@@ -6,7 +6,7 @@
  * each is a branch a source grep would pass by name alone.
  */
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native'
-import { Linking, View } from 'react-native'
+import { View } from 'react-native'
 
 jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock')
@@ -36,7 +36,7 @@ jest.mock('../lib/useAuth', () => ({
   deleteAccount: jest.fn(),
 }))
 jest.mock('../lib/apiClient', () => ({
-  apiClient: { getProfile: jest.fn(), updateProfile: jest.fn(), getMyPlus: jest.fn(), queuedRequest: jest.fn(), getChatGroups: jest.fn() },
+  apiClient: { getProfile: jest.fn(), updateProfile: jest.fn(), queuedRequest: jest.fn(), getChatGroups: jest.fn() },
 }))
 jest.mock('../lib/notifications', () => ({
   initializePushNotifications: jest.fn(async () => null),
@@ -59,14 +59,6 @@ import { deleteAccount, signOut } from '../lib/useAuth'
 import { appleProofForDeletion, googleProofForDeletion } from '../lib/deletionProof'
 
 const api = apiClient as jest.Mocked<typeof apiClient>
-const plusStatus = (o: Partial<{ active: boolean; gated: boolean; source: 'apple' | 'google' | 'grant' | null }> = {}) => ({
-  active: false,
-  gated: true,
-  product: o.active ? 'plus' : null,
-  source: null,
-  expiresAt: null,
-  ...o,
-})
 const permissions = Notifications.getPermissionsAsync as jest.Mock
 let mockCountry: string | null = null
 jest.mock('../lib/homeCity', () => ({ ...jest.requireActual('../lib/homeCity'), useHomeCountry: () => mockCountry }))
@@ -88,7 +80,6 @@ beforeEach(() => {
   resetMutedRooms()
   api.getProfile.mockResolvedValue({ success: true, data: { profile: { push_enabled: true } } } as never)
   api.updateProfile.mockResolvedValue({ success: true } as never)
-  api.getMyPlus.mockResolvedValue({ success: true, data: plusStatus() } as never)
   ;(api.getChatGroups as jest.Mock).mockResolvedValue({ success: true, data: { groups: [] } })
   permissions.mockResolvedValue({ status: 'granted', canAskAgain: true })
   ;(api.queuedRequest as jest.Mock).mockImplementation((_url: string, init?: RequestInit) =>
@@ -96,21 +87,12 @@ beforeEach(() => {
   )
 })
 
-/* Owner ruling 2026-11-18: the app is free to use. Blend'n+ in Settings only where it is sold (`gated`, staging). */
-describe('Blend’n+ only in a gated city', () => {
-  it('ungated (prod): no Blend’n+ row, no launch line', async () => {
-    api.getMyPlus.mockResolvedValue({ success: true, data: plusStatus({ gated: false }) } as never)
-    await render(<Screen />)
-    await waitFor(() => expect(api.getMyPlus).toHaveBeenCalled())
-    await act(async () => {})
-    expect(screen.queryByTestId('settings-plus')).toBeNull()
-    expect(screen.queryByText(/Blend’n\+|Free during launch/)).toBeNull()
-  })
-
-  it('control: gated (staging), the row is there', async () => {
-    await render(<Screen />)
-    expect(await screen.findByTestId('settings-plus')).toBeTruthy()
-  })
+/* Launch gate 5 (SCRUM-1178): Blend'n+ is deleted from the app; the list closes up where its row was. */
+it('Settings has no Blend’n+ row and no launch line', async () => {
+  await render(<Screen />)
+  expect(await screen.findByRole('button', { name: 'Sign out' })).toBeTruthy()
+  expect(screen.queryByTestId('settings-plus')).toBeNull()
+  expect(screen.queryByText(/Blend’n\+|Free during launch/)).toBeNull()
 })
 
 describe('Blocked row (SCRUM-1082)', () => {
@@ -435,40 +417,11 @@ describe('Delete account', () => {
     expect(deleteAccount).not.toHaveBeenCalled()
   })
 
-  it.each([
-    ['apple', 'App Store'],
-    ['google', 'Google Play'],
-  ] as const)('says to cancel a %s subscription first, with Manage subscription (review H1)', async (source, store) => {
-    const opened = jest.spyOn(Linking, 'openURL').mockResolvedValue(true)
+  it('the first step names no store and offers no subscription to manage', async () => {
     await render(<Screen />)
-    api.getMyPlus.mockResolvedValue({ success: true, data: plusStatus({ active: true, source }) } as never)
     await openTray()
-    expect(
-      await screen.findByText(`Blend’n+ renews through ${store === 'App Store' ? 'the App Store' : store}. Deleting doesn’t cancel it.`)
-    ).toBeTruthy()
-    fireEvent.press(screen.getByRole('button', { name: 'Manage subscription' }))
-    await waitFor(() => expect(opened).toHaveBeenCalledWith(expect.stringMatching(/^https:\/\/(apps\.apple\.com|play\.google\.com)\//)))
-    opened.mockRestore()
-  })
-
-  it('says nothing about the store for a grant, or no Plus', async () => {
-    await render(<Screen />)
-    for (const data of [plusStatus({ active: true, source: 'grant' }), plusStatus()]) {
-      api.getMyPlus.mockResolvedValue({ success: true, data } as never)
-      await openTray()
-      await waitFor(() => expect(api.getMyPlus).toHaveBeenCalled())
-      expect(screen.queryByText(/Deleting doesn’t cancel it/)).toBeNull()
-      fireEvent.press(screen.getByRole('button', { name: 'Keep my account' }))
-    }
-  })
-})
-
-describe('Blendn+ row (review H2)', () => {
-  it('where it is sold, opens the paywall', async () => {
-    await render(<Screen />)
-    await waitFor(() => expect(api.getMyPlus).toHaveBeenCalled())
-    fireEvent.press(await screen.findByRole('button', { name: /^Blend’n\+, See plans/ }))
-    await waitFor(() => expect(router.push).toHaveBeenCalledWith(expect.objectContaining({ pathname: '/plus' })))
+    expect(screen.queryByText(/Deleting doesn’t cancel it/)).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Manage subscription' })).toBeNull()
   })
 })
 

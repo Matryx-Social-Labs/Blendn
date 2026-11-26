@@ -15,14 +15,11 @@ import { COLOR, FONT_FAMILY, ICON, MAX_FONT_SCALE, PRESS, RADIUS, SIZE, SPACE } 
 import { copyText } from '../lib/copyText'
 import { BLENDN_LINKS, openInApp } from '../lib/links'
 import { appVersionLabel, platformParts, shortAccountId, SUPPORT_EMAIL, supportMailto } from '../lib/support'
-import { usePlusStatus } from '../lib/plus'
 import { useAuth } from '../lib/useAuth'
 import { useTopBarOverlay } from '../lib/useTopBarState'
 
 /** What it is about: the email's subject, so the right person reads it first (remaining-screens 04 A). Client only. */
-const TOPICS = ['My account', 'A person or a room', 'Blend’n+ or a payment', 'Something broke', 'Something else'].map((label) => ({ key: label, label }))
-/** Blend'n+ is named only where it is sold (owner 2026-11-18, the free app: `gated`, as Me and Settings). */
-const PLUS_TOPIC = 'Blend’n+ or a payment'
+const TOPICS = ['My account', 'A person or a room', 'Something broke', 'Something else'].map((label) => ({ key: label, label }))
 const SUBJECT = 'Blend’n support'
 
 /**
@@ -41,8 +38,6 @@ export default function SupportScreen() {
   // D-M9: at the accessibility sizes a row's label and value no longer fit side by side; the label went. They stack.
   const largeText = useLargeText()
   const [topic, setTopic] = useState<string | null>(null)
-  const sold = usePlusStatus().status?.gated === true
-  const topics = sold ? TOPICS : TOPICS.filter((t) => t.key !== PLUS_TOPIC)
 
   const email = () =>
     Linking.openURL(supportMailto({ subject: topic ? `${SUBJECT}: ${topic}` : SUBJECT, userId: user?.id })).catch(() =>
@@ -73,7 +68,7 @@ export default function SupportScreen() {
             What is it about?
           </Text>
           <ChipSet
-            items={topics}
+            items={TOPICS}
             selection="single"
             selected={topic ? [topic] : []}
             onToggle={(key) => setTopic((was) => (was === key ? null : key))}

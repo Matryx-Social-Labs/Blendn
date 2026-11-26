@@ -24,7 +24,7 @@ const ROW_CLEAR = SPACE.md + CHECK_DISC + SPACE.sm
 /** The lead card's sentence on the selected fill: white at 80% (Flow 4 `.rc.on span`). */
 const ON_FILL_HINT = 0.8
 
-/** The action link's line grown to the 48 pt target, as the DS's other text links (TonightSheet). */
+/** The action link's line grown to the 48 pt target, as the DS's other text links. */
 const LINK_SLOP = (SIZE.targetAndroid - TYPE.control.lineHeight) / 2
 const FILL = quickTransition('background-color', 'opacity')
 const RING_FADE = quickTransition('opacity')

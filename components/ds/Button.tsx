@@ -134,7 +134,7 @@ export type ButtonProps = {
   kind?: ButtonKind
   size?: ButtonSize
   /**
-   * A price after the label, in Geist Mono (Flow 12: "Start Blend’n+ — ₹199 / month"). The label is the words
+   * A figure after the label, in Geist Mono (a countdown: "Try again 0:42"). The label is the words
    * before it; pass `accessibilityLabel` with the whole thing, since the price is not part of `label`.
    */
   price?: { amount: string; per?: string }

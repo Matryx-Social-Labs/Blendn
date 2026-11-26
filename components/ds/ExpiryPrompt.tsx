@@ -6,7 +6,6 @@ import { Icon } from '../ui/Icon'
 import { COLOR, FONT_FAMILY, PRESS, RADIUS, SIZE, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { OPACITY } from '../../lib/theme'
 import { Button } from './Button'
-import { monoCaption, spokenPrice } from './MonoFamily'
 import { Sheet } from './Sheet'
 import { CONTROL_FONT_CAP, focusRing, font, IC_HAIRLINE, PRESSED_WASH, useBoldText, useIncreaseContrast } from './shared'
 import { Title } from './Title'
@@ -26,26 +25,20 @@ const noop = () => {}
  * When live time runs out (guidelines/components/ExpiryPrompt.html, Flow 11 ·
  * 11.4, ROUND3 G1): the room asks once, "Your live time at Toit is up · Still
  * here?". **Extend 45 min — free** is the gradient primary on purpose (a bold
- * paid "Yes" beside a faint free "No" is a dark pattern); the Blend'n+ row is
- * a full-width solid secondary between it and Done, and never on a night's
- * first Go Live. Silence lets it lapse. `reset` is the 06:00 close.
+ * paid "Yes" beside a faint free "No" is a dark pattern); "Stay while you're
+ * here · up to 4 h" is a full-width solid secondary between it and Done.
+ * Silence lets it lapse. `reset` is the 06:00 close.
  *
- * `H.primary` on Extend; none as it appears, on the Plus row or on Done (the
+ * `H.primary` on Extend; none as it appears, on the Stay row or on Done (the
  * R3-G frame's annotations; the page's `H.threshold` at 2 minutes is
  * overruled). Read title, "Still here?", then the three buttons.
- *
- * The row is Blend'n+'s where Blend'n+ is sold (`from`, the store's lowest
- * price): it opens the Tonight sheet. Where staying is simply free (a launch
- * season, or somebody who has Blend'n+) the same row reads "Stay while you're
- * here · up to 4 h" and stays; nothing is sold there, so no "from".
  */
 export function ExpiryPrompt({
   kind,
   visible,
   venue,
   onExtend,
-  plus,
-  firstGoLiveTonight = false,
+  stay,
   extending = false,
   staying = false,
   opensAt,
@@ -56,13 +49,8 @@ export function ExpiryPrompt({
   visible: boolean
   venue: string
   onExtend?: () => void
-  /**
-   * The Stay row. With `from` (the store's own lowest price) it is Blend'n+'s and opens the Tonight sheet's expiry
-   * trigger; without, staying is free here and it goes live.
-   */
-  plus?: { from?: string; onPress: () => void }
-  /** The client rule: no Blend'n+ row on a person's first Go Live (it is never a first impression). */
-  firstGoLiveTonight?: boolean
+  /** The Stay row: it goes live for as long as you're here. */
+  stay?: { onPress: () => void }
   extending?: boolean
   /** A Stay is on its way: everything holds, as for Extend, but Extend shows no spinner. */
   staying?: boolean
@@ -91,15 +79,15 @@ export function ExpiryPrompt({
     <Sheet visible={visible} onClose={held ? noop : onDone} onShown={onShown} icon="hourglass" title={`Your live time at ${venue} is up`} body="Still here?">
       <View style={styles.actions}>
         <Button kind="primary" label={FREE_EXTEND} loading={extending} disabled={staying} onPress={onExtend} />
-        {plus && !(plus.from && firstGoLiveTonight) ? <PlusRow from={plus.from} disabled={held} onPress={plus.onPress} /> : null}
+        {stay ? <StayRow disabled={held} onPress={stay.onPress} /> : null}
         <Button kind="tertiary" label="Done for now" disabled={held} onPress={onDone} />
       </View>
     </Sheet>
   )
 }
 
-/** "Stay while you're here with Blend'n+ · up to 4 h · from ₹49": solid, since glass in a sheet would be glass on glass. Free to stay: "Stay while you're here · up to 4 h". */
-function PlusRow({ from, disabled, onPress }: { from?: string; disabled: boolean; onPress: () => void }) {
+/** "Stay while you're here · up to 4 h": solid, since glass in a sheet would be glass on glass. */
+function StayRow({ disabled, onPress }: { disabled: boolean; onPress: () => void }) {
   const android = Platform.OS === 'android'
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
@@ -114,16 +102,15 @@ function PlusRow({ from, disabled, onPress }: { from?: string; disabled: boolean
         onBlur={() => setFocused(false)}
         android_ripple={{ color: PRESSED_WASH.android, foreground: true }}
         accessibilityRole="button"
-        accessibilityLabel={from ? `Stay while you’re here with Blend’n+, up to 4 h, from ${spokenPrice(from)}` : 'Stay while you’re here, up to 4 h'}
+        accessibilityLabel="Stay while you’re here, up to 4 h"
         accessibilityState={{ disabled }}
-        style={[styles.plus, contrast && IC_HAIRLINE, disabled && { opacity: OPACITY.disabled }]}
+        style={[styles.stay, contrast && IC_HAIRLINE, disabled && { opacity: OPACITY.disabled }]}
       >
         <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('button', bold), styles.ink]}>
-          {from ? 'Stay while you’re here with Blend’n+' : 'Stay while you’re here'}
+          Stay while you’re here
         </Text>
         <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('caption', bold, FONT_FAMILY.brand[400]), { color: COLOR.textSecondary }]}>
-          {from ? 'up to 4 h · from ' : 'up to 4 h'}
-          {from ? <Text style={monoCaption(bold)}>{from}</Text> : null}
+          up to 4 h
         </Text>
       </ScalePress>
       {focused ? focusRing(RADIUS.button).map((r, i) => <View key={i} pointerEvents="none" style={r} />) : null}
@@ -165,7 +152,7 @@ export function NotLiveNotice({ kind, onPress, testID }: { kind: 'notLive' | 'ro
 const styles = StyleSheet.create({
   actions: { gap: SPACE.sm },
   ink: { color: COLOR.textPrimary },
-  plus: {
+  stay: {
     minHeight: SIZE.primary,
     borderRadius: RADIUS.button,
     backgroundColor: COLOR.surface,

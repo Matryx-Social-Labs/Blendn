@@ -50,7 +50,7 @@ describe('the white selection that is left', () => {
     expect(why.length).toBeGreaterThan(10)
   })
 
-  it.each(['Chip', 'SegmentedControl', 'RadioCard', 'LookingForCard', 'PlanCard', 'ProgressBar', 'MakeSteps', 'TitleTabs', 'Toggle'])(
+  it.each(['Chip', 'SegmentedControl', 'RadioCard', 'LookingForCard', 'ProgressBar', 'MakeSteps', 'TitleTabs', 'Toggle'])(
     '%s lights in the hue, never in white',
     (name) => {
       const file = [...walk('components')].find((f) => path.basename(f) === `${name}.tsx`)!

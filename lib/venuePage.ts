@@ -268,7 +268,6 @@ export type SheetRefusal = { kind: SheetKind; message?: string; title?: string; 
 
 /** Which of the sheet's refusals a Go Live answer is, with the server's own words where it has them. */
 export function sheetRefusal(refusal: GoLiveRefusal): SheetRefusal {
-  if (refusal.kind === 'plus') return { kind: 'stay' }
   if (refusal.kind === 'handoff') return { kind: 'eventOn', eventId: refusal.eventId, message: refusal.message }
   const { reason, message, title } = refusal
   return reason === 'other' ? { kind: 'other', title, message } : { kind: reason, message }

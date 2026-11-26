@@ -42,9 +42,7 @@ import { EXTEND_CHOICE, oneTapChoice, readLiveSession, venueAction, type GoLiveC
 import { type ShowTray, type TrayButton, type TrayExtra } from '../../lib/locationFix'
 import { Logger } from '../../lib/logger'
 import { openInMaps } from '../../lib/openInMaps'
-import { openTonight } from '../../lib/paywall'
 import { guestTypeLabel, placeArea, plateFor, type DistanceReading } from '../../lib/placesPane'
-import { usePlusStatus } from '../../lib/plus'
 import { idParam } from '../../lib/routeParams'
 import { serverNow } from '../../lib/serverClock'
 import { venueTarget } from '../../lib/shareEvent'
@@ -160,7 +158,6 @@ function VenueScreen({ id, km, reading }: { id: string; km: number | null; readi
   const { showToast } = useToast()
   const { user } = useAuth()
   const userId = user?.id ?? null
-  const { status: plus } = usePlusStatus()
   const [detail, setDetail] = useState<VenueDetail | null>(null)
   const [gate, setGate] = useState<VenueGate | null>(null)
   const arrive = useSkeletonCrossfade(!gate && (!detail || !detail.live))
@@ -349,30 +346,11 @@ function VenueScreen({ id, km, reading }: { id: string; km: number | null; readi
       // Try again: the same window, asked once more.
       setRefusal(null)
       if (lastAsked.current) void goLive(lastAsked.current)
-    } else if (r.kind === 'stay') {
-      // Pick a time: back to the dial, on the first window.
-      setRefusal(null)
-      setDial(20)
     } else if (r.kind === 'notFound') {
       setSheet(null)
       router.back()
     }
   }
-  /** A tap on something that says Blendn+: the Tonight sheet for the Stay tap, once the dial has left. The free hour and a bought Stay both go live here. */
-  const stayLocked = () =>
-    afterDialLeaves(
-      () =>
-        void openTonight(
-          {
-            trigger: 'stay',
-            venue: detail?.venue.name ?? '',
-            onFree: () => void goLive({ minutes: 60 }),
-            onUnlocked: () => void goLive({ stay: true }),
-          },
-          { userInitiated: true }
-        )
-    )
-  const refusalAlt = stayLocked
 
   const extend = async () => {
     setExtending(true)
@@ -573,8 +551,6 @@ function VenueScreen({ id, km, reading }: { id: string; km: number | null; readi
         pseudonym="your nickname for today"
         choice={dial}
         onChoice={setDial}
-        stay={plus?.gated && !plus.active ? 'locked' : 'free'}
-        onStayLocked={stayLocked}
         onGoLive={() => void goLive(apiChoice(dial))}
         busy={busy}
         refusal={refusal?.kind ?? null}
@@ -582,7 +558,6 @@ function VenueScreen({ id, km, reading }: { id: string; km: number | null; readi
         refusalTitle={refusal?.title}
         event={refusal?.eventId && tonight?.id === refusal.eventId ? tonight.title : ''}
         onRefusalAction={refusalAction}
-        onRefusalAlt={refusalAlt}
         leaving={liveElsewhere}
         testID="venue-dial"
       />

@@ -83,7 +83,7 @@ it('Try again plays H.primary on press-in and mounts the children afresh', async
 it('reports once, as the exception, with the route it happened on', async () => {
   const onError = jest.fn()
   await render(
-    <ErrorBoundary route="plus-manage" onError={onError}>
+    <ErrorBoundary route="notification-settings" onError={onError}>
       <Bomb />
     </ErrorBoundary>
   )
@@ -94,7 +94,7 @@ it('reports once, as the exception, with the route it happened on', async () => 
   // Unhandled, so it counts against the crash-free rate; a hint, so Sentry keeps the mechanism (review LOW).
   expect(hint.mechanism).toEqual({ type: 'react.error-boundary', handled: false })
   expect(Object.keys(hint).sort()).toEqual(['captureContext', 'mechanism'])
-  expect(context.tags).toEqual({ context: 'error-boundary', error_id: onError.mock.calls[0][2], route: 'plus-manage' })
+  expect(context.tags).toEqual({ context: 'error-boundary', error_id: onError.mock.calls[0][2], route: 'notification-settings' })
   expect(error.message).toBe('boom: a stack-trace fragment')
   expect(context.extra.componentStack).toContain('ErrorBoundary')
 })
@@ -113,7 +113,7 @@ describe('somewhere else clears it', () => {
   })
 
   it('a different route draws the children again', async () => {
-    const view = await render(at('/plus-manage'))
+    const view = await render(at('/notification-settings'))
     expect(screen.getByText('Something went wrong')).toBeTruthy()
     shouldThrow = false
     now += 2000
@@ -122,17 +122,17 @@ describe('somewhere else clears it', () => {
   })
 
   it('but not the route change that came with the crash itself (no remount into the same crash)', async () => {
-    const view = await render(at('/plus-manage'))
+    const view = await render(at('/notification-settings'))
     await view.rerender(at('/'))
     expect(screen.getByText('Something went wrong')).toBeTruthy()
     expect(Sentry.captureException).toHaveBeenCalledTimes(1)
   })
 
   it('the same route keeps it', async () => {
-    const view = await render(at('/plus-manage'))
+    const view = await render(at('/notification-settings'))
     shouldThrow = false
     now += 2000
-    await view.rerender(at('/plus-manage'))
+    await view.rerender(at('/notification-settings'))
     expect(screen.getByText('Something went wrong')).toBeTruthy()
   })
 })

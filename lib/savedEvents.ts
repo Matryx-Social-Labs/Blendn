@@ -166,12 +166,6 @@ export interface AttendancePayload {
     ratedAt?: string | null
   }[]
   pagination?: { page: number; totalCount: number; hasMore: boolean; nextCursor?: string | null }
-  /**
-   * Older nights hidden behind Blendn+ (step 11): 0 when the city is not gated
-   * or you have Plus. When locked, `events` holds at most the latest 3 nights.
-   * Absent from an older server.
-   */
-  lockedCount?: number
 }
 
 export interface PastEventRow {
@@ -235,8 +229,6 @@ export type GoingItem =
   | { kind: 'header'; key: string; title: string; /** The server's true count, when it is more than the rows held. */ count?: number }
   | { kind: 'saved'; key: string; row: SavedEventRow }
   | { kind: 'past'; key: string; row: PastEventRow }
-  /** "{n} more nights with Blendn+" — the paywall's `recap` door. */
-  | { kind: 'locked'; key: string; count: number }
   /** The end of a section the server has more of: "{n} more", said honestly, and what it is doing. */
   | { kind: 'more'; key: string; section: 'going' | 'saved' | 'past'; remaining: number; busy: boolean; failed: boolean }
 
@@ -282,20 +274,6 @@ export function goingItems(
     for (const row of past) items.push({ kind: 'past', key: `p:${row.id}`, row })
   }
   return items
-}
-
-/**
- * The nights the server kept behind Blend'n+ (`lockedCount`), as one row after
- * Past — under a Past heading of its own when none of the 3 shown has ended.
- */
-export function withLockedNights(items: GoingItem[], lockedCount: number | null | undefined): GoingItem[] {
-  if (!lockedCount || lockedCount <= 0) return items
-  const header: GoingItem[] = items.some((i) => i.key === 'h:past') ? [] : [{ kind: 'header', key: 'h:past', title: 'Past' }]
-  return [...items, ...header, { kind: 'locked', key: 'locked', count: lockedCount }]
-}
-
-export function lockedNightsLabel(count: number): string {
-  return `${count} more night${count === 1 ? '' : 's'} with Blend’n+`
 }
 
 /**

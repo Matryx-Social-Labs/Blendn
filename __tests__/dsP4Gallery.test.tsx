@@ -44,15 +44,11 @@ const CELLS = [
   'ds-likingas-me',
   'ds-reveal-after',
   'ds-open-reveal-crew',
-  'ds-open-golive-locked',
   'ds-open-golive-closed',
   'ds-open-session-ending',
-  'ds-open-expiry-plus',
+  'ds-open-expiry-ended',
   'ds-expiry-notlive',
   'ds-badge-all',
-  'ds-open-tonight-pending',
-  'ds-plan-list',
-  'ds-manage-night',
   'ds-offer-why',
   'ds-open-share-unlisted',
   'ds-og-e1-cancelled',
@@ -78,7 +74,7 @@ describe('the gallery, app/preview/ds-p4', () => {
 
   it('a sheet opens from its button', async () => {
     await render(<DsP4Preview />)
-    await fireEvent.press(screen.getByTestId('ds-open-expiry-plus'))
+    await fireEvent.press(screen.getByTestId('ds-open-expiry-ended'))
     expect(screen.getByRole('button', { name: 'Extend 45 min — free' })).toBeTruthy()
   })
 })
