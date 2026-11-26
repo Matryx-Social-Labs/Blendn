@@ -347,16 +347,34 @@ describe('the reveal panel folds away (drive: it stayed over the thread on Andro
   })
 })
 
-describe('photos (R9): only once you can both see each other, or nobody was hidden', () => {
+/*
+ * D-024: photos in DMs are off at 1.0. No state of the conversation offers one, not even once you can both see each
+ * other; a photo already in the thread still draws and still opens. Negative control: today's composer offered
+ * "Send a photo" once both had revealed, or when nobody was hidden (R9), which fails the first two rows below.
+ */
+describe('photos in a DM (D-024): none can be sent, old ones still show', () => {
   it.each([
-    ['both anonymous', anonymous, false],
-    ['only you revealed', { ...anonymous, youRevealed: true }, false],
-    ['both revealed', named, true],
-    ['never pseudonymous', { ...anonymous, pseudonymous: false }, true],
-  ])('%s', async (_name, data, offered) => {
+    ['both revealed', named],
+    ['never pseudonymous', { ...anonymous, pseudonymous: false }],
+    ['both anonymous', anonymous],
+    ['only you revealed', { ...anonymous, youRevealed: true }],
+  ])('%s: no Send a photo', async (_name, data) => {
     api.getConversation.mockResolvedValue({ success: true, data } as never)
     await open()
-    expect(!!screen.queryByLabelText('Send a photo')).toBe(offered)
+    expect(screen.getByTestId('dm-composer')).toBeTruthy()
+    expect(screen.queryByLabelText('Send a photo')).toBeNull()
+  })
+
+  // Negative control: drawing the photo bubble from anything but the message's mediaUrl leaves no image and no bubble.
+  it('a photo already in the thread still draws', async () => {
+    const OLD_PHOTO = 'https://cdn.blendn.app/dm/old.jpg'
+    const oldPhoto = { ...theirs, id: 'm5', text: null, mediaUrl: OLD_PHOTO, mediaType: 'image' }
+    api.getConversation.mockResolvedValue({ success: true, data: named } as never)
+    api.getConversationMessages.mockResolvedValue(page([oldPhoto, theirs]) as never)
+    await open()
+    expect(screen.getByTestId('dm-photo-m5-bubble')).toBeTruthy()
+    expect(imageUris()).toContain(OLD_PHOTO)
+    expect(screen.getByTestId('dm-photo-m5-bubble').props.accessibilityLabel).toMatch(/^Mika, Photo, /)
   })
 })
 
