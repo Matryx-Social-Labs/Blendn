@@ -193,5 +193,4 @@ describe('the door, around a late answer', () => {
     expect(props.showTray).toHaveBeenCalledTimes(1)
     expect(flow.checkingIn).toBe(true)
   })
-
 })
