@@ -47,11 +47,14 @@ describe('no line says dating', () => {
   })
 
   it('the room reasons never say "Both open to dating"', () => {
-    expect(reasonLine({ sharedIntents: ['dating'] }, NOW)).not.toMatch(/dating/i)
+    // Nothing else shared: the same line as a card that shares nothing.
+    expect(reasonLine({ sharedIntents: ['dating'] }, NOW)).toBe(reasonLine({}, NOW))
     expect(reasonLines({ sharedIntents: ['dating', 'networking'] })).toEqual(['Both here to network'])
   })
 
   it('the lens pill never says dating', () => {
     expect(leadFor(person, music)).toEqual([])
+    // Control: the same lens still says an intent the app offers.
+    expect(leadFor({ ...person, sharedIntents: ['dating', 'friendship'] }, music)).toEqual([{ icon: 'users', label: 'Here for friends', lit: true }])
   })
 })

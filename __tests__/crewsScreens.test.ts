@@ -445,12 +445,16 @@ describe('Edit crew’s tags (free hashtags)', () => {
     expect(crewPatch(crew, { ...edit, tags: [...edit.tags].reverse() })).toBeNull()
   })
 
-  it('a crew stored with dating (D-002): a name edit never writes an intent, and the old Both stays as it is', () => {
+  it('a crew stored with dating (D-002): any save leaves it as the sheet shows it, dating gone', () => {
     const datingOnly = { ...(crew as object), intent: ['dating'] } as never
     expect(editOf(datingOnly).choice).toBeNull()
-    expect(crewPatch(datingOnly, { ...editOf(datingOnly), name: 'Nebula Two' })).toEqual({ name: 'Nebula Two' })
+    expect(crewPatch(datingOnly, { ...editOf(datingOnly), name: 'Nebula Two' })).toEqual({ name: 'Nebula Two', intent: [] })
     const both = { ...(crew as object), intent: ['friendship', 'dating'] } as never
     expect(editOf(both).choice).toBe('friendship')
-    expect(crewPatch(both, editOf(both))).toBeNull()
+    expect(crewPatch(both, editOf(both))).toEqual({ intent: ['friendship'] })
+    expect(crewPatch(both, { ...editOf(both), name: 'Nebula Two' })).toEqual({ name: 'Nebula Two', intent: ['friendship'] })
+    expect(crewPatch(both, { ...editOf(both), choice: 'networking' })).toEqual({ intent: ['networking'] })
+    // Control: a crew with no dating and nothing changed sends nothing.
+    expect(crewPatch(crew, editOf(crew))).toBeNull()
   })
 })

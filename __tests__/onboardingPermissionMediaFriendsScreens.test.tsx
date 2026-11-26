@@ -463,13 +463,13 @@ describe('preferences', () => {
     expect(sentOnContinue(mockDraft).intent_default).toEqual(['friendship'])
   })
 
-  it('a draft whose only intent is a stored dating sends no intent at all (D-002: dropped on read)', async () => {
+  it('a draft whose only intent is a stored dating sends an empty list: Continue leaves what the screen shows (D-002)', async () => {
     mockDraft = { dateOfBirth: '1990-01-01', intent_default: ['dating'] }
     await render(<PreferencesScreen />)
     expect(screen.queryByTestId('looking-for-dating')).toBeNull()
     await fireEvent.press(screen.getByTestId('onboarding-primary'))
     // The hook spreads the patch over the draft, so the patch must overwrite the stale value, not omit it.
-    expect(sentOnContinue(mockDraft)).not.toHaveProperty('intent_default')
+    expect(sentOnContinue(mockDraft).intent_default).toEqual([])
   })
 
   const tile = (name: string) => screen.getByTestId(`looking-for-${name}`)

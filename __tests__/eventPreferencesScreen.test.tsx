@@ -144,6 +144,24 @@ it('leaves the intent alone when only the reveal was opened', async () => {
   expect(api.setMatchPreferences.mock.calls[0][1]).toMatchObject({ intent: undefined, revealed: false })
 })
 
+it('a stored event intent with dating loses it on the next save, the rest kept; one without is left alone (D-002)', async () => {
+  Object.assign(mockParams, { askIntent: undefined })
+  api.getMatchPreferences.mockResolvedValue({ success: true, data: { intent: ['dating', 'networking'], revealed: false } } as never)
+  await render(<EventPreferences />)
+  await fireEvent.press(await screen.findByRole('button', { name: 'Save' }))
+  await waitFor(() => expect(api.setMatchPreferences).toHaveBeenCalled())
+  expect(api.setMatchPreferences.mock.calls[0][1]).toMatchObject({ intent: ['networking'] })
+  expect(api.setMatchPreferences.mock.calls[0][1]).not.toHaveProperty('rememberIntent')
+
+  api.setMatchPreferences.mockClear()
+  api.getMatchPreferences.mockResolvedValue({ success: true, data: { intent: ['networking'], revealed: false } } as never)
+  await screen.unmount()
+  await render(<EventPreferences />)
+  await fireEvent.press(await screen.findByRole('button', { name: 'Save' }))
+  await waitFor(() => expect(api.setMatchPreferences).toHaveBeenCalled())
+  expect(api.setMatchPreferences.mock.calls[0][1]).toMatchObject({ intent: undefined })
+})
+
 it('leads with the intent question at the first door, and the reveal question otherwise', async () => {
   await render(<EventPreferences />)
   expect(await screen.findByText('Why do you go out?')).toBeTruthy()

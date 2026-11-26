@@ -191,6 +191,16 @@ describe('stepPayload', () => {
     expect('dateOfBirth' in body).toBe(false)
   })
 
+  it('a stored draft from before 1.0 is read without its dating fields, and with dating out of its intents (D-002)', () => {
+    // `finish` sends the whole draft, so a resumed draft is cleaned where it is read, not per step.
+    const stored = (draft: object) =>
+      parseStoredOnboarding(JSON.stringify({ progress: { step: 'details', completed: ['basics', 'preferences'] }, draft }))?.draft
+    expect(stored({ name: 'Julian', gender: 'woman', orientations: ['queer'], show_orientation: true, interested_in: ['man'], intent_default: ['friendship', 'dating'] }))
+      .toEqual({ name: 'Julian', intent_default: ['friendship'] })
+    expect(stored({ name: 'Julian', intent_default: ['dating'] })).toEqual({ name: 'Julian', intent_default: [] })
+    expect(stored({ name: 'Julian' })).toEqual({ name: 'Julian' })
+  })
+
   it('never forwards the dating fields a draft from before 1.0 still holds (D-002)', () => {
     // Gender, orientation and its consent were asked only for dating; a resumed draft can still carry them.
     const resumed = { ...full, gender: 'woman', orientations: ['queer'], show_orientation: true, intent_default: ['friendship'] } as OnboardingDraft

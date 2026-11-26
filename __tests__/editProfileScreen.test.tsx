@@ -512,9 +512,37 @@ describe('dating is not an intent (D-002, SCRUM-1192)', () => {
     expect(api.updateProfile.mock.calls[0][1]).toMatchObject({ intent_default: ['friendship', 'networking'] })
   })
 
-  // A guard rather than a reproducer (today's code already holds it): the save compares with the sanitised load.
-  it('a bio-only save sends no intent and none of the dating fields', async () => {
+  it('taking off the last offered intent of a mixed stored row sends an empty list, never the stored dating', async () => {
     storedDating()
+    await render(<EditProfile />)
+    await screen.findByDisplayValue('Sam')
+    await openRow('open')
+    await fireEvent.press(within(await screen.findByTestId('matching-intents')).getByText('Friendship'))
+    await fireEvent.press(screen.getByText('Done'))
+    await fireEvent.press(screen.getByText('Save'))
+    await waitFor(() => expect(api.updateProfile).toHaveBeenCalled())
+    expect(api.updateProfile.mock.calls[0][1]).toMatchObject({ intent_default: [] })
+  })
+
+  it('a dating-only profile that picks Friendship sends exactly that', async () => {
+    api.getProfile.mockResolvedValue({ success: true, data: { name: 'Sam', interests: [], profile: { age: 28, location: 'Bengaluru', bio: 'Records.', goals: [], looking_for: [], intent_default: ['dating'] } } } as never)
+    await render(<EditProfile />)
+    await screen.findByDisplayValue('Sam')
+    await openRow('open')
+    await fireEvent.press(await screen.findByText('Friendship'))
+    await fireEvent.press(screen.getByText('Done'))
+    await fireEvent.press(screen.getByText('Save'))
+    await waitFor(() => expect(api.updateProfile).toHaveBeenCalled())
+    expect(api.updateProfile.mock.calls[0][1]).toMatchObject({ intent_default: ['friendship'] })
+  })
+
+  // Any save leaves the server holding what the screen shows (advisor, after the security review): a stored dating is
+  // cleared by the person's next save, whatever they edited. The special-category fields are never sent.
+  const bioOnlySave = async (intent_default: string[] | undefined) => {
+    api.getProfile.mockResolvedValue({
+      success: true,
+      data: { name: 'Sam', interests: [], profile: { age: 28, location: 'Bengaluru', bio: 'Records.', goals: [], looking_for: [], intent_default, gender: 'woman', orientations: ['queer'], interested_in: ['woman'], show_orientation: true } },
+    } as never)
     await render(<EditProfile />)
     await screen.findByDisplayValue('Sam')
     await fireEvent.changeText(screen.getByDisplayValue('Records.'), 'Records and riso.')
@@ -522,7 +550,20 @@ describe('dating is not an intent (D-002, SCRUM-1192)', () => {
     await waitFor(() => expect(api.updateProfile).toHaveBeenCalled())
     const sent = api.updateProfile.mock.calls[0][1] as Record<string, unknown>
     expect(sent).toMatchObject({ bio: 'Records and riso.' })
-    for (const key of ['intent_default', 'gender', 'orientations', 'interested_in', 'show_orientation']) expect(sent).not.toHaveProperty(key)
+    for (const key of ['gender', 'orientations', 'interested_in', 'show_orientation']) expect(sent).not.toHaveProperty(key)
+    return sent
+  }
+
+  it('a bio-only save of a stored Friendship and Dating sends Friendship, what the screen shows', async () => {
+    expect((await bioOnlySave(['friendship', 'dating'])).intent_default).toEqual(['friendship'])
+  })
+
+  it('a bio-only save of a stored dating alone sends an empty list', async () => {
+    expect((await bioOnlySave(['dating'])).intent_default).toEqual([])
+  })
+
+  it('a bio-only save of a stored answer with no dating sends no intent (control)', async () => {
+    expect(await bioOnlySave(['friendship'])).not.toHaveProperty('intent_default')
   })
 })
 
