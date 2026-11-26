@@ -9,10 +9,11 @@ These used to live in `/tmp/mflows`, which macOS purges; they live here now.
 ## Run
 
 ```bash
+EMAIL="<a seeded person>"   # one of SEED_PERSONAS in blendn-admin scripts/test-accounts.ts
 PW="$(railway variables --environment staging --service Blendn-Admin --json | jq -r .SEED_PASSWORD)"
 maestro --device <id> test .maestro/journeys/c03-sign-in-and-out.yaml \
-  -e EMAIL=ananya.b@blendn.app -e PASSWORD="$PW"
-unset PW
+  -e EMAIL="$EMAIL" -e PASSWORD="$PW"
+unset PW EMAIL
 ```
 
 **No credential is ever written in a flow.** Everything comes in with `-e`.
