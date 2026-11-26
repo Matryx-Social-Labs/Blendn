@@ -1545,8 +1545,8 @@ what is about to reach the public.
 
 `docs/STORE-SUBMISSION.md` (ops task 10, 2026-11-26) holds it: the App Review
 notes and Play "App access" text, the age rating, the App Privacy and Data
-safety draft, the storefronts and the pre-submit checklist. It replaced this
-section's 2026-10-24 answers, which still listed RevenueCat and "Ads: No".
+safety draft, the storefronts and the pre-submit checklist. It supersedes this
+section's 2026-10-24 answers.
 
 ### iPhone only for v1.0 (revisitable)
 
