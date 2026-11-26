@@ -60,12 +60,11 @@ re-run that script to set a fresh one — it re-asserts passwords by design.
 1. Check in to the seeded room, force-quit, reopen, go to Matches.
 2. **Correct:** the room, or an honest error. Never "Not Checked In Yet".
 
-### A5. Dating cannot be chosen without an orientation
-1. New account → onboarding preferences step (or Edit profile) → tick **Dating**, leave gender/orientation empty →
-   Continue.
-2. **Correct:** refused, naming what is missing.
-3. **The bug:** it continued, and dating silently never worked afterwards with
-   nothing on screen to explain why.
+### A5. Nobody can pick or see Dating (D-002)
+1. Onboarding step 1 has no "I am" row; step 2 shows Friendship and Networking tiles and no Orientation.
+2. Edit profile → What are you open to? shows Networking · Friendship · Just here; ticking one opens nothing under it.
+3. Event preferences shows two tiles; Make a crew → Here for shows Friendship · Networking.
+4. An account whose profile holds `dating` sees none of it, and saving a bio does not resend it.
 
 ### A6. #67 debris
 - Reveal in a room: the chip reads **"You're visible as \<your name\>"**, not

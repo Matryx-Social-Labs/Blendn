@@ -208,7 +208,8 @@ describe('step 2 · the vibe, optional, and the consent on the button (board 02 
 
   it('"Here for" is Friendship or Networking: no Dating, no Both (D-002)', async () => {
     await toVibe()
-    expect(screen.getAllByTestId(/^make-intent-[a-z]+$/).map((c) => c.props.testID)).toEqual(['make-intent-friendship', 'make-intent-networking'])
+    const chips = screen.getAllByTestId(/^make-intent-[a-z]+$/).map((c) => c.props.testID).filter((id) => id !== 'make-intent-wrap')
+    expect(chips).toEqual(['make-intent-friendship', 'make-intent-networking'])
     expect(screen.queryByLabelText('Dating')).toBeNull()
     expect(screen.queryByLabelText('Both')).toBeNull()
   })
@@ -555,6 +556,7 @@ describe('a link that closes the sheet keeps what was typed (review LOW)', () =>
 
   it('a draft kept from before 1.0 with Dating or Both picked opens on Friendship, and sends friendship (D-002)', async () => {
     crews.create.mockResolvedValue({ success: true, data: { crewId: 'c1', chatGroupId: 'g1', invited: 1 } })
+    crews.crew.mockResolvedValue({ success: true, data: { crewId: 'c1', emblemSeed: 'real-seed' } as never })
     for (const choice of ['dating', 'both']) {
       crews.create.mockClear()
       setDraft(crewDraftThread('u-me'), JSON.stringify({ name: 'Nebula', choice, tags: [], openToSolo: false, keepAnonymous: false, picked: ['u-priya'] }))

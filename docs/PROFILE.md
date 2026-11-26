@@ -48,7 +48,7 @@ render.
 ### There used to be two editors and three doors
 
 `edit-profile` owned your photos, bio and details. **`about-you` owned every
-field the matching engine reads** — intent, work field, gender, orientation,
+field the matching engine reads** — intent, work field and, until dating went (D-002), gender, orientation and
 `interested_in` — and was reachable only from Settings → Discovery → "You and
 matching", three taps deep under a heading that did not name it.
 
@@ -69,9 +69,8 @@ written against. They simply were not typed or read.
 
 **Saving sends only what moved.** A blanket send would write
 `intent_default: []` for anyone who opened the screen and saved without touching
-the chips, which silently switches their matching off. And the dating three stop
-being written once dating is unticked — they are special-category data, so
-continuing to write them would keep it current for somebody who just opted out.
+the chips, which silently switches their matching off. A stored `dating` is dropped on read (D-002), so it is never
+sent back; gender, orientation and interested-in are neither asked, read nor written.
 
 ---
 

@@ -71,7 +71,7 @@ const LEAD_ORDER: Record<string, readonly Lead[]> = {
 const THINGS_IN_COMMON = new Set(['social', 'venue_night'])
 
 /** The shared intents, as the pill says them. `just_here` is never said (see `MatchCard.sharedIntents`). */
-const INTENT_WORD: Record<string, string> = { friendship: 'friends', friends: 'friends', networking: 'work', dating: 'dating' }
+const INTENT_WORD: Record<string, string> = { friendship: 'friends', friends: 'friends', networking: 'work' }
 
 function joinAnd(words: string[]): string {
   return words.length <= 1 ? (words[0] ?? '') : `${words.slice(0, -1).join(', ')} and ${words[words.length - 1]}`

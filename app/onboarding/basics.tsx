@@ -5,7 +5,6 @@ import { useCallback, useState } from 'react'
 import { AccessibilityInfo, BackHandler, StyleSheet, View } from 'react-native'
 
 import { Button } from '../../components/ds/Button'
-import { ChipSet } from '../../components/ds/ChipSet'
 import { DateField, type DateParts } from '../../components/ds/DateField'
 import { Sheet } from '../../components/ds/Sheet'
 import { TextField } from '../../components/ds/TextField'
@@ -22,7 +21,6 @@ import {
   NAME_LENGTH_SENTENCE,
   nameTooShort,
   splitDateOfBirth,
-  type OnboardingGender,
 } from '../../lib/onboarding'
 import { SPACE } from '../../lib/design/tokens'
 import { useOnboarding } from '../../lib/useOnboarding'
@@ -31,31 +29,14 @@ import { counterLimit, overCapMessage, PROFILE_LIMITS, serverLength } from '../.
 import { Swap } from '../../components/motion/Swap'
 
 /**
- * Step one: a name, a gender, a birth date, as two screens inside the one step (direction A, one question per screen): the name,
- * then the birthday with the gender. Stored as one step, so resume and the five segments are unchanged.
+ * Step one: a name and a birth date, as two screens inside the one step (direction A, one question per screen): the name,
+ * then the birthday. Stored as one step, so resume and the five segments are unchanged. No gender: it was read only for
+ * dating, which is not an intent in 1.0 (register D-002, SCRUM-1192).
  *
  * The only step that cannot be skipped. The birth date is why: every age rule
- * on the server derives from it, and an account without one is refused dating
- * and every event with a minimum age, permanently and silently.
+ * on the server derives from it, and an account without one is refused every
+ * event with a minimum age, permanently and silently.
  */
-
-/**
- * The four options the API stores, each labelled as what it stores.
- *
- * The frames offer Woman, Man, Non-binary, **Other**, and the fourth chip was
- * labelled "Other" while it saved `prefer_not_to_say`. Someone choosing
- * "Other" is saying none of the three fit; we recorded that they declined to
- * answer, a different statement. The API's enum is
- * `woman | man | non_binary | prefer_not_to_say`, so the label now says what
- * is stored. An `other` value is still a question for the API
- * (`docs/ONBOARDING.md`).
- */
-const GENDERS: { label: string; value: OnboardingGender }[] = [
-  { label: 'Woman', value: 'woman' },
-  { label: 'Man', value: 'man' },
-  { label: 'Non-binary', value: 'non_binary' },
-  { label: 'Prefer not to say', value: 'prefer_not_to_say' },
-]
 
 /** Under the birthday question. Profiles show the age (`/profiles/:id`), never the date. */
 const DOB_SUBTITLE = 'Blend’n is 18+. People see your age, never your birthday.'
@@ -70,7 +51,6 @@ function BasicsScreenInner() {
   // The length sentence waits for the person to leave the field: one letter typed is not yet a mistake.
   const [nameLeft, setNameLeft] = useState(false)
   const { refused, refuse } = useRefusedPulse()
-  const [gender, setGender] = useState<OnboardingGender | undefined>()
   const [dob, setDob] = useState({ day: '', month: '', year: '' })
   const [page, setPage] = useState<'name' | 'birthday'>('name')
   // Android's back on the birthday screen goes to the name, as the header's back does, not out of the flow. Only while this
@@ -110,7 +90,6 @@ function BasicsScreenInner() {
     setName(draft.name ?? user?.name ?? '')
     // A name already there (a resume, the account's) has been left: its sentence, if it needs one, shows at once.
     setNameLeft(!!(draft.name ?? user?.name))
-    setGender(draft.gender)
     setDob(splitDateOfBirth(draft.dateOfBirth))
   }
 
@@ -136,7 +115,7 @@ function BasicsScreenInner() {
   }
 
   const dateOfBirth = joinDateOfBirth(dob.day, dob.month, dob.year)
-  const patch = { name: name.trim(), gender, dateOfBirth }
+  const patch = { name: name.trim(), dateOfBirth }
   // Never cut for the person: a paste past the server's cap stays on screen, says by how much, and Continue waits.
   const nameOverCap = serverLength(name) > PROFILE_LIMITS.name
   const nameReady = !nameTooShort(name) && !nameOverCap
@@ -221,37 +200,21 @@ function BasicsScreenInner() {
             testID="onboarding-name"
           />
         ) : (
-          <>
-            <View style={styles.date}>
-              <DateField
-                label="Date of birth"
-                value={[dob.day, dob.month, dob.year] as DateParts}
-                onChange={([day, month, year]) => setDob({ day, month, year })}
-                error={dateError}
-                testID="onboarding-dob"
-              />
-              {/* Under 18 is a dead end on this account, so the exit sits beside the sentence. */}
-              <Swap>
-                {underAge ? (
-                  <Button label="Sign out" kind="tertiary" size="sm" onPress={() => setConfirmSignOut(true)} testID="onboarding-under-age-sign-out" />
-                ) : null}
-              </Swap>
-            </View>
-
-            <ChipSet
-              label="I am"
-              items={GENDERS.map((option) => ({
-                key: option.value,
-                label: option.label,
-              }))}
-              selection="single"
-              selected={gender ? [gender] : []}
-              // Tapping the chosen one again clears it. Gender is optional and
-              // there is otherwise no way back to "unanswered" once tapped.
-              onToggle={(value) => setGender(gender === value ? undefined : (value as typeof gender))}
-              testID="onboarding-gender"
+          <View style={styles.date}>
+            <DateField
+              label="Date of birth"
+              value={[dob.day, dob.month, dob.year] as DateParts}
+              onChange={([day, month, year]) => setDob({ day, month, year })}
+              error={dateError}
+              testID="onboarding-dob"
             />
-          </>
+            {/* Under 18 is a dead end on this account, so the exit sits beside the sentence. */}
+            <Swap>
+              {underAge ? (
+                <Button label="Sign out" kind="tertiary" size="sm" onPress={() => setConfirmSignOut(true)} testID="onboarding-under-age-sign-out" />
+              ) : null}
+            </Swap>
+          </View>
         )}
 
         <Sheet

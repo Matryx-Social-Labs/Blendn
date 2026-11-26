@@ -241,7 +241,7 @@ function Banners() {
         <Banner kind="info" text="Your place in line: 4th." />
       </Cell>
       <Cell label="info with an action" testID="ds-banner-info-action">
-        <Banner kind="info" text="Dating is on for this event." action={{ label: 'Change', onPress: () => {} }} />
+        <Banner kind="info" text="Reveal is on for this room." action={{ label: 'Change', onPress: () => {} }} />
       </Cell>
       {VISIBILITY.map((state) => (
         <Cell key={state} label={`visibility · ${state}`} testID={`ds-banner-visibility-${state}`}>

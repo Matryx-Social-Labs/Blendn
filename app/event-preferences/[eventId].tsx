@@ -21,7 +21,7 @@ import { useToast } from '../../components/Toast'
 import { apiClient } from '../../lib/apiClient'
 import { checkInChanged, intentAnswered } from '../../lib/checkIn'
 import { COLOR, MAX_FONT_SCALE, SPACE, SPRING } from '../../lib/design/tokens'
-import { toggleIntent } from '../../lib/intents'
+import { toggleIntent, type Intent } from '../../lib/intents'
 import { Logger } from '../../lib/logger'
 import { firstNameOf } from '../../lib/profileIdentity'
 import { personFace } from '../../lib/personFace'
@@ -71,19 +71,16 @@ import { useReducedMotion } from '../../lib/motion'
  * and makes the last holdout visible.
  */
 
-type Intent = 'dating' | 'networking' | 'friendship' | 'just_here'
-
+/** Two tiles and "Just here" (no Dating: it is not an intent in 1.0, register D-002). */
 const INTENTS: { value: Intent; label: string; hint: string }[] = [
   { value: 'networking', label: 'Networking', hint: 'People to work with or learn from' },
   { value: 'friendship', label: 'Making friends', hint: 'People to spend time with' },
-  { value: 'dating', label: 'Dating', hint: 'Something romantic' },
   { value: 'just_here', label: 'Just here for the event', hint: 'Not looking to meet anyone' },
 ]
 
 const ART: Record<Exclude<Intent, 'just_here'>, number> = {
   networking: require('../../assets/onboarding/looking-networking.jpg'),
   friendship: require('../../assets/onboarding/looking-friendship.jpg'),
-  dating: require('../../assets/onboarding/looking-dating.jpg'),
 }
 
 const AVATAR = 56
@@ -170,10 +167,6 @@ function EventPreferencesContent() {
   const [canReveal, setCanReveal] = useState<RevealReadiness | null>(null)
   const [photo, setPhoto] = useState<string | null>(null)
   const [firstName, setFirstName] = useState<string | null>(null)
-  // Dating is 18+. The server refuses it (403) on this write as everywhere
-  // else; hiding the card for a minor turns that refusal into a card they
-  // never see rather than an error on the way into their first room.
-  const [under18, setUnder18] = useState(false)
   /*
    * Tonight's question (Flow 5 P-A): asked only when the room has one (`GET /matches/preferences` says the lens). The
    * answer is sent only when it changed, so opening this to change the reveal never rewrites it.
@@ -221,9 +214,7 @@ function EventPreferencesContent() {
         .getProfile(user.id)
         .then((res) => {
           if (cancelled || !res.success || !res.data) return
-          const age = res.data.profile?.age
           const photos: string[] = Array.isArray(res.data.profile?.photos) ? res.data.profile.photos : []
-          setUnder18(typeof age === 'number' && age < 18)
           const name: unknown = res.data.profile?.name || res.data.name
           setPhoto(typeof photos[0] === 'string' ? photos[0] : null)
           setFirstName(typeof name === 'string' && name.trim() ? firstNameOf(name) : null)
@@ -280,8 +271,7 @@ function EventPreferencesContent() {
         return
       }
       if (!res.success) {
-        // The server's sentence when it has one — "Dating is for 18+" is
-        // actionable; "could not save" is not.
+        // The server's sentence when it has one: it says what to do; "could not save" does not.
         showToast(res.error || 'Couldn’t save that. Try again.', 'error', { haptic: 'error' })
         return
       }
@@ -296,9 +286,8 @@ function EventPreferencesContent() {
     }
   }, [answer, answerChanged, workIntent, workIntentChanged, askIntent, eventId, intent, intentTouched, leave, rememberReveal, revealed, saving, setAnswerRefused, showToast])
 
-  const intents = under18 ? INTENTS.filter((i) => i.value !== 'dating') : INTENTS
-  const lookingIntents = intents.filter((i) => i.value !== 'just_here')
-  const justHere = intents.find((i) => i.value === 'just_here')
+  const lookingIntents = INTENTS.filter((i) => i.value !== 'just_here')
+  const justHere = INTENTS.find((i) => i.value === 'just_here')
 
   const tile = (opt: (typeof INTENTS)[number]) => (
     <LookingForCard

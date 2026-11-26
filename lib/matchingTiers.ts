@@ -28,20 +28,12 @@ export const FIELD_TIER = {
   occupation: 'C',
   prompts: 'C',
   photos: 'C',
-  gender: 'O',
-  interestedIn: 'O',
-  orientation: 'O',
 } as const satisfies Record<string, Tier>
 
 export type MatchingField = keyof typeof FIELD_TIER
 
-/**
- * Orientation is owner-only until the person turns "show on profile" on (`show_orientation`); then `GET /profiles/:id` sends it to
- * everyone who may see who they are, which is Tier C. Saying "nobody" then would be false reassurance about special-category data.
- */
-export const orientationTier = (shownOnProfile: boolean): Tier => (shownOnProfile ? 'C' : 'O')
-
-/** The sentence under a field, and its glyph. `tier` overrides the field's own (orientation, by consent). */
-export const whoSees = (field: MatchingField, tier: Tier = FIELD_TIER[field]): { tier: Tier; text: string; icon: (typeof TIER_ICON)[Tier] } => {
+/** The sentence under a field, and its glyph. */
+export const whoSees = (field: MatchingField): { tier: Tier; text: string; icon: (typeof TIER_ICON)[Tier] } => {
+  const tier = FIELD_TIER[field]
   return { tier, text: TIER_SEES[tier], icon: TIER_ICON[tier] }
 }

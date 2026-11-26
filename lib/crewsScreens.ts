@@ -146,40 +146,34 @@ export function nameError(name: string): string | undefined {
 /** True while the bio is within the cap; a longer one cannot be sent. */
 export const bioFits = (bio: string): boolean => characters(bio.trim()) <= CREW_BIO_MAX
 
-export type IntentChoice = 'friendship' | 'dating' | 'both'
+/** "Here for": one pick (the crews board 02 A's chips; Dating is not an intent in 1.0, register D-002). */
+export type IntentChoice = 'friendship' | 'networking'
 export const INTENT_CHOICES: readonly { value: IntentChoice; label: string }[] = [
   { value: 'friendship', label: 'Friendship' },
-  { value: 'dating', label: 'Dating' },
-  { value: 'both', label: 'Both' },
+  { value: 'networking', label: 'Networking' },
 ]
 
-const INTENT_BY_CHOICE: Record<IntentChoice, CrewIntent[]> = {
-  friendship: ['friendship'],
-  dating: ['dating'],
-  both: ['friendship', 'dating'],
+export const intentOf = (choice: IntentChoice): CrewIntent[] => [choice]
+
+/**
+ * The choice a crew's intent list stands for, or null when it is something the picker has no chip for. A stored `dating` is
+ * read as not there (D-002): a dating crew picks nothing, and the old "Both" (friendship and dating) is Friendship.
+ */
+export function intentChoice(intent: readonly string[]): IntentChoice | null {
+  const kept = intent.filter((i) => i !== 'dating')
+  return kept.length === 1 && INTENT_CHOICES.some((c) => c.value === kept[0]) ? (kept[0] as IntentChoice) : null
 }
 
-export const intentOf = (choice: IntentChoice): CrewIntent[] => [...INTENT_BY_CHOICE[choice]]
-
-/** The choice a crew's intent list stands for, or null when it is something the picker has no chip for. */
-export function intentChoice(intent: readonly CrewIntent[]): IntentChoice | null {
-  const has = (i: CrewIntent) => intent.includes(i)
-  if (intent.some((i) => i !== 'friendship' && i !== 'dating')) return null
-  if (has('friendship') && has('dating')) return 'both'
-  if (has('dating')) return 'dating'
-  return has('friendship') ? 'friendship' : null
-}
-
-const INTENT_LABEL: Record<CrewIntent, string> = {
+const INTENT_LABEL: Record<string, string> = {
   friendship: 'Friendship',
-  dating: 'Dating',
   networking: 'Networking',
   just_here: 'Just here',
 }
 
-/** "Friendship · Dating", or undefined for a crew that named none. */
-export function intentLine(intent: readonly CrewIntent[]): string | undefined {
-  return intent.length ? intent.map((i) => INTENT_LABEL[i]).join(' · ') : undefined
+/** "Friendship · Networking", or undefined for a crew that named none the app offers: a stored value it does not offer is never printed. */
+export function intentLine(intent: readonly string[]): string | undefined {
+  const words = intent.flatMap((i) => INTENT_LABEL[i] ?? [])
+  return words.length ? words.join(' · ') : undefined
 }
 
 /** The step line: "1 of 2 · Name and friends" (board 02 A: friends first, the vibe optional after). */

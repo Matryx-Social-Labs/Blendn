@@ -15,8 +15,7 @@ import { clockTime, eventClock } from './time'
 
 /**
  * A reason line has to fit under a face in a three-column grid: at 24 almost every one was cut ("Both at 1 night bef…",
- * RC audit B-R7). 19 is the longest fixed sentence, "Both open to dating", which is the same words as the card's overlap
- * line (`lib/overlapLine.ts`); counts take their short phrasing well under it.
+ * RC audit B-R7). 19 fits under a face at 360 dp; counts take their short phrasing well under it.
  */
 export const REASON_MAX = 19
 
@@ -24,7 +23,7 @@ export const REASON_MAX = 19
 export const JUST_ARRIVED_MS = 10 * 60_000
 
 export interface ReasonSource {
-  /** The shared subset only; `dating` only when the server checked both ways. */
+  /** The shared subset only. A stored `dating` is never said (register D-002). */
   sharedIntents?: readonly string[]
   /** Future events you are both going to, excluding this one. */
   sharedPlans?: number
@@ -64,7 +63,6 @@ function fit(text: string, max = REASON_MAX): string {
 export function reasonLines(p: ReasonSource & { overlaps?: readonly { text: string }[] }): string[] {
   const out: string[] = []
   const intents = p.sharedIntents ?? []
-  if (intents.includes('dating')) out.push('Both open to dating')
   if (intents.includes('networking')) out.push('Both here to network')
   if (intents.includes('friends')) out.push('Both here to make friends')
   const plans = p.sharedPlans ?? 0
@@ -80,17 +78,13 @@ export function reasonLines(p: ReasonSource & { overlaps?: readonly { text: stri
  * One short reason to walk over.
  *
  * The same priority the old Grid card's box used —
- * rarest and most actionable first — with dating ahead of it, because it only
- * appears when the server has already checked that it is mutual and it is the
- * one thing somebody would most want to know before crossing a room.
+ * rarest and most actionable first.
  *
  * History reads "N events with you" (audit C-2, owner 2026-11-11: "Both at 1 night" read as nothing), never "Met at": the product exists
  * because people in the same room do not meet, and claiming they did would be
  * the one sentence here that isn't true.
  */
 export function reasonLine(p: ReasonSource, now: number = Date.now()): string {
-  if (p.sharedIntents?.includes('dating')) return 'Both open to dating'
-
   // Counts take the short phrasing, which fits at every count a person has: an ellipsis would cut the only word that
   // explains it ("Going to 12 more togeth…").
   const plans = p.sharedPlans ?? 0

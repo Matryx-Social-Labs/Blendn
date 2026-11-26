@@ -1,14 +1,14 @@
 import { StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 
 import { COLOR, ICON, MAX_FONT_SCALE, SPACE, TYPE } from '../../lib/design/tokens'
-import { whoSees, type MatchingField, type Tier } from '../../lib/matchingTiers'
+import { whoSees, type MatchingField } from '../../lib/matchingTiers'
 import { font, useBoldText } from '../ds/shared'
 import { Icon } from '../ui/Icon'
 
 /** The "who sees this" line under a field (14.0): a glyph and the tier's sentence, wrapping rather than cutting at any text size. */
-export function WhoSees({ field, tier, testID }: { field: MatchingField; tier?: Tier; testID?: string }) {
+export function WhoSees({ field, testID }: { field: MatchingField; testID?: string }) {
   const bold = useBoldText()
-  const { text, icon } = whoSees(field, tier)
+  const { text, icon } = whoSees(field)
   // The glyph is centred on the first line, which grows with the text up to the text's own cap (as Banner's glyph slot).
   const line = TYPE.meta.lineHeight * Math.min(useWindowDimensions().fontScale || 1, MAX_FONT_SCALE.meta)
   const id = testID ?? `who-sees-${field}`
