@@ -42,6 +42,8 @@ describe('the brand is spelled Blend’n+', () => {
   })
 
   it('reads strings, not comments', () => {
-    expect(stringsIn('lib/mePlus.ts').some((s) => WRONG.test(s))).toBe(false)
+    // A file that spells it "Blendn+" in a comment only (the RevenueCat wrapper, until task 04 removes it).
+    expect(fs.readFileSync(path.join(ROOT, 'lib/purchases.ts'), 'utf8')).toMatch(WRONG)
+    expect(stringsIn('lib/purchases.ts').some((s) => WRONG.test(s))).toBe(false)
   })
 })

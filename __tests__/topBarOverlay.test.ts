@@ -39,8 +39,9 @@ describe('every pinned TopBar is measured by useTopBarOverlay', () => {
     fs.readdirSync(dir, { withFileTypes: true }).flatMap((d) => (d.isDirectory() ? walk(nodePath.join(dir, d.name)) : /\.tsx?$/.test(d.name) ? [nodePath.join(dir, d.name)] : []))
   const callers = [...walk(nodePath.join(root, 'app')), ...walk(nodePath.join(root, 'components'))].filter((f) => fs.readFileSync(f, 'utf8').includes('useTopBarOverlay()'))
 
-  it('finds the 13 screens', () => {
-    expect(callers.length).toBe(13)
+  // 12 since Manage (app/plus-manage.tsx) went with Blend'n+ (launch gate 5).
+  it('finds the 12 screens', () => {
+    expect(callers.length).toBe(12)
   })
 
   it.each(callers.map((f) => [nodePath.relative(root, f), f]))('%s hands the bar its layout and keeps no local copy', (_, f) => {

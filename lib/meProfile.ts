@@ -200,29 +200,25 @@ export type NightsStatus = 'loading' | 'ready' | 'failed'
  * for someone with no night yet. A load that failed with nothing to show says so and offers Try again, without tiles. Pure, so the
  * choice between them is testable.
  *
- * "No night yet" is the count's word, never the list's (D-H1): a free account sees its latest 3 nights and `lockedCount` more
- * are with Blend'n+, and those 3 can be nights that haven't ended (the list keeps ended ones only). So an empty list under a
- * count above 0 is `locked` when the server kept nights back, `pending` when the nights it has are still going, and `first`
- * only when the count is 0 (or unknown, from a server that sends none).
+ * "No night yet" is the count's word, never the list's (D-H1): the list keeps ended nights only, so an empty list under a
+ * count above 0 is `pending` (the nights it has are still going), and `first` only when the count is 0 (or unknown, from a
+ * server that sends none).
  */
 export type NightsView =
   | { kind: 'loading' }
   | { kind: 'first' }
   | { kind: 'failed' }
-  | { kind: 'locked'; total: number }
   | { kind: 'pending'; total: number }
   /**
-   * `locked`: the older nights kept behind Blend'n+, said under the tiles (S-1: a free account sees its latest 3 ended).
    * `running`: nights the count has that the grid doesn't yet, because they haven't ended (RC 7: "4 NIGHTS" over one tile).
-   * `ended`: every night that has ended, since you joined, the locked ones included: with `running`, the NIGHTS stat
-   * (rc7: the line counted the shown tiles in 12 weeks, "3 nights out" under 46).
+   * `ended`: every night that has ended, since you joined: with `running`, the NIGHTS stat (rc7: the line counted the shown
+   * tiles in 12 weeks, "3 nights out" under 46).
    */
-  | { kind: 'tiles'; failed: boolean; ended: number; locked: number; running: number }
+  | { kind: 'tiles'; failed: boolean; ended: number; running: number }
 
 export function nightsView(
   status: NightsStatus,
   rows: readonly { id: string; start_time: string }[],
-  lockedCount: number = 0,
   total: number | null = null,
   running: number = 0
 ): NightsView {
@@ -233,23 +229,20 @@ export function nightsView(
       failed: status === 'failed',
       // The stat's nights less those still going; an older server with no total: the ended nights listed.
       ended: total !== null ? Math.max(rows.length, total - stillGoing) : rows.length,
-      locked: Math.max(0, lockedCount),
       running: stillGoing,
     }
   }
   if (status === 'loading') return { kind: 'loading' }
   if (status === 'failed') return { kind: 'failed' }
-  const count = Math.max(total ?? 0, lockedCount)
-  if (lockedCount > 0) return { kind: 'locked', total: count }
+  const count = total ?? 0
   return count > 0 ? { kind: 'pending', total: count } : { kind: 'first' }
 }
 
 /**
- * What `/me/attendance` says beyond its rows: the nights kept behind Blend'n+, every night (the shown ones plus those), and
- * the nights it lists that haven't ended (S-1 lists them; the grid keeps ended ones only, `pastEventRows`).
+ * What `/me/attendance` says beyond its rows: every night, and the nights it lists that haven't ended (S-1 lists them; the
+ * grid keeps ended ones only, `pastEventRows`).
  */
 export interface NightsCounts {
-  locked: number
   /** Null from a server that sends no pagination. */
   total: number | null
   /** Listed nights still going: in `total`, not yet on the grid. */
@@ -257,13 +250,11 @@ export interface NightsCounts {
 }
 
 export function nightsCounts(
-  payload: { pagination?: { totalCount: number }; lockedCount?: number; events?: readonly { end_time: string }[] } | null | undefined,
+  payload: { pagination?: { totalCount: number }; events?: readonly { end_time: string }[] } | null | undefined,
   now: number = Date.now()
 ): NightsCounts {
-  const locked = Math.max(0, payload?.lockedCount ?? 0)
-  // `totalCount` is the nights the list may show (the server's `visible`); the locked ones are on top of it.
   const shown = payload?.pagination?.totalCount
   // The complement of `pastEventRows`' "ended": an end not before now (the newest nights, so always on the first page).
   const running = (payload?.events ?? []).filter((e) => !(new Date(e.end_time).getTime() < now)).length
-  return { locked, total: typeof shown === 'number' ? shown + locked : null, running }
+  return { total: typeof shown === 'number' ? shown : null, running }
 }

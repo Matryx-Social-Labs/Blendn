@@ -326,6 +326,26 @@ describe('a locked keychain is not a missing token (SCRUM-878)', () => {
   })
 })
 
+/*
+ * SCRUM-1187: the stored user now opens the app before the server has answered, so only a user is one: a value with no
+ * string id (a damaged write, a value some other build stored) is no stored user, and the launch waits for the server.
+ */
+describe('the stored user (SCRUM-1187)', () => {
+  const USER = 'blendn_user'
+
+  it.each(['not json', '"text"', 'null', '7', '{"name":"Asha"}', '{"id":7}', '{"id":""}'])('%s is no stored user', async (raw) => {
+    mockSecure.set(USER, raw)
+    TokenStorage.forgetMemory()
+    await expect(TokenStorage.getUser()).resolves.toBeNull()
+  })
+
+  it('negative control: a stored user with an id is returned as stored', async () => {
+    mockSecure.set(USER, '{"id":"u1","name":"Asha"}')
+    TokenStorage.forgetMemory()
+    await expect(TokenStorage.getUser()).resolves.toEqual({ id: 'u1', name: 'Asha' })
+  })
+})
+
 describe('sign-out clears both keychain services (SCRUM-878 review)', () => {
   it('deletes the old copy even when the new delete fails, and reports the clear as incomplete', async () => {
     // An install whose old copy outlived a migration: both services hold the refresh token.

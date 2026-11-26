@@ -11,8 +11,6 @@ import { emitEventStatusChanged } from './eventStatusSignal'
 import { markCheckIn } from './checkInTiming'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import type { AttendancePayload, RsvpEventsPayload, SavedEventsPayload } from './savedEvents'
-import type { PaywallEvent, PaywallTrigger } from './paywallPolicy'
-import type { PlusStatus } from './plus'
 import { noteBlocked } from './blockEpoch'
 import { forgetPersonalChats } from './queryCache'
 import { CONVERSATIONS_PAGE } from './conversationsPage'
@@ -351,6 +349,8 @@ export const nextSession = (): number => {
   lastRefreshFailedAt = 0
   return ++sessionEpoch
 }
+/** Which session is signed in now: work started in one compares it before writing into the next (a late check-in, SCRUM-1189). */
+export const currentSession = (): number => sessionEpoch
 
 /*
  * Why the reads stay on SecureStore's async API (RC drive D1). expo-secure-store's async functions have no `.runOnQueue`, so
@@ -504,7 +504,9 @@ class TokenStorage {
     const userStr = await this.secureGet(USER_KEY)
     if (!userStr) return null
     try {
-      return JSON.parse(userStr)
+      const user = JSON.parse(userStr)
+      // Only a user is one: the launch opens as it before the server has answered (SCRUM-1187).
+      return typeof user?.id === 'string' && user.id ? user : null
     } catch {
       return null
     }
@@ -1589,9 +1591,11 @@ let lastProactiveRefreshAt = 0
  * On a cold start against a hung server the proactive refresh times out, then the
  * session read, then the launch path asked for a refresh again: a third deadline
  * for the same silence. `refreshSessionOutcome` reads this and does not ask again
- * inside the window; the background retries and the 401 path still do.
+ * inside the window; the background retries and the 401 path still do. As long as
+ * a refresh may take (SCRUM-1187): at 10 s, a session read slower than that between
+ * the two still sent the second.
  */
-const FAILED_REFRESH_COOLDOWN_MS = 10_000
+const FAILED_REFRESH_COOLDOWN_MS = REFRESH_DEADLINE_MS
 let lastRefreshFailedAt = 0
 /**
  * The refresh token the server last refused (401/403). It is dead: a launch that
@@ -3148,22 +3152,6 @@ class ApiClientClass {
   /** The events you attended, most recent first. `/me`-scoped, like the above. */
   async getMyAttendance(limit = 10, page = 1, cursor?: string | null): Promise<ApiResponse<AttendancePayload>> {
     return this.queuedRequest<AttendancePayload>(`/api/mobile/me/attendance?limit=${limit}&${pageQuery(page, cursor)}`)
-  }
-
-  /** Whether you have Blendn+ — the server's answer, the only one that unlocks anything. Never cached. */
-  async getMyPlus(): Promise<ApiResponse<PlusStatus>> {
-    return this.queuedRequest<PlusStatus>('/api/mobile/me/plus')
-  }
-
-  /** The paywall's analytics. Lowest priority; nothing waits on it. */
-  async logPaywallEvent(event: PaywallEvent, trigger: PaywallTrigger): Promise<ApiResponse<{ recorded: true }>> {
-    return this.queuedRequest<{ recorded: true }>(
-      '/api/mobile/me/plus/paywall-events',
-      { method: 'POST', body: JSON.stringify({ event, trigger }) },
-      true,
-      // Last in the queue: lower runs first, and nothing waits on this.
-      10
-    )
   }
 
   // === CHAT ENDPOINTS ===

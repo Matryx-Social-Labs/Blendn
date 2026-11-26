@@ -1,15 +1,8 @@
 /**
- * Manage opened over the paywall (RC drive 5, iOS release, an account with Blend'n+): `blendn:///plus`, then
- * `blendn:///plus-manage`, showed the root "Something went wrong", 2 of 2, and nothing short of a relaunch got past it.
- *
- * The error, reproduced here with the real root layout and both real screens: "Maximum update depth exceeded", thrown
- * from expo-router's `Screen` → `navigation.setOptions`. Manage set its own options with `<Stack.Screen options={{
- * headerShown: false }} />`, a new object every render; over a modal the stack re-rendered it on each `setOptions`, and
- * each render set them again. From the tabs it settled, which is why Settings › Blend'n+ worked.
- *
- * Negative controls: the code before the fix (the screen's own `<Stack.Screen options={{ … }} />`, the route not declared
- * in the root layout) fails the first test with the loop and the boundary. The literal alone, with the declaration kept,
- * did not loop here, and fails the guard test, which takes any `<X.Screen>` or `.setOptions(` outside a layout.
+ * The guard from RC drive 5 (an account with Blend'n+ opened Manage over the paywall, and the stack's re-render of a screen
+ * that set its own options every render looped into "Maximum update depth exceeded"): no screen sets navigation options
+ * from its render; a route declares them in its layout. The screens it was found on were deleted with Blend'n+ (launch
+ * gate 5, tag `plus-paused-2026-11`); the rule stands.
  *
  * And what a link or a notification tap does while a modal route is up: the modal closes, and the link opens over what
  * presented it (`dismissModals`, lib/pendingRoute). Links are delivered the way iOS delivers them to the running app,
@@ -40,19 +33,11 @@ jest.mock('../lib/useAuth', () => ({
 }))
 jest.mock('../lib/apiClient', () => ({
   apiClient: {
-    getMyPlus: jest.fn(async () => ({ success: true, data: { active: true, gated: true, product: 'plus', source: 'apple', expiresAt: '2026-11-03T12:00:00' } })),
-    logPaywallEvent: jest.fn(async () => ({ success: true })),
     // Make a crew, the real screen here (RC drive 6).
     getFriends: jest.fn(async () => ({ success: true, data: { friends: [], count: 0 } })),
   },
 }))
 jest.mock('../lib/crewsApi', () => ({ crewsApi: { create: jest.fn(), crew: jest.fn() } }))
-jest.mock('../lib/purchases', () => ({
-  ...jest.requireActual('../lib/purchases'),
-  purchasesAvailable: jest.fn(() => true),
-  canBuyAs: jest.fn(async () => true),
-  loadPlusOffers: jest.fn(async () => []),
-}))
 // The router test harness stubs Reanimated, which has no Reduce Motion hook; the root layout reads it for its transitions.
 jest.mock('../lib/motion', () => ({ ...jest.requireActual('../lib/motion'), useReducedMotion: () => false }))
 {
@@ -60,7 +45,7 @@ jest.mock('../lib/motion', () => ({ ...jest.requireActual('../lib/motion'), useR
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const mocked = require('react-native-reanimated')
   mocked.makeMutable = jest.requireActual('react-native-reanimated').makeMutable
-  // And the paywall's dock lines sit in a `Swap`, whose `LayoutAnimationConfig` the stub has none of (motion audit M16).
+  // And a `Swap`'s `LayoutAnimationConfig`, which the stub has none of (motion audit M16).
   mocked.LayoutAnimationConfig ??= jest.requireActual('react-native-reanimated').LayoutAnimationConfig
 }
 jest.mock('../lib/notifications', () => ({
@@ -99,7 +84,7 @@ jest.mock('expo-linear-gradient', () => {
 })
 
 /* eslint-disable import/first */
-import { holdLinks, openWhenReady, ROOT_MODAL_ROUTES } from '../lib/pendingRoute'
+import { openWhenReady, ROOT_MODAL_ROUTES } from '../lib/pendingRoute'
 import { askIntentRoute, intentAnswered, untilIntentAnswered } from '../lib/checkIn'
 import { crewDraftThread, draftOf, setDraft } from '../lib/chatOutbox'
 import { scrubEvent, Sentry } from '../lib/sentry'
@@ -155,8 +140,6 @@ async function mountApp() {
       index: Stub,
       '(tabs)/events': Stub,
       '(tabs)/profile': Stub,
-      plus: require('../app/plus').default,
-      'plus-manage': require('../app/plus-manage').default,
       settings: Stub,
       'f/[token]': InviteScreen,
       'event-preferences/[eventId]': IntentQuestion,
@@ -173,7 +156,7 @@ async function mountApp() {
   return { pathname: () => r.getPathname(), routes: () => rootStack(r.getRouterState())?.routes.map((route) => route.name) }
 }
 
-describe('Manage over the paywall (RC drive 5)', () => {
+describe('links over a modal route (RC drives 5 and 6)', () => {
   let errors: string[]
   beforeEach(() => {
     errors = []
@@ -195,22 +178,6 @@ describe('Manage over the paywall (RC drive 5)', () => {
     await cleanup()
     jest.restoreAllMocks()
     jest.useRealTimers()
-  })
-
-  it('opens Manage over /plus: its card, no loop, no boundary', async () => {
-    const r = await mountApp()
-    await act(async () => router.push('/plus'))
-    await settle()
-    expect(r.pathname()).toBe('/plus')
-
-    await act(async () => router.push('/plus-manage'))
-    await settle()
-
-    expect(r.pathname()).toBe('/plus-manage')
-    expect(screen.getByTestId('plus-manage-status')).toBeTruthy()
-    expect(screen.queryByText('Something went wrong')).toBeNull()
-    expect(errors.join('\n')).not.toMatch(/Maximum update depth/)
-    expect(Sentry.captureException).not.toHaveBeenCalled()
   })
 
   it('no screen or component sets navigation options from its render: a route declares them in its layout', () => {
@@ -238,31 +205,28 @@ describe('Manage over the paywall (RC drive 5)', () => {
       await settle()
     }
 
-    it('a link to Manage with the paywall up: the paywall closes, Manage opens over the tabs', async () => {
+    it('a link with Make a crew up: the modal closes, the link opens over the tabs', async () => {
       const r = await mountApp()
-      await act(async () => router.push('/plus'))
+      await act(async () => router.push('/crews/new'))
       await settle()
-      expect(r.routes()).toEqual(['(tabs)/events', 'plus'])
+      expect(r.routes()).toEqual(['(tabs)/events', 'crews/new'])
 
-      await link('/plus-manage')
+      await link('/settings')
 
-      expect(r.routes()).toEqual(['(tabs)/events', 'plus-manage'])
-      expect(r.pathname()).toBe('/plus-manage')
-      expect(screen.getByTestId('plus-manage-status')).toBeTruthy()
+      expect(r.routes()).toEqual(['(tabs)/events', 'settings'])
+      expect(r.pathname()).toBe('/settings')
     })
 
     it('what the modal was presented over stays: only the modal and what is above it close', async () => {
       const r = await mountApp()
       await act(async () => router.push('/settings'))
-      await act(async () => router.push('/plus'))
+      await act(async () => router.push('/crews/new'))
       await settle()
-      await act(async () => router.push('/plus-manage'))
-      await settle()
-      expect(r.routes()).toEqual(['(tabs)/events', 'settings', 'plus', 'plus-manage'])
+      expect(r.routes()).toEqual(['(tabs)/events', 'settings', 'crews/new'])
 
       await link('/profile')
 
-      // Settings presented the paywall: it stays, and the link opens over it (drive 5's next link was this one).
+      // Settings presented the modal: it stays, and the link opens over it (drive 5's next link was this one).
       expect(r.routes()).toEqual(['(tabs)/events', 'settings', '(tabs)/profile'])
       expect(r.pathname()).toBe('/profile')
     })
@@ -315,47 +279,33 @@ describe('Manage over the paywall (RC drive 5)', () => {
       setDraft(crewDraftThread('u1'), '')
     })
 
-    it('a link held by the paywall (a purchase in flight) waits, then closes it and goes once released', async () => {
-      const r = await mountApp()
-      await act(async () => router.push('/plus'))
-      await settle()
-      const release = holdLinks()
-
-      await link('/plus-manage')
-      expect(r.routes()).toEqual(['(tabs)/events', 'plus'])
-
-      await act(async () => release())
-      await settle()
-      expect(r.routes()).toEqual(['(tabs)/events', 'plus-manage'])
-    })
-
     it('with nothing modal up, a link closes nothing', async () => {
       const r = await mountApp()
       await act(async () => router.push('/settings'))
       await settle()
 
-      await link('/plus-manage')
+      await link('/profile')
 
-      expect(r.routes()).toEqual(['(tabs)/events', 'settings', 'plus-manage'])
+      expect(r.routes()).toEqual(['(tabs)/events', 'settings', '(tabs)/profile'])
     })
 
     it('a notification tap (openWhenReady) closes the modal the same way', async () => {
       const r = await mountApp()
-      await act(async () => router.push('/plus'))
+      await act(async () => router.push('/crews/new'))
       await settle()
 
-      // What the state held when the push was made: it waits for the paywall to have left, as a link does.
+      // What the state held when the push was made: it waits for the modal to have left, as a link does.
       let atPush: string[] | undefined
       const push = router.push
       jest.spyOn(router, 'push').mockImplementation((...args) => {
         atPush = r.routes()
         return push(...args)
       })
-      await act(async () => openWhenReady('/plus-manage'))
+      await act(async () => openWhenReady('/settings'))
       await settle()
 
       expect(atPush).toEqual(['(tabs)/events'])
-      expect(r.routes()).toEqual(['(tabs)/events', 'plus-manage'])
+      expect(r.routes()).toEqual(['(tabs)/events', 'settings'])
     })
   })
 

@@ -24,8 +24,8 @@ import { DELETION_REFUSED, rateLimitedMessage } from './signInRefusal'
 import { Sentry } from './sentry'
 import { markSessionExpired, subscribeSessionExpired } from './sessionEvents'
 
-/** How long the cold start waits on the keychain for the stored account's location switch. */
-const LOCATION_SWITCH_READ_MS = 1_500
+/** How long the cold start waits on the keychain for the stored user: who it opens as, and their location switch. */
+const STORED_USER_READ_MS = 1_500
 
 export interface AuthState {
   session: { user: AuthUser } | null // Maintain session shape for compatibility
@@ -189,53 +189,23 @@ const initializeAuth = async (): Promise<AuthState> => {
       }
 
       if (accessToken) {
-        // We have a token, verify it's still valid
-        Logger.debug('auth', 'Found stored access token, verifying session...')
-        // The switch is known before the session answers: a read on the way up obeys it (`lib/shareLocation`). Bounded: no keychain waits for it.
-        setLocationSharing((await settleWithin(TokenStorage.getUser(), LOCATION_SWITCH_READ_MS, null))?.profile?.share_location)
+        // Bounded: no keychain waits for it. Its location switch is known before the session answers (`lib/shareLocation`).
+        const stored = await settleWithin(TokenStorage.getUser(), STORED_USER_READ_MS, null)
+        setLocationSharing(stored?.profile?.share_location)
 
-        const result = await apiClient.getSession()
-
-        if (result.success && result.data) {
-          await signInVerified(result.data, 'Session verified')
+        /*
+         * Signed in from the stored user at once, and the session checked behind it (SCRUM-1187). Waiting on the check held a
+         * returning person on the logo for a refresh and a session read in series: 45 s on venue data. Only the server
+         * refusing the session signs them out. Without a refresh token the session cannot be renewed, so the launch waits.
+         */
+        if (stored && refreshToken) {
+          Logger.debug('auth', 'Signed in from the stored user; checking the session behind it', { userId: stored.id })
+          updateAuthState({ session: { user: stored }, user: stored, loading: false, initialized: true })
+          void checkSession()
+            .then((answer) => applySessionAnswer(answer, stored))
+            .catch((error) => Logger.error('auth', 'Session check failed; staying signed in', { error }))
         } else {
-          lastSessionFailure = { errorCode: result.errorCode, reasonCode: result.reasonCode, retryAfter: result.retryAfter }
-          /*
-           * Signed out only when the server refused the refresh token.
-           *
-           * This used to read `refreshSession()`, a boolean that folds "the
-           * server said no" and "the server never answered" into one `false`,
-           * and cleared the session on either. So opening the app on a train,
-           * or during a deploy, signed somebody out of a perfectly good session
-           * (P0). `request()` has already tried a refresh on a 401 and cleared
-           * the tokens if it was refused, so no tokens left means refused.
-           */
-          Logger.debug('auth', 'Session verification failed, attempting refresh...')
-          // A token the keychain could not read (undefined) may be there: refreshed for, never taken for refused (SCRUM-878).
-          const outcome = (await TokenStorage.accessTokenOrUnknown()) !== null
-            ? await apiClient.refreshSessionOutcome()
-            : 'rejected'
-
-          if (outcome === 'ok') {
-            const retryResult = await apiClient.getSession()
-            if (retryResult.success && retryResult.data) {
-              await signInVerified(retryResult.data, 'Session refreshed successfully')
-            } else if ((await TokenStorage.accessTokenOrUnknown()) !== null) {
-              // Refreshed, then the re-read did not land. Nothing refused us.
-              await keepStoredSession()
-            } else {
-              Logger.warn('auth', 'Session refresh succeeded but session still invalid')
-              await clearAuthState()
-            }
-          } else if (outcome === 'failed') {
-            await keepStoredSession()
-          } else {
-            Logger.warn('auth', 'Session refresh was refused')
-            // A no-op when `request()` already recorded it (the first word
-            // stands), and the notice for a cold start that never got that far.
-            markSessionExpired()
-            await clearAuthState()
-          }
+          await applySessionAnswer(await checkSession(), null)
         }
       } else {
         // No stored token - user is not authenticated
@@ -265,6 +235,50 @@ const initializeAuth = async (): Promise<AuthState> => {
   })
 
   return initializationPromise
+}
+
+/** What the server said of the stored session: its user, refused, or nothing (it was not reached). */
+type SessionAnswer = AuthUser | 'refused' | 'unknown'
+
+const checkSession = async (): Promise<SessionAnswer> => {
+  const result = await apiClient.getSession()
+  if (result.success && result.data) return result.data
+  lastSessionFailure = { errorCode: result.errorCode, reasonCode: result.reasonCode, retryAfter: result.retryAfter }
+  /*
+   * Refused only when the server refused the refresh token.
+   *
+   * This used to read `refreshSession()`, a boolean that folds "the server said no" and "the server never answered" into
+   * one `false`, and cleared the session on either. So opening the app on a train, or during a deploy, signed somebody out
+   * of a perfectly good session (P0). `request()` has already tried a refresh on a 401 and cleared the tokens if it was
+   * refused, so no tokens left means refused. A token the keychain could not read (undefined) may be there: refreshed
+   * for, never taken for refused (SCRUM-878).
+   */
+  const outcome = (await TokenStorage.accessTokenOrUnknown()) !== null ? await apiClient.refreshSessionOutcome() : 'rejected'
+  if (outcome === 'rejected') return 'refused'
+  if (outcome === 'failed') return 'unknown'
+  const retry = await apiClient.getSession()
+  if (retry.success && retry.data) return retry.data
+  // Refreshed, then the re-read did not land: nothing refused us, unless its 401 dropped the tokens.
+  return (await TokenStorage.accessTokenOrUnknown()) !== null ? 'unknown' : 'refused'
+}
+
+/**
+ * The launch acts on the check. `stored` is the user it signed in from before asking: once somebody else is on screen (a
+ * sign-out, another sign-in, a fresher read) the answer is not theirs, and a late one never signs anybody in or out.
+ */
+const applySessionAnswer = async (answer: SessionAnswer, stored: AuthUser | null) => {
+  if (stored && globalAuthState.user !== stored) return
+  if (answer === 'refused') {
+    Logger.warn('auth', 'Session refresh was refused')
+    // A no-op when `request()` already recorded it (the first word stands), and the notice for a launch that never got that far.
+    markSessionExpired()
+    await clearAuthState()
+  } else if (answer === 'unknown') {
+    // Signed in from the stored user already; with none, the entry screen says it cannot reach Blend'n.
+    if (!stored) await keepStoredSession()
+  } else {
+    await signInVerified(answer, 'Session verified')
+  }
 }
 
 /** The server confirmed the session: signed in with its copy of the user. */

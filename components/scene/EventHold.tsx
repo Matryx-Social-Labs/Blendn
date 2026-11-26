@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 
 import { passReachLine, type PassReach } from '../../lib/attendanceState'
-import { CHECKING_OUT_LABEL, CHECK_OUT_CONSEQUENCE, CHECK_OUT_LABEL, STAY_LABEL, SWITCH_LABEL, checkOutCaption, checkOutQuestion, switchCaption } from '../../lib/switchCopy'
+import { CHECKING_IN_LABEL, CHECKING_OUT_LABEL, CHECK_OUT_CONSEQUENCE, CHECK_OUT_LABEL, STAY_LABEL, SWITCH_LABEL, checkOutCaption, checkOutQuestion, switchCaption } from '../../lib/switchCopy'
 import { COLOR, MAX_FONT_SCALE, SPACE } from '../../lib/design/tokens'
 import { Button } from '../ds/Button'
 import { HoldToConfirm } from '../ds/HoldToConfirm'
@@ -41,6 +41,7 @@ export function EventHold({ reach, onConfirm, busy, confirmed, switching = false
         onConfirm={onConfirm}
         disabled={reach !== 'open'}
         busy={busy}
+        busyLabel={CHECKING_IN_LABEL}
         confirmedLabel={confirmed ? 'You’re in' : undefined}
         testID="scene-hold-pill"
       />

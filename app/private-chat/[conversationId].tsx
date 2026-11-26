@@ -55,6 +55,7 @@ import { useKeyboardShown } from '../../lib/keyboard'
 import { markDomainsDirty } from '../../lib/liveSyncState'
 import { Logger } from '../../lib/logger'
 import { draftParam, matchOpener } from '../../lib/matchOpener'
+import { insertInOrder } from '../../lib/insertInOrder'
 import { mergeNewestPage } from '../../lib/mergeNewestPage'
 import { messageMenu } from '../../lib/messageMenu'
 import { useActiveThread } from '../../lib/notifications'
@@ -448,7 +449,7 @@ function PrivateChatInner() {
         // Your own send echoed before the request resolved is still yours; the first into an empty thread takes over from Say hi.
         // Theirs rise too (DS #13) when you are at the bottom; read back, nothing moves: the chip counts it.
         if (prev.length === 0 || data.message.senderId === myId || isAtBottomRef.current) markArriving(data.message.id)
-        return [...prev, directMessageFrom(data.message)]
+        return insertInOrder(prev, directMessageFrom(data.message), (m) => m.createdAt, (m) => m.id, isLocalMessage)
       })
       setIsOtherTyping(false)
       if (otherTypingTimeoutRef.current) clearTimeout(otherTypingTimeoutRef.current)
@@ -517,6 +518,8 @@ function PrivateChatInner() {
       if (outcome.kind === 'failed') {
         // A rate limit or the spam filter locks the composer; anything else is the server's sentence.
         composer.apply(result.errorCode, result.retryAfter, result.error)
+        // Gone or barred: they may have left or blocked, which the socket never says. The read decides whether it has ended.
+        if (result.errorCode === 'NOT_FOUND' || result.errorCode === 'FORBIDDEN') void loadMessages()
         if (mediaUrl) return fail(result.error || outcome.reason)
         fail()
         if (result.errorCode !== 'RATE_LIMITED' && result.errorCode !== 'SPAM_BLOCKED') showToast(outcome.reason, 'error')
@@ -733,6 +736,8 @@ function PrivateChatInner() {
       return loadMessages()
     },
     domains: ['chat'],
+    // The socket applies messages, reads, deliveries and the reveal; a `chat` mark is any room's or DM's message (SCRUM-1173).
+    syncOnDirty: false,
     syncOnReconnect: true,
     disconnectedIntervalMs: 15000,
   })

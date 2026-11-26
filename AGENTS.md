@@ -22,6 +22,8 @@ screen was built from, where the build deliberately departs from it, and what is
 still an open question. **Read the one for a screen before changing it**; they
 exist because the same mistakes were otherwise made twice.
 
+Security findings live in Jira (Epic SCRUM-1126), not in this public repo. A gap that is still open stays out of repo files, code comments, commits and PR text until it is fixed; once fixed, the commit and its test explain it.
+
 ## Running the app
 
 ```bash
@@ -51,7 +53,6 @@ The native shell (Google Sign-In, Apple Authentication, Sentry native modules) o
 eas build --profile development --platform ios          # cloud build, simulator .app (what the Maestro agents build against)
 eas build --profile development-device --platform ios    # same, but for a physical device — installs via QR, needs the device UDID registered (`eas device:create`)
 eas build --profile production --platform ios            # release build
-eas update                                        # OTA push of JS-only changes to an existing build, no App Store review
 ```
 
 For cross-device/OS QA before a release (devices/OS versions not owned locally): push to `stage`. `.github/workflows/ci.yml` runs typecheck/test/lint on that commit, and if it passes, its `ship` job starts `.eas/workflows/stage-testflight.yml` on the same SHA. That workflow builds and submits to TestFlight and Play internal, free: the existing Apple Developer account covers it, on the EAS free build tier. Install the TestFlight build on any device through the TestFlight app. No local Xcode and no paid device-farm service are needed. When a stage deploy fails, the `ship` check on the commit says which step and which EAS job; see `docs/RELEASING.md`. The EAS free tier allows 15 builds a month per platform, so do not add triggers casually. **That `ship` job is off since 2026-09-28**, behind the repository variable `EAS_CLOUD_SHIP`, because the month's builds are spent: `stage` ships from a Mac with `npm run ship:local` instead. See [Shipping `stage` from a Mac](docs/RELEASING.md#shipping-stage-from-a-mac).

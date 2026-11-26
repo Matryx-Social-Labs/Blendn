@@ -233,7 +233,7 @@ const PRICE_ROLE = { lg: 'display', md: 'heading', sm: 'meta' } as const
 const UNIT_ROLE = { lg: 'body', md: 'caption', sm: 'caption' } as const
 
 /** "₹199" → "199 rupees"; "/ month" → "a month", "/ 3 months" → "every 3 months". "Free" stays "Free". */
-export function spokenPrice(amount: string, per?: string) {
+function spokenPrice(amount: string, per?: string) {
   const words = amount.startsWith('₹') ? `${amount.slice(1)} rupees` : amount
   return per ? `${words} ${per.replace(/^\/\s*(?=\d)/, 'every ').replace(/^\/\s*/, 'a ')}` : words
 }

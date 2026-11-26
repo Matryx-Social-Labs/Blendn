@@ -53,7 +53,6 @@ const M26 = [
   'components/places/PlaceParts.tsx',
   'components/profile/PhotoGridTile.tsx',
   'components/profile/MatchingFields.tsx',
-  'components/plus/PlusSections.tsx',
   'components/share/ArrivalBanner.tsx',
 ]
 

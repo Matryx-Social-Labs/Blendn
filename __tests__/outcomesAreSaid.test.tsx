@@ -16,7 +16,6 @@ import { RequestCard } from '../components/banter/BanterParts'
 import { RegularOff, RegularOn } from '../components/offer/OfferSections'
 import { JustMutedLine } from '../components/chat/ChatParts'
 import { useAnnounced } from '../components/ds/shared'
-import { DockLine } from '../components/plus/PlusSections'
 import { SentLine } from '../components/rate/RateParts'
 
 let announce: jest.SpyInstance
@@ -123,12 +122,6 @@ it('every live region is said on iOS, or says why it is not an outcome', () => {
 })
 
 describe('the follow-up’s outcomes, said', () => {
-  it('the Plus dock’s line: each step of a purchase is said as it changes', async () => {
-    const r = await render(<DockLine text="Confirming with the store…" spinning />)
-    await r.rerender(<DockLine text="You’re in." strong />)
-    expect(said()).toEqual(['Confirming with the store…', 'You’re in.'])
-  })
-
   it('Rate’s "Sent" line, once it lands', async () => {
     await render(<SentLine />)
     expect(said()).toEqual(['Sent. Only we see this.'])

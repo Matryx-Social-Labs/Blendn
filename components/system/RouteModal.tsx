@@ -5,7 +5,7 @@ import { Platform } from 'react-native'
 import { PresentsHere, releaseTurn, requestTurn, type Turn } from '../../lib/modalTurn'
 
 /**
- * A router modal (the paywall, Make a crew, a friend link, event preferences) holds the screen while it is focused:
+ * A router modal (Make a crew, a friend link, event preferences) holds the screen while it is focused:
  * a sheet that comes due under it waits, rather than being refused. Ahead of anyone already waiting, because it is on
  * screen.
  */

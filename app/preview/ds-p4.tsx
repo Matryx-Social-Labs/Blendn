@@ -12,17 +12,14 @@ import { GoLiveSheet, type GoLiveChoice, type GoLiveRefusal } from '../../compon
 import { InAppBanner, type InAppBannerProps } from '../../components/ds/InAppBanner'
 import { LikingAsChip } from '../../components/ds/LikingAsChip'
 import { LinkPreviewCard, type LinkPreview, type ShareEvent } from '../../components/ds/LinkPreviewCard'
-import { ManageStatusRow, type PlusStatus } from '../../components/ds/ManageStatusRow'
 import { NotificationRow, type NotificationRowProps } from '../../components/ds/NotificationRow'
 import { OfferCard } from '../../components/ds/OfferCard'
-import { NightPassRow, PlanCard, PlanList } from '../../components/ds/PlanCard'
 import { RevealSheet, RevealSide, type RevealPerson } from '../../components/ds/RevealSheet'
 import { SessionSheet, type SessionTime } from '../../components/ds/SessionSheet'
 import { ShareSheet, type ShareTarget } from '../../components/ds/ShareSheet'
 import { Sheet } from '../../components/ds/Sheet'
 import { StoryCard } from '../../components/ds/StoryCard'
 import { Toast } from '../../components/ds/Toast'
-import { TonightSheet, type TonightPick, type TonightTrigger } from '../../components/ds/TonightSheet'
 import { COLOR, RADIUS, SPACE, TYPE } from '../../lib/design/tokens'
 
 /**
@@ -60,9 +57,6 @@ export default function DsP4Preview() {
         <Session />
         <Expiry />
         <Badges />
-        <Tonight />
-        <Plans />
-        <Manage />
         <Offers />
         <Share />
         <Previews />
@@ -387,11 +381,10 @@ function Reveal() {
 
 // ── Places live (Flow 11) ───────────────────────────────────────────────────
 
-const GO_LIVE: Record<string, { choice?: GoLiveChoice; stay?: 'locked'; busy?: boolean; refusal?: GoLiveRefusal }> = {
+const GO_LIVE: Record<string, { choice?: GoLiveChoice; busy?: boolean; refusal?: GoLiveRefusal }> = {
   first: { choice: 20 },
   '60': { choice: 60 },
   stay: { choice: 'stay' },
-  locked: { choice: 45, stay: 'locked' },
   busy: { busy: true },
   notHere: { refusal: 'notHere' },
   eventOn: { refusal: 'eventOn' },
@@ -443,8 +436,6 @@ function GoLive() {
         pseudonym="Night Cat"
         choice={choice}
         onChoice={setChoice}
-        stay={spec.stay}
-        onStayLocked={() => setOpen(null)}
         busy={busy || !!spec.busy}
         live={live}
         onGoLive={() => setBusy(true)}
@@ -479,11 +470,10 @@ function Session() {
 }
 
 function Expiry() {
-  const [open, setOpen] = useState<'plus' | 'first' | 'reset' | null>(null)
+  const [open, setOpen] = useState<'ended' | 'reset' | null>(null)
   return (
-    <Section title="ExpiryPrompt · NotLiveNotice" note="Extend 45 min — free is the gradient primary (G1) · never a Plus row on a night’s first Go Live">
-      <Open id="expiry-plus" label="Open: ended · with Blend’n+" onPress={() => setOpen('plus')} />
-      <Open id="expiry-first" label="Open: ended · first Go Live" onPress={() => setOpen('first')} />
+    <Section title="ExpiryPrompt · NotLiveNotice" note="Extend 45 min — free is the gradient primary (G1)">
+      <Open id="expiry-ended" label="Open: ended" onPress={() => setOpen('ended')} />
       <Open id="expiry-reset" label="Open: reset at 06:00" onPress={() => setOpen('reset')} />
       <Cell label="not live · after it ends" testID="ds-expiry-notlive">
         <NotLiveNotice kind="notLive" onPress={noop} />
@@ -495,9 +485,8 @@ function Expiry() {
         kind={open === 'reset' ? 'reset' : 'ended'}
         visible={open !== null}
         venue="Toit"
-        firstGoLiveTonight={open === 'first'}
         onExtend={() => setOpen(null)}
-        plus={{ from: '₹49', onPress: () => setOpen(null) }}
+        stay={{ onPress: () => setOpen(null) }}
         onDone={() => setOpen(null)}
       />
     </Section>
@@ -524,141 +513,6 @@ function Badges() {
           <AchievementBadge kind="nights_out" onPress={() => setMeaning('5 or more nights out this month')} />
         </View>
         {meaning ? <Text style={styles.note}>{meaning}</Text> : null}
-      </Cell>
-    </Section>
-  )
-}
-
-// ── Blend'n+ (Flow 12) ──────────────────────────────────────────────────────
-
-const PRICES = { night: '₹49', monthly: '₹199' }
-const TONIGHT: Record<string, { trigger: TonightTrigger; pick?: TonightPick; status?: 'pending' | 'cancelled' | 'failed'; store?: 'ios' | 'android' }> = {
-  stay: { trigger: 'stay' },
-  perk: { trigger: 'perk' },
-  night: { trigger: 'night' },
-  crew: { trigger: 'crew' },
-  expiry: { trigger: 'expiry' },
-  monthly: { trigger: 'stay', pick: 'monthly' },
-  cancelled: { trigger: 'stay', status: 'cancelled' },
-  failed: { trigger: 'stay', status: 'failed' },
-  pending: { trigger: 'stay', status: 'pending', store: 'android' },
-}
-
-function Tonight() {
-  const [open, setOpen] = useState<string | null>(null)
-  const [pick, setPick] = useState<TonightPick>('night')
-  const [toast, setToast] = useState<'success' | 'launch' | null>(null)
-  const spec = TONIGHT[open ?? 'stay']
-  return (
-    <Section title="TonightSheet" note="Night Pass first, preselected · Continue: H.primary · success is a toast with H.success · during launch it never opens">
-      {Object.keys(TONIGHT).map((k) => (
-        <Open
-          key={k}
-          id={`tonight-${k}`}
-          label={`Open: ${k}`}
-          onPress={() => {
-            setPick(TONIGHT[k].pick ?? 'night')
-            setOpen(k)
-          }}
-        />
-      ))}
-      <Button testID="ds-show-tonight-success" kind="secondary" size="md" label="Show: success toast" onPress={() => setToast('success')} />
-      <Button testID="ds-show-tonight-launch" kind="secondary" size="md" label="Show: launch toast" onPress={() => setToast('launch')} />
-      <TonightSheet
-        visible={open !== null}
-        onClose={() => setOpen(null)}
-        trigger={spec.trigger}
-        venue="Toit"
-        crew="Nebula"
-        prices={PRICES}
-        pick={pick}
-        onPick={setPick}
-        onContinue={() => {
-          setOpen(null)
-          setToast('success')
-        }}
-        onFree={() => setOpen(null)}
-        onSeeAll={() => setOpen(null)}
-        onTerms={noop}
-        onPrivacy={noop}
-        onRestore={noop}
-        status={spec.status}
-        store={spec.store ?? 'ios'}
-      />
-      {toast ? (
-        <Toast
-          key={toast}
-          kind={toast === 'success' ? 'success' : 'info'}
-          text={toast === 'success' ? 'Blend’n+ · Night Pass · 24 hours' : 'Free during launch in Bengaluru — until 30 Nov.'}
-          onDismiss={() => setToast(null)}
-        />
-      ) : null}
-    </Section>
-  )
-}
-
-const PACKAGES = [
-  { name: 'Monthly', price: '₹199', per: '/ month' },
-  { name: '3 months', price: '₹499', per: '/ 3 months', sub: 'About ₹166 a month · Save 16%' },
-  { name: 'Yearly', price: '₹1,499', per: '/ year', sub: 'About ₹125 a month · Save 37%' },
-]
-
-function Plans() {
-  const [picked, setPicked] = useState('Monthly')
-  return (
-    <Section title="PlanCard · NightPassRow" note="A radio row, not a card with a badge · H.select on a pick · four packages (G2)">
-      <Cell label="Monthly · on" testID="ds-plan-on" style={styles.surface}>
-        <PlanCard {...PACKAGES[0]} selected onPress={noop} />
-      </Cell>
-      <Cell label="Monthly · off" testID="ds-plan-off" style={styles.surface}>
-        <PlanCard {...PACKAGES[0]} onPress={noop} />
-      </Cell>
-      <Cell label="Night Pass · on" testID="ds-plan-night-on" style={styles.surface}>
-        <NightPassRow price="₹49" selected onPress={noop} />
-      </Cell>
-      <Cell label="Night Pass · off" testID="ds-plan-night-off" style={styles.surface}>
-        <NightPassRow price="₹49" onPress={noop} />
-      </Cell>
-      <Cell label="pressed · focused" testID="ds-plan-transient" style={styles.surface}>
-        <PlanCard {...PACKAGES[1]} onPress={noop} previewState="pressed" />
-        <PlanCard {...PACKAGES[2]} onPress={noop} previewState="focused" />
-      </Cell>
-      <Cell label="the list · live" testID="ds-plan-list">
-        <PlanList>
-          {PACKAGES.map((p) => (
-            <PlanCard key={p.name} {...p} selected={picked === p.name} onPress={() => setPicked(p.name)} />
-          ))}
-          <NightPassRow price="₹49" selected={picked === 'night'} onPress={() => setPicked('night')} />
-        </PlanList>
-      </Cell>
-    </Section>
-  )
-}
-
-const STATUS: [PlusStatus, string][] = [
-  ['launch', 'Everything’s unlocked in Bengaluru until 30 Nov. Nothing to pay, nothing renews.'],
-  ['trial', '14 days of Blend’n+, free, until 29 Oct. Nothing renews: choose a plan when it ends, or don’t.'],
-  ['active', 'Renews 3 Nov · ₹199 · Google Play'],
-  ['cancelled', 'You keep Blend’n+ until 3 Nov. Nothing renews after that.'],
-  ['grace', 'You still have Blend’n+. Fix it in Google Play to keep Blend’n+ after 6 Nov.'],
-  ['hold', 'Blend’n+ is paused until the payment is fixed in Google Play.'],
-  ['paused', 'You paused Blend’n+ in Google Play. It resumes 1 Dec.'],
-  ['expired', 'It ended 3 Nov. Everything you had is still yours to see; the extras are locked.'],
-  ['refunded', 'The store refunded this, so Blend’n+ is off. You can start again anytime.'],
-  ['night', 'Until 9:42 pm tomorrow. It doesn’t renew; another one adds 24 hours.'],
-  ['referral', 'Your referral month runs to 4 Nov. Nothing renews unless you choose a plan.'],
-]
-
-function Manage() {
-  return (
-    <Section title="ManageStatusRow" note="What is true, in one card · a payment problem links to its store">
-      {STATUS.map(([status, sentence]) => (
-        <Cell key={status} label={status} testID={`ds-manage-${status}`}>
-          <ManageStatusRow status={status} sentence={sentence} store="android" onFix={noop} />
-        </Cell>
-      ))}
-      <Cell label="grace · App Store" testID="ds-manage-grace-ios">
-        <ManageStatusRow status="grace" sentence="You still have Blend’n+. Fix it in the App Store to keep Blend’n+ after 6 Nov." store="ios" onFix={noop} />
       </Cell>
     </Section>
   )

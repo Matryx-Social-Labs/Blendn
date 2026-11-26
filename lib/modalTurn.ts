@@ -9,7 +9,7 @@ import { useLatest } from './useLatest'
  * One Modal on screen at a time on iOS, across the whole app (RC drive 4 D-9, D-8).
  *
  * The app's Modals live in hosts that know nothing of each other: the presence monitor's "Checked out", Go Live's
- * "Your live time is up", `showSheet`'s host, the share tray, a ⋯ menu, a photo viewer, a router modal (the paywall).
+ * "Your live time is up", `showSheet`'s host, the share tray, a ⋯ menu, a photo viewer, a router modal (Make a crew).
  * iOS refuses a Modal presented while another is on screen or still leaving, and React Native 0.86 marks it presented
  * before asking and never asks again (`RCTModalHostViewComponentView ensurePresentedOnlyIfNeeded`): the sheet never
  * draws, its owner thinks it was shown, and on drive 4 the app took no taps until it was relaunched.
@@ -283,7 +283,7 @@ export const HOLD_MAX_MS = 90_000
  * is up: it waits for a Modal on its way out (its onDismiss, at most `waitMs`), so it is not dropped, and a sheet that
  * comes due under it waits rather than being refused (review MED-B). Ahead of anyone already waiting: it was asked for.
  *
- * A Modal that stays up (the sheet a link was opened from, the paywall) is presented over at once, as before.
+ * A Modal that stays up (the sheet a link was opened from) is presented over at once, as before.
  * `afterClosing`: the caller has just closed the Modal holding the screen (the photo source sheet), which React may not
  * have drawn closed yet: wait for whatever Modal holds it.
  */

@@ -153,7 +153,8 @@ describe('the irreversible row is hard to hit by accident', () => {
   it('separates every group from the next by a gap, not one card', () => {
     // Six groups in one bordered card read as one block; each is its own SettingsGroup in a gapped column.
     const src = SETTINGS()
-    expect(src.match(/<SettingsGroup\b/g)?.length).toBeGreaterThanOrEqual(8)
+    // Seven since Blend'n+'s own group went with it (launch gate 5).
+    expect(src.match(/<SettingsGroup\b/g)?.length).toBeGreaterThanOrEqual(7)
     expect(src).toMatch(/content: \{[^}]*gap: DS_SPACE\.xl/)
   })
 })
@@ -186,11 +187,10 @@ describe('the editor is on the app’s palette', () => {
 
 describe('Settings in Me + settings A order (owner 2026-11-18, SCRUM-1076)', () => {
   const SETTINGS = () => codeOnly(read('app/settings.tsx'))
-  it('account, Blend’n+, Notification settings, Privacy & safety, Where you are, Help & legal, the ways out, Delete, the version', () => {
+  it('account, Notification settings, Privacy & safety, Where you are, Help & legal, the ways out, Delete, the version', () => {
     const src = SETTINGS()
     const at = [
       'testID="settings-account"',
-      'testID="settings-plus"',
       'title="Notification settings"',
       'title="Privacy & safety"',
       'testID="settings-blocked"',

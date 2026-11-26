@@ -117,14 +117,10 @@ describe('a refused Go Live on screen (PL-CU01)', () => {
     expect(router.push).toHaveBeenCalledWith('/event/e1')
   })
 
-  it('PLUS_REQUIRED, when the paywall may not come by itself, says why and opens it on a tap (step 11)', () => {
+  it('PLUS_REQUIRED from an old server: the server’s sentence and Done, nothing to buy (launch gate 5)', () => {
     const showTray = jest.fn()
-    const seePlus = jest.fn()
-    showGoLiveRefusal(goLiveRefusal('PLUS_REQUIRED', 'Staying live is part of Blendn+.'), place, { showTray, closeTray: jest.fn(), seePlus })
-    const [title, , buttons] = showTray.mock.calls[0]
-    expect(title).toBe('Staying live is part of Blend’n+')
-    ;(buttons as { label: string; onPress: () => void }[]).find((b) => b.label === 'See Blend’n+')?.onPress()
-    expect(seePlus).toHaveBeenCalledTimes(1)
+    showGoLiveRefusal(goLiveRefusal('PLUS_REQUIRED', 'Staying live isn’t open here right now.'), place, { showTray, closeTray: jest.fn() })
+    expect(showTray).toHaveBeenCalledWith('Couldn’t go live', 'Staying live isn’t open here right now.')
   })
 })
 

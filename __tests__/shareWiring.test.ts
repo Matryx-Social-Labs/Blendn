@@ -49,12 +49,26 @@ describe('one tray for every surface', () => {
     expect(builders).toEqual([])
     expect(read('lib/shareLinks.ts')).toMatch(/WEB_PAGES_LIVE \? 'e' : 'event'/)
   })
+
+  it('the site host is written in `lib/shareLinks.ts` alone (SCRUM-1364): no other code names www or the apex as a link', () => {
+    // Comments may name the site; code may not. `//` only after whitespace, so a URL's own `//` is not taken for one.
+    const strip = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|\s)\/\/.*$/gm, '$1')
+    const code = (f: string) => strip(read(f))
+    const hardCoded = /['"`]https:\/\/([a-z0-9-]+\.)*blendn\.app\b|['"`](www\.)?blendn\.app['"`]/
+    const offenders = [...walk('app'), ...walk('components'), ...walk('lib')].filter((f) => f !== 'lib/shareLinks.ts' && hardCoded.test(code(f)))
+    expect(offenders).toEqual([])
+    // Controls: the one module still holds the production default; each form is caught, and a comment or a derived URL is not.
+    expect(hardCoded.test(code('lib/shareLinks.ts'))).toBe(true)
+    for (const literal of ["'https://www.blendn.app/x'", '`https://blendn.app/x`', '"https://staging.blendn.app"', "'blendn.app'", "'www.blendn.app'"]) expect(hardCoded.test(literal)).toBe(true)
+    for (const fine of ['const a = `${SITE_ORIGIN}/terms`', "'dashboard.blendn.app'", "'support@blendn.app'"]) expect(hardCoded.test(fine)).toBe(false)
+    expect(strip('x(1) // https://www.blendn.app/x\n/* \'https://blendn.app\' */')).not.toMatch(hardCoded)
+  })
 })
 
 describe('a link we send is one the app is verified for (SCRUM-738)', () => {
-  // The live site's associated-domain file (curl https://www.blendn.app/.well-known/apple-app-site-association) lists these
-  // and no others; `/e/` and `/v/` serve the homepage until SCRUM-689. A new outbound path must be added here on purpose.
-  const LIVE_AASA_PATHS = ['/f/', '/event/']
+  // The live site's associated-domain file (curl https://www.blendn.app/.well-known/apple-app-site-association, and the
+  // staging host's, byte-identical, 2026-11-26) lists these and no others. A new outbound path must be added here on purpose.
+  const LIVE_AASA_PATHS = ['/f/', '/c/', '/event/', '/e/', '/v/']
   const { eventLink, inviteLink, venueLink } = jest.requireActual('../lib/shareLinks') as typeof import('../lib/shareLinks')
 
   it.each([
@@ -120,11 +134,13 @@ describe('the app answers to the links it sends', () => {
     expect(read('app/+native-intent.tsx')).toMatch(/nativeIntentPath/)
   })
 
-  it('Android verifies /e/, /v/, /f/ and the organizer’s /event/ on www; iOS asks about WhatsApp', () => {
+  it('Android verifies /e/, /v/, /f/ and the organizer’s /event/ on www and staging; iOS asks about WhatsApp', () => {
     const app = JSON.parse(read('app.json')).expo
-    const prefixes = app.android.intentFilters.flatMap((f: { data: { host?: string; pathPrefix?: string }[] }) => f.data.filter((d) => d.host === 'www.blendn.app').map((d) => d.pathPrefix))
-    expect(prefixes).toEqual(expect.arrayContaining(['/e/', '/v/', '/f/', '/event/']))
-    expect(app.ios.associatedDomains).toEqual(['applinks:www.blendn.app'])
+    for (const host of ['www.blendn.app', 'staging.blendn.app']) {
+      const prefixes = app.android.intentFilters.flatMap((f: { data: { host?: string; pathPrefix?: string }[] }) => f.data.filter((d) => d.host === host).map((d) => d.pathPrefix))
+      expect(prefixes).toEqual(expect.arrayContaining(['/e/', '/v/', '/f/', '/event/']))
+    }
+    expect(app.ios.associatedDomains).toEqual(['applinks:www.blendn.app', 'applinks:staging.blendn.app'])
     expect(app.ios.infoPlist.LSApplicationQueriesSchemes).toContain('whatsapp')
   })
 

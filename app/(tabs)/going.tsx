@@ -45,12 +45,10 @@ import {
 } from '../../lib/pagedList'
 import {
   changedTag,
-  lockedNightsLabel,
   ratingsToRead,
   stayLabel,
   rsvpEventRows,
   savedEventRows,
-  withLockedNights,
   withPendingSaves,
   type AttendancePayload,
   type GoingItem,
@@ -69,7 +67,6 @@ import { openInMaps } from '../../lib/openInMaps'
 import { LobbyRowNews, NewInLobbyRow } from '../../components/board/LobbyPreview'
 import { postPhoneLobbyMarkers } from '../../lib/lobbySeen'
 import { addToCalendar } from '../../lib/calendar'
-import { openTonight } from '../../lib/paywall'
 import { shareEvent } from '../../lib/shareRow'
 import { showSheet } from '../../lib/sheet'
 import { isNightRated, markNightRated, useRatedNights } from '../../lib/ratedNights'
@@ -109,8 +106,6 @@ function GoingScreenInner() {
   const attended = useMemo(() => pagedRows(pastPaged), [pastPaged])
   /** Which section is reading its next page, and which one's read failed (the row at its end says so). */
   const [reading, setReading] = useState<Partial<Record<GoingSection, 'busy' | 'failed'>>>({})
-  /** Older nights the server keeps behind Blendn+ (step 11). */
-  const [lockedCount, setLockedCount] = useState(0)
   const [refreshing, setRefreshing] = useState(false)
   const [loadFailed, setLoadFailed] = useState(false)
   /** Seconds the server asked us to wait, when it refused a read for asking too fast (Flow 15 #15). */
@@ -182,14 +177,12 @@ function GoingScreenInner() {
 
   /*
    * The latest of each list, for a read that starts from what is held (a refresh, or the next page) without waiting for a
-   * render. The three reads below answer one page by number or by cursor; `lockedRef` is the Blendn+ count the first page of
-   * Past carries.
+   * render. The three reads below answer one page by number or by cursor.
    */
   const latest = useRef({ saved: savedPaged, going: goingPaged, past: pastPaged })
   useEffect(() => {
     latest.current = { saved: savedPaged, going: goingPaged, past: pastPaged }
   }, [savedPaged, goingPaged, pastPaged])
-  const lockedRef = useRef<number | null>(null)
   const uid = authUser?.id ?? ''
   const readSaved = useCallback(
     async (ask: PageAsk): Promise<PageRead<EventRow, ApiResult>> => {
@@ -207,7 +200,6 @@ function GoingScreenInner() {
   const readPast = useCallback(async (ask: PageAsk): Promise<PageRead<AttendancePayload['events'][number], ApiResult>> => {
     const res = await apiClient.getMyAttendance(PAST_PAGE, ask.page, ask.cursor)
     if (!res.success || !res.data) return { ok: false, failure: res }
-    if (ask.page === 1) lockedRef.current = res.data.lockedCount ?? 0
     return { ok: true, rows: res.data.events ?? [], meta: pageMeta(res.data.pagination) }
   }, [])
 
@@ -219,7 +211,6 @@ function GoingScreenInner() {
         setSavedPaged(emptyPaged())
         setGoingPaged(emptyPaged())
         setPastPaged(emptyPaged())
-        setLockedCount(0)
         setLoading(false)
         return
       }
@@ -234,7 +225,6 @@ function GoingScreenInner() {
        * is thrown away.
        */
       const id = ++loadId.current
-      lockedRef.current = null
       const [saved, rsvps, past] = await Promise.all([
         rereadPaged(latest.current.saved, SAVED_PAGE, readSaved, (rows) => withPendingSaves(rows, pendingSaves.current, id)),
         rereadPaged(latest.current.going, GOING_PAGE, readGoing),
@@ -252,8 +242,6 @@ function GoingScreenInner() {
       if (past.ok) {
         setPastPaged(past.paged)
         readRatings(pagedRows(past.paged))
-        // Older nights behind Blendn+ (step 11); kept as last known when the read fails, like the rows.
-        if (lockedRef.current !== null) setLockedCount(lockedRef.current)
       } else Logger.debug('interested', 'Failed to load attendance', { error: past.failure.error })
 
       const allFailed = !saved.ok && !rsvps.ok && !past.ok
@@ -337,7 +325,7 @@ function GoingScreenInner() {
       if (authUser) void loadInterestedEvents()
     }, [authUser, loadInterestedEvents])
   )
-  // And on returning to the app: a pending Blendn+ payment confirmed while away unlocks the older nights.
+  // And on returning to the app: what changed while away is read again.
   useEffect(() => {
     const app = AppState.addEventListener('change', (state) => {
       if (state === 'active' && authUser) void loadInterestedEvents()
@@ -724,12 +712,6 @@ function GoingScreenInner() {
       )
     }
 
-    if (item.kind === 'locked') {
-      // A tap on something that says Blendn+: the Tonight sheet for the earlier nights always opens (trigger `recap`); bought, the nights are read again.
-      // Plus is violet (owner's ruling): the lock is Plus's, in its selection colours on an ember screen (audit C13).
-      return <LockedNights count={item.count} onPress={() => void openTonight({ trigger: 'night', venue: '', onUnlocked: () => reloadRef.current() }, { userInitiated: true })} />
-    }
-
     if (item.kind === 'past' && item.row.visit) {
       // A place you went live at (Flow 4 · Past venues): its name, its type art, "Live here · 28 Sep · 1h 40m" and a "Venue" tag.
       const { visit } = item.row
@@ -821,8 +803,8 @@ function GoingScreenInner() {
     [goingPaged, savedPaged, pastPaged, reading]
   )
   const items = useMemo(
-    () => withLockedNights(goingSections(going, events, attended, undefined, paging), lockedCount),
-    [going, events, attended, lockedCount, paging]
+    () => goingSections(going, events, attended, undefined, paging),
+    [going, events, attended, paging]
   )
   // Past is the list that runs long, and it is the last: its next page is asked for as the reader reaches the end. A failed read
   // is asked again by the row, never by the scroll, so a refusal cannot turn into a loop.
@@ -957,13 +939,6 @@ function rowWhen(start: string, timeZone?: string | null): string {
   const day = featuredDateLabel(start, new Date(), timeZone)
   const time = timeLabel(start, timeZone)
   return day === 'Today' || !day ? time : `${day} · ${time}`
-}
-
-/** "{n} more nights with Blend'n+": Plus's door, a positive action (buttons board C): `lit`, as every yes is. */
-function LockedNights({ count, onPress }: { count: number; onPress: () => void }) {
-  return (
-    <Button kind="lit" size="md" icon="lock" label={lockedNightsLabel(count)} accessibilityHint="Opens Blend’n+" onPress={onPress} style={[styles.inset, styles.locked]} />
-  )
 }
 
 /** "Tonight · 9 PM" with the time in Geist Mono, or the still live dot and "Happening now". */
@@ -1273,7 +1248,6 @@ const styles = StyleSheet.create({
   // 24 under the hero, 12 between rows (flow4.js going `loading`).
   skeletonFirstRow: { marginTop: SPACE.xl },
   skeletonRow: { marginTop: SPACE.md },
-  locked: { marginTop: SPACE.md },
   heroLit: { flex: 1 },
   // The ⋯ and the "Show more" row: the row's own air, nothing bordered.
   // Controls beside each other keep their 44 apart (the Android 48 reach is 8 either side of a 32), so no two reaches overlap.

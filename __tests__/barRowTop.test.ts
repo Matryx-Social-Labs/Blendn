@@ -19,7 +19,6 @@ const CHROME = [
   'components/ds/MomentRecap.tsx',
   'components/profile/PhotoViewer.tsx',
   'components/offer/OfferSections.tsx',
-  'components/plus/PlusSections.tsx',
   'components/banter/BanterParts.tsx',
   'components/chat/ChatHeader.tsx',
   'components/blendn/BlendnScreen.tsx',

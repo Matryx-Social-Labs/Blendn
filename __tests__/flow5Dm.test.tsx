@@ -469,6 +469,39 @@ describe('the thread’s states', () => {
     expect(screen.queryByLabelText('Message')).toBeNull()
     expect(screen.queryByText(/block/i)).toBeNull()
   })
+
+  /*
+   * They left, blocked or deleted it: the server says nothing on the socket, and no `chat` mark re-reads the thread any
+   * more (SCRUM-1173). A send it refuses as gone or forbidden reads the thread again, and the read decides.
+   */
+  it.each(['NOT_FOUND', 'FORBIDDEN'])('a send refused as %s reads the thread again, and a gone thread shows as ended', async (errorCode) => {
+    api.getConversationMessages.mockResolvedValueOnce(page([]) as never)
+    await open()
+    api.getConversationMessages.mockResolvedValue({ success: false, errorCode: 'NOT_FOUND', error: 'Conversation not found' } as never)
+    api.sendPrivateMessage.mockResolvedValue({ success: false, errorCode, error: 'Conversation not found' } as never)
+    await act(async () => fireEvent.press(screen.getByLabelText(/Say hi/)))
+    await flush()
+    expect(screen.getByText('This conversation has ended')).toBeTruthy()
+  })
+
+  it('a refusal whose re-read still finds the thread leaves it open', async () => {
+    api.getConversationMessages.mockResolvedValue(page([]) as never)
+    await open()
+    api.sendPrivateMessage.mockResolvedValue({ success: false, errorCode: 'FORBIDDEN', error: 'Not yet' } as never)
+    await act(async () => fireEvent.press(screen.getByLabelText(/Say hi/)))
+    await flush()
+    expect(screen.queryByText('This conversation has ended')).toBeNull()
+  })
+
+  it('a send refused for any other reason does not read the thread again', async () => {
+    api.getConversationMessages.mockResolvedValueOnce(page([]) as never)
+    await open()
+    const reads = api.getConversationMessages.mock.calls.length
+    api.sendPrivateMessage.mockResolvedValue({ success: false, errorCode: 'RATE_LIMITED', error: 'Slow down' } as never)
+    await act(async () => fireEvent.press(screen.getByLabelText(/Say hi/)))
+    await flush()
+    expect(api.getConversationMessages.mock.calls.length).toBe(reads)
+  })
 })
 
 describe('the composer rides the keyboard', () => {
@@ -786,4 +819,32 @@ it('the DM feed keeps its rows attached, so an instant jump to the newest never 
   } finally {
     Object.defineProperty(Platform, 'OS', { value: os, configurable: true })
   }
+})
+
+describe('socket messages take their place by (createdAt, id), not by arrival (SCRUM-1168)', () => {
+  const deliver = (id: string, createdAt: string) =>
+    mockLive.forEach((h) =>
+      h.onMessage?.({ message: { id, conversationId: 'c1', senderId: 'u-c', sender: { id: 'u-c', name: null, image: null }, text: `order ${id}`, isRead: false, createdAt } })
+    )
+  const order = () => screen.getAllByText(/^order /).map((n) => [n.props.children].flat().join(''))
+
+  it('shows the earlier message above the later one when the later arrives first', async () => {
+    await open()
+    await act(async () => {
+      deliver('m3', '2026-10-15T19:06:02.000Z')
+      deliver('m2', '2026-10-15T19:06:01.000Z')
+    })
+    await flush()
+    expect(order()).toEqual(['order m2', 'order m3'])
+  })
+
+  it('orders two messages of the same instant by id', async () => {
+    await open()
+    await act(async () => {
+      deliver('mb', '2026-10-15T19:06:00.000Z')
+      deliver('ma', '2026-10-15T19:06:00.000Z')
+    })
+    await flush()
+    expect(order()).toEqual(['order ma', 'order mb'])
+  })
 })

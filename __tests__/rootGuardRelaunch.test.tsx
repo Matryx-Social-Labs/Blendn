@@ -52,7 +52,6 @@ jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock')
 )
 jest.mock('../lib/apiClient', () => ({ apiClient: {} }))
-jest.mock('../lib/paywall', () => ({ notePathname: jest.fn() }))
 // The router test harness stubs Reanimated, which has no Reduce Motion hook; the root layout reads it for its transitions.
 jest.mock('../lib/motion', () => ({ ...jest.requireActual('../lib/motion'), useReducedMotion: () => false }))
 jest.mock('../lib/notifications', () => ({

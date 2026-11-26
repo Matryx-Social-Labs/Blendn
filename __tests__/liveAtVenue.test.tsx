@@ -1,12 +1,11 @@
 /**
  * Your Go Live, wherever you are (plan v2 step 5), as mounted: the expiry prompt (Flow 11 ·
  * 11.4) is `ExpiryPrompt`, asked when a fixed window has run out ("Your live time at ‹place›
- * is up · Still here?"), once a night, with the free 45 minutes as its primary, a Stay row
- * that is Blendn+'s only where Blendn+ is sold (and never on a first Go Live), and Done for now.
+ * is up · Still here?"), once a night, with the free 45 minutes as its primary, a free Stay
+ * row, and Done for now.
  *
  * Negative controls (the client keeps no registry): dropping `!here.prompted` fails "asks
- * once a night"; showing the sold row without `firstGoLive` fails "never on a first Go Live";
- * routing the sold row to `goLive(STAY_CHOICE)` fails "opens the Tonight sheet, never asks the server".
+ * once a night"; dropping `NO_STAY_ROW_PATHS` fails "over a chat there is no Stay row".
  */
 import React from 'react'
 import { act, render, screen, fireEvent } from '@testing-library/react-native'
@@ -34,18 +33,7 @@ jest.mock('expo-linear-gradient', () => {
 })
 jest.mock('expo-router', () => ({ usePathname: () => mockPath, router: { push: jest.fn() } }))
 jest.mock('../lib/logger', () => ({ Logger: { debug: jest.fn(), warn: jest.fn(), error: jest.fn(), info: jest.fn() } }))
-jest.mock('../lib/apiClient', () => ({ apiClient: { getActiveCheckins: jest.fn(), goLive: jest.fn(), getMyPlus: jest.fn() } }))
-// The Tonight sheet: whether it opened, and its closing (the prompt comes back after a dismissal).
-const mockPaywallClosed = new Set<(how: 'done' | 'dismissed') => void>()
-const mockOpenTonight = jest.fn(async (..._a: unknown[]) => true)
-jest.mock('../lib/paywall', () => ({
-  openTonight: (...a: unknown[]) => mockOpenTonight(...a),
-  subscribePaywallClosed: (fn: (how: 'done' | 'dismissed') => void) => {
-    mockPaywallClosed.add(fn)
-    return () => mockPaywallClosed.delete(fn)
-  },
-}))
-jest.mock('../components/plus/TonightHost', () => ({ TonightHost: () => null }))
+jest.mock('../lib/apiClient', () => ({ apiClient: { getActiveCheckins: jest.fn(), goLive: jest.fn() } }))
 // The prompt's own drawing is `dsExpiryPrompt.test.tsx`'s; here, what LiveAtVenue tells it. A sheet that left is gone from the tree.
 /** Whether the prompt reaches the screen when asked (its Sheet's onShow): false is one that waited and was withdrawn, or iOS refused. */
 let mockShows = true
@@ -66,14 +54,13 @@ jest.mock('../components/ds/ExpiryPrompt', () => {
           <Text accessibilityRole="header">{p.kind === 'reset' ? 'Today’s room has closed' : `Your live time at ${p.venue} is up`}</Text>
           {p.kind === 'ended' ? <Text>Still here?</Text> : null}
           {p.opensAt ? <Text>{`opens at ${p.opensAt}`}</Text> : null}
-          {p.firstGoLiveTonight ? <Text>first Go Live</Text> : null}
           {p.kind === 'ended' ? <Pressable accessibilityRole="button" accessibilityLabel="Extend 45 min — free" accessibilityState={{ busy: p.extending }} onPress={p.onExtend} /> : null}
-          {p.plus ? (
+          {p.stay ? (
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={p.plus.from ? `Stay while you’re here with Blend’n+, from ${p.plus.from}` : 'Stay while you’re here, up to 4 h'}
+              accessibilityLabel="Stay while you’re here, up to 4 h"
               accessibilityState={{ busy: p.staying }}
-              onPress={p.plus.onPress}
+              onPress={p.stay.onPress}
             />
           ) : null}
           <Pressable accessibilityRole="button" accessibilityLabel="Done for now" onPress={p.onDone} />
@@ -81,7 +68,6 @@ jest.mock('../components/ds/ExpiryPrompt', () => {
       ) : null,
   }
 })
-jest.mock('../lib/purchases', () => ({ loadPlusOffers: jest.fn() }))
 jest.mock('../lib/blendnOverlay', () => ({ isBlendnOpen: () => mockRoomOpen }))
 jest.mock('../lib/socketClient', () => ({
   subscribeToLiveEnded: (cb: never) => {
@@ -106,9 +92,8 @@ jest.mock('../lib/sheetDismissed', () => ({ ...jest.requireActual('../lib/sheetD
 import { LiveAtVenue, endedByReset } from '../components/LiveAtVenue'
 import { apiClient } from '../lib/apiClient'
 import { checkInChanged } from '../lib/checkIn'
-import { markLivePrompted, noteGoLiveDay, noteOwnGoLive, readLiveSession, rememberLiveSession } from '../lib/goLive'
+import { markLivePrompted, readLiveSession, rememberLiveSession } from '../lib/goLive'
 import { getCurrentLocation } from '../lib/locationFix'
-import { loadPlusOffers } from '../lib/purchases'
 /* eslint-enable import/first */
 
 const at = (min: number) => new Date(NOW + min * 60_000).toISOString()
@@ -118,9 +103,6 @@ const active = (expiresAt: string, stay = false) =>
     data: { checkIns: [{ id: 'c1', eventId: 'day-1', kind: 'venue_day', expiresAt, stay, event: { venueName: 'The Humming Tree' } }] },
   })
 const notLive = () => (apiClient.getActiveCheckins as jest.Mock).mockResolvedValue({ success: true, data: { checkIns: [] } })
-const plus = (patch: object) =>
-  (apiClient.getMyPlus as jest.Mock).mockResolvedValue({ success: true, data: { active: false, gated: true, product: null, source: null, expiresAt: null, ...patch } })
-const offer = (price: number, priceString: string) => ({ pkg: { product: { price } }, price: priceString })
 
 const flush = async () => {
   await act(async () => {
@@ -155,24 +137,16 @@ beforeEach(async () => {
     now: NOW,
     doNotFake: ['hrtime', 'nextTick', 'performance', 'queueMicrotask', 'requestAnimationFrame', 'cancelAnimationFrame', 'requestIdleCallback', 'cancelIdleCallback', 'setImmediate', 'clearImmediate', 'setInterval', 'clearInterval', 'setTimeout', 'clearTimeout'],
   })
-  noteOwnGoLive(0)
   mockEnded.length = 0
   mockShows = true
   mockChanged.clear()
-  mockPaywallClosed.clear()
   mockPath = '/venue/v1'
   mockRoomOpen = false
   jest.clearAllMocks()
   await require('@react-native-async-storage/async-storage').clear()
-  // A second night: this is not a first Go Live.
-  await noteGoLiveDay('u1', 'day-0')
   await rememberLiveSession({ userId: 'u1', venueDayId: 'day-1', venueId: 'v1', venueName: 'The Humming Tree', choice: { minutes: 20 } })
   notLive()
   ;(apiClient.goLive as jest.Mock).mockResolvedValue({ success: true, data: { venueDayId: 'day-1', expiresAt: at(65) } })
-  // Gated here, no Plus.
-  plus({})
-  ;(loadPlusOffers as jest.Mock).mockResolvedValue([offer(199, '₹199'), offer(49, '₹49')])
-  mockOpenTonight.mockReset().mockResolvedValue(true)
 })
 
 afterEach(() => jest.useRealTimers())
@@ -457,59 +431,7 @@ describe('the Stay row (Flow 11 · R2-D7, 12.1 #05)', () => {
     await endWith('expired')
   }
 
-  it('where Blendn+ is sold it is Blendn+’s, from the store’s lowest price, and a tap opens the Tonight sheet — never the server', async () => {
-    await ended()
-    const row = screen.getByRole('button', { name: /Stay while you’re here with Blend’n\+/ })
-    expect(row.props.accessibilityLabel).toContain('from')
-    await act(async () => {
-      fireEvent.press(row)
-    })
-    await flush()
-    expect(mockOpenTonight).toHaveBeenCalledWith(expect.objectContaining({ trigger: 'expiry', venue: 'The Humming Tree' }), { userInitiated: true })
-    expect(apiClient.goLive).not.toHaveBeenCalled()
-    // The sheet makes way for it.
-    expect(isUp('Still here?')).toBe(false)
-  })
-
-  it('the Tonight sheet’s free path extends 45 minutes; a bought Stay goes live with Stay', async () => {
-    await ended()
-    await act(async () => {
-      fireEvent.press(screen.getByRole('button', { name: /Stay while you’re here with Blend’n\+/ }))
-    })
-    await flush()
-    const request = mockOpenTonight.mock.calls[0][0] as { onFree: () => void; onUnlocked: () => void }
-    await act(async () => request.onFree())
-    expect(apiClient.goLive).toHaveBeenLastCalledWith('v1', expect.objectContaining({ minutes: 45 }))
-    await act(async () => request.onUnlocked())
-    expect(apiClient.goLive).toHaveBeenLastCalledWith('v1', expect.objectContaining({ stay: true }))
-  })
-
-  it('declining it brings the prompt back; doing something there does not', async () => {
-    await ended()
-    await act(async () => {
-      fireEvent.press(screen.getByRole('button', { name: /Stay while you’re here with Blend’n\+/ }))
-    })
-    await flush()
-    await act(async () => {
-      for (const fn of [...mockPaywallClosed]) fn('dismissed')
-    })
-    expect(isUp('Still here?')).toBe(true)
-    expect(screen.getByRole('button', { name: 'Extend 45 min — free' })).toBeTruthy()
-
-    await act(async () => {
-      fireEvent.press(screen.getByRole('button', { name: /Stay while you’re here with Blend’n\+/ }))
-    })
-    await flush()
-    await act(async () => {
-      for (const fn of [...mockPaywallClosed]) fn('done')
-    })
-    expect(isUp('Still here?')).toBe(false)
-  })
-
-  /**
-   * H2: never a paywall over a chat or the room: Extend and Done only, for the sold row and the free one alike.
-   * Negative control: dropping `isQuietSurface` from `stayRow` fails these.
-   */
+  /** Over a chat or the room: Extend and Done only. Negative control: dropping `NO_STAY_ROW_PATHS` from `stayRow` fails these. */
   it.each([['a chat', '/chat/g1', false], ['a DM', '/private-chat/c1', false], ['the room overlay', '/(tabs)/events', true]])('over %s there is no Stay row', async (_label, path, roomOpen) => {
     mockPath = path
     mockRoomOpen = roomOpen
@@ -520,52 +442,26 @@ describe('the Stay row (Flow 11 · R2-D7, 12.1 #05)', () => {
     expect(screen.queryByRole('button', { name: /Stay while you’re here/ })).toBeNull()
   })
 
-  it('never on a person’s first Go Live', async () => {
-    await require('@react-native-async-storage/async-storage').clear()
-    await rememberLiveSession({ userId: 'u1', venueDayId: 'day-1', venueId: 'v1', venueName: 'The Humming Tree' })
-    await ended()
-    expect(isUp('Still here?')).toBe(true)
-    // The prompt is told it is a first Go Live: it draws no Blendn+ row for one (dsExpiryPrompt.test).
-    expect(isUp('first Go Live')).toBe(true)
-  })
-
-  it('no row where Blendn+ is sold but the store has no price to name', async () => {
-    ;(loadPlusOffers as jest.Mock).mockResolvedValue(null)
-    await ended()
-    expect(screen.queryByRole('button', { name: /Stay while you’re here/ })).toBeNull()
-  })
-
-  it.each([
-    ['in a launch season', { gated: false }],
-    ['to a holder', { active: true, product: 'plus' }],
-  ])('%s staying is just staying: the plain row goes live with Stay, no price, even on a first night', async (_label, patch) => {
-    plus(patch)
+  it('staying is just staying (launch gate 5): the row goes live with Stay, no price, even on a first night', async () => {
     await require('@react-native-async-storage/async-storage').clear()
     await rememberLiveSession({ userId: 'u1', venueDayId: 'day-1', venueId: 'v1', venueName: 'The Humming Tree' })
     ;(apiClient.goLive as jest.Mock).mockResolvedValue({ success: true, data: { venueDayId: 'day-1', expiresAt: at(30), stay: true } })
     await ended()
-    expect(screen.queryByRole('button', { name: /with Blend’n\+/ })).toBeNull()
+    expect(screen.queryByText(/Blend’n\+/)).toBeNull()
     await press('Stay while you’re here, up to 4 h')
     expect(apiClient.goLive).toHaveBeenCalledWith('v1', expect.objectContaining({ stay: true }))
-    expect(mockOpenTonight).not.toHaveBeenCalled()
     expect(mockShowToast).toHaveBeenCalledWith("You’re live for as long as you’re here", 'success')
     expect(isUp('Still here?')).toBe(false)
   })
 
-  it('refused as Blendn+’s by a stale status: the status is read again, the Tonight sheet opens for it and the prompt waits for it', async () => {
-    plus({ gated: false })
-    ;(apiClient.goLive as jest.Mock).mockResolvedValue({ success: false, errorCode: 'PLUS_REQUIRED', error: 'Staying live is part of Blendn+.' })
+  it('an old server that still answers PLUS_REQUIRED: its own sentence in a tray, no sheet to buy anything', async () => {
+    ;(apiClient.goLive as jest.Mock).mockResolvedValue({ success: false, errorCode: 'PLUS_REQUIRED', error: 'Staying live isn’t open here right now.' })
     await ended()
-    ;(apiClient.getMyPlus as jest.Mock).mockClear()
     await press('Stay while you’re here, up to 4 h')
-    // M7: a stale "free" is corrected at once (the dial and the next prompt read it).
-    expect(apiClient.getMyPlus).toHaveBeenCalled()
-    expect(mockOpenTonight).toHaveBeenCalledWith(expect.objectContaining({ trigger: 'stay', venue: 'The Humming Tree' }))
     expect(isUp('Still here?')).toBe(false)
-    await act(async () => {
-      for (const fn of [...mockPaywallClosed]) fn('dismissed')
-    })
-    expect(isUp('Still here?')).toBe(true)
+    expect(screen.getByText('Couldn’t go live')).toBeTruthy()
+    expect(screen.getByText('Staying live isn’t open here right now.')).toBeTruthy()
+    expect(screen.queryByText(/Blend’n\+/)).toBeNull()
   })
 
   it('spins Extend only when Extend was pressed', async () => {
@@ -578,69 +474,5 @@ describe('the Stay row (Flow 11 · R2-D7, 12.1 #05)', () => {
     expect(screen.getByRole('button', { name: 'Extend 45 min — free' }).props.accessibilityState).toMatchObject({ busy: true })
     await act(async () => land({ success: true, data: { venueDayId: 'day-1', expiresAt: at(65) } }))
     ;(getCurrentLocation as jest.Mock).mockClear()
-  })
-})
-
-/**
- * Flow 12 · 12.4 "Plus lapses during Stay": inline, once, never a paywall and no haptic.
- * Negative control: dropping the `ownGoLiveAt` guard fails "our own Go Live is not a lapse".
- */
-describe('Blendn+ lapsing during a Stay', () => {
-  const readsAgain = async () => {
-    await act(async () => {
-      mockChanged.forEach((f) => f())
-    })
-    await flush()
-  }
-
-  it('says the window is back to minutes, once', async () => {
-    active(at(60), true)
-    await mount()
-    active(at(20))
-    await readsAgain()
-    expect(mockShowToast).toHaveBeenCalledWith('Your Blend’n+ ended, so you’re live for 20 more minutes.', 'info')
-    expect(mockOpenTonight).not.toHaveBeenCalled()
-    mockShowToast.mockClear()
-    await readsAgain()
-    expect(mockShowToast).not.toHaveBeenCalled()
-  })
-
-  it('says nothing when the window was never a stay, or is a different night', async () => {
-    active(at(60))
-    await mount()
-    active(at(20))
-    await readsAgain()
-    expect(mockShowToast).not.toHaveBeenCalled()
-  })
-
-  it('our own Go Live, here or on the place page, is not a lapse', async () => {
-    active(at(60), true)
-    await mount()
-    noteOwnGoLive()
-    active(at(45))
-    await readsAgain()
-    expect(mockShowToast).not.toHaveBeenCalled()
-  })
-
-  it('but a Go Live long ago is not an excuse', async () => {
-    active(at(60), true)
-    await mount()
-    noteOwnGoLive()
-    jest.setSystemTime(NOW + 60_000)
-    active(at(45))
-    await readsAgain()
-    expect(mockShowToast).toHaveBeenCalledWith(expect.stringContaining('Your Blend’n+ ended'), 'info')
-  })
-})
-
-describe('the last answer about Blendn+ is one account’s', () => {
-  it('is cleared when the account goes (sign-out, or another one)', async () => {
-    const plusLib = require('../lib/plus')
-    const view = await render(<LiveAtVenue />)
-    await flush()
-    const spy = jest.spyOn(plusLib, 'clearKnownPlus')
-    await view.unmount()
-    expect(spy).toHaveBeenCalled()
-    spy.mockRestore()
   })
 })
