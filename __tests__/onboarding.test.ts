@@ -176,7 +176,7 @@ describe('stepPayload', () => {
      * The bug this prevents is silent and destructive. Sending the whole draft
      * on every step means going back to fix a typo in your name re-sends an
      * empty `bio`, and the API reads a present key as "set this" — so a
-     * correction on step one wipes an answer from step six.
+     * correction on `basics` wipes an answer from `details`.
      */
     expect(stepPayload('basics', full)).toEqual({
       name: 'Julian',
