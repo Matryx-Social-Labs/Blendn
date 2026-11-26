@@ -23,7 +23,7 @@ import { useAuth } from '../../lib/useAuth'
 import { useOnboarding } from '../../lib/useOnboarding'
 
 /**
- * Step seven: photos.
+ * Step four: photos.
  *
  * Six slots, and every one of them optional. This is the highest-friction thing
  * the flow asks for, and refusing to let anyone in without a photo loses more

@@ -1,6 +1,6 @@
 <!--
   MIRROR — do not edit here. Edits belong in Blendn-Admin/docs/USER_JOURNEY.md.
-  From Blendn-Admin @ 257e570c (v0.69.0, 2026-10-11).
+  From Blendn-Admin @ 33eea380 (v0.69.0, 2026-11-26).
   Refresh: ./scripts/sync-api-docs.sh
 -->
 
@@ -73,29 +73,31 @@ cost, rate limiting, and a fraud surface OAuth does not have.
 
 ### 2. Onboarding
 
-**Decided: minimal.** Nothing between installing and browsing.
+**The steps are whatever `ONBOARDING_STEPS` in the app's `lib/onboarding.ts`
+says, in that order;** the screens are `app/onboarding/`. Read the list there,
+not a count here.
 
 | | |
 |---|---|
-| Designed | Eight steps, hard-gated, before anything is visible |
-| Built | Eight steps, hard-gated — `gestureEnabled: false`, Android back swallowed |
-| Served | `PUT /profiles/:userId` accepts everything |
+| Designed | Hard-gated, before anything is visible |
+| Built | Six steps, which a new account goes through before the tabs: `basics`, `preferences`, `details`, `media`, `location`, `ready`. Five are questions, and the progress bar counts five; `ready` is the payoff. `preferences`, `details` and `media` can be skipped and `location` answered "Maybe later"; `basics` cannot. Back and the edge swipe move between steps; nothing swipes out of the flow |
+| Served | `PUT /profiles/:userId` with only the fields a step answered (a skip sends nothing); `ready` sends the whole draft with `onboarded: true`. Interests also through `/profiles/:userId/interests` |
 
-Two of the eight steps **discard what they collect**: `goals.tsx` and
-`preferences.tsx` both note "stored locally for now" and never sync, though the
-endpoint has always accepted those fields.
+What each step asks: `basics` the name, gender and date of birth;
+`preferences` orientations and whether to show them, why you go out
+(`intent_default`) and how you enter rooms (`reveal_by_default`); `details`
+interests and a bio; `media` photos; `location` the location permission
+(`share_location`). Push is not a step: the app asks for it in context, the
+first time it pays off.
 
-**The shape:** sign in → browse → check in. At first check-in, one screen with two
-chip-pickers — *why are you here tonight* (intent, multi-select, "just the event"
-is a first-class answer) and *what are you into* (interests). Both are things
-matching needs anyway. Photo and bio are prompted only when someone chooses to
-reveal, which is the first moment a photo means anything.
+**History.** The eight screens that once stood here, two of which discarded what
+they collected, were deleted on 2026-08-10 with the gate that sent people to
+them; per-step-saved screens came back on 2026-08-14, and the flow became
+today's six on 2026-11-01.
 
-**The blocker underneath it:** onboarding writes interests to
-`profiles.interests`, free text, from a hardcoded 28-emoji list. Matching ranks on
-the **structured** `user_interests → categories` graph, and the endpoints that
-populate it have **zero call sites**. Until that is fixed every match card comes
-back with no shared interests, for everyone.
+**Interests reach matching.** `details` picks from the server's category tree
+and writes both the free-text `profiles.interests` and the structured
+`user_interests → categories` graph that matching ranks on (`lib/matching.ts`).
 
 ### 3. Browse and discover
 
@@ -236,7 +238,11 @@ from a 1–5 star and needs a real 0–10 question.
 2. **My venues** — utilisation, ratings, returning organizers
 3. **Building occupancy** — everyone inside across concurrent events, against the
    venue's own licensed capacity
-4. **Events here** — read-only operational access to events at their venue
+4. **Tonight** — the room running at the venue now, in ranges; how people met
+   only on the venue's own venue day
+5. **Nights here** — every night at the venue (its venue days included) with who
+   came as a band, met someone (own nights only), mood, rating and offers
+   redeemed; each row opens the event, and a venue day's Feedback once it is over
 
 **Gaps:** availability/booking calendar — utilisation is reported after the fact,
 never what is bookable.
@@ -320,8 +326,7 @@ p22 masks, and shows the photo anyway.
 **Decided: anonymity by default, opt in to be public.** Already how the API works
 — `reveal_by_default` false, per-event `revealed`, enforced inside `rankMatches`.
 
-So the **design changes**, not the build. That is a real ask of the designer and
-`DESIGN_HANDOFF.md` explains why rather than announcing it.
+So the **design changes**, not the build. That is a real ask of the designer.
 
 ---
 
@@ -331,4 +336,4 @@ Every gap from this document lands in exactly one roadmap:
 
 - **API side** → `docs/ROADMAP.md` here
 - **App side** → `blendn/ROADMAP.md`
-- **Design** → `docs/DESIGN_HANDOFF.md`
+- **Design** → Jira, the design Epic (SCRUM-1129); a dashboard screen goes through `docs/DESIGN-CHAIN.md`

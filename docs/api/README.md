@@ -23,7 +23,6 @@ layer.
 | [`CHECKIN.md`](CHECKIN.md) | The geofence, and capacity vs occupancy vs attendance. Read before touching check-in |
 | [`SOCKET_EVENTS.md`](SOCKET_EVENTS.md) | The realtime catalogue. `lib/socketClient.ts` currently matches it exactly — keep it that way |
 | [`client-chat-moderation-guide.md`](client-chat-moderation-guide.md) | Written for this client: what moderation does to a message and what the app has to render |
-| [`DESIGN_HANDOFF.md`](DESIGN_HANDOFF.md) | What the designer is being asked to change in `Blendn.fig`, and why. Read before building a screen from the deck |
 | [`DESIGN_SYSTEM.md`](DESIGN_SYSTEM.md) | The web design system — the reference for the token work in `ROADMAP.md` §11 |
 
 `../ROADMAP.md` is this repo's ledger of what to build against all of it.

@@ -78,7 +78,7 @@ function withStoredPhotos(draft: OnboardingDraft, data: unknown): OnboardingDraf
  * its own route and therefore its own mount — there is no common React parent
  * to hold state in that survives navigation. Storage is the shared parent
  * instead, which is what makes resume work at all: the same mechanism that
- * carries an answer from step three to step seven carries it across a quit.
+ * carries an answer from `details` to `media` carries it across a quit.
  *
  * ## The save rule
  *
@@ -89,7 +89,7 @@ function withStoredPhotos(draft: OnboardingDraft, data: unknown): OnboardingDraf
  *  - **Server, only this step's fields.** `stepPayload` narrows it. Sending the
  *    whole draft each time would mean going back to fix a typo in your name
  *    re-sends an empty `bio`, and the API reads a present key as "set this" —
- *    so a correction on step one silently wipes an answer from step six.
+ *    so a correction on `basics` silently wipes an answer from `details`.
  *
  * A failed server save **stops on the step and says so**. It used to move on
  * regardless, logging a warning nobody saw, on the theory that the last step

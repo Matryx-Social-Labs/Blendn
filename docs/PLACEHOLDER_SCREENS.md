@@ -18,9 +18,9 @@ was designed to match sign-in on 2026-09-28, with a "Check your inbox" state
 (`app/board/[eventId].tsx`, §6) took the Flow 4 design on 2026-10-16; its rules
 below still hold.
 
-**Read `blendn-admin/docs/DESIGN_HANDOFF.md` first.** It explains the product's
-five non-negotiable rules and why they exist. This file is the per-screen
-detail.
+**Read [`api/USER_JOURNEY.md`](api/USER_JOURNEY.md) § "The rules that do not
+bend" first.** It explains the product's five non-negotiable rules and why they
+exist. This file is the per-screen detail.
 
 ---
 
@@ -221,8 +221,8 @@ the Blend'n room's settings.
 and photo are visible **in this room**, via
 `PUT /events/:id/matches/preferences`.
 
-`DESIGN_HANDOFF.md` calls the reveal control **"the single most important new
-screen"**, because it is the counterpart to the entire pseudonymity model.
+The reveal control is **the single most important new screen**, because it is
+the counterpart to the entire pseudonymity model.
 
 ### Rules the design must not break
 

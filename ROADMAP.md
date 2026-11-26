@@ -25,7 +25,6 @@ This file deliberately does not restate them:
 | `docs/API.md` | Every endpoint, with payloads. **The reference** — do not copy shapes into this file, they drift |
 | `docs/SOCKET_EVENTS.md` | The realtime catalogue |
 | `docs/CHECKIN.md` | Capacity vs occupancy vs attendance, and why check-in never refuses |
-| `docs/DESIGN_HANDOFF.md` | What the designer is being asked to change, and why |
 
 **Live Swagger UI** — the fastest way to see a real payload:
 
@@ -1089,7 +1088,7 @@ empties both halves. Intent is a tag and a ranking signal, never a partition.
 Decided the other way: pseudonymous by default, opt in to reveal, per event.
 It is the product's actual differentiator — a competitor can copy an events list
 in a fortnight and cannot copy a room people trust. The **design** changes here,
-not the build. See `DESIGN_HANDOFF.md`.
+not the build.
 
 **Client-side geofencing.** The server judges. Reimplementing it here produces
 two answers to one question, and the client's is the one an attacker controls.

@@ -17,10 +17,10 @@ import { askOsPermission } from '../../lib/onboarding'
 import { useOnboarding } from '../../lib/useOnboarding'
 
 /**
- * Step three: location.
+ * Step five: location.
  *
- * Same shape as notifications, and the same reason for existing: the OS dialog
- * fires once, so the explanation has to come first.
+ * It exists because the OS dialog fires once, so the explanation has to come
+ * first.
  *
  * Location matters more here than it does in most apps — **check-in is
  * GPS-validated and there is no way around that**, so an account that refuses
@@ -140,8 +140,7 @@ export default function LocationScreen() {
       ctaBusy={saving || asking}
       onContinue={() => void ask()}
       secondaryLabel="Maybe later"
-      // The same bug in the second of two places — see the note in
-      // `notifications.tsx`. Declining left `share_location` at `@default(true)`.
+      // Declining is written: left unsent, `share_location` stayed at `@default(true)`.
       onSecondary={() => void commit({ share_location: false })}
       // Not while the map shows where you are: the step is about to move on.
       onBack={() => !asking && goBack()}

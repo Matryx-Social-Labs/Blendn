@@ -78,14 +78,11 @@ blendn/
 │   │   └── profile.tsx         # Own profile
 │   ├── onboarding/             # Multi-step onboarding flow
 │   │   ├── basics.tsx          # step order: ONBOARDING_STEPS in lib/onboarding.ts
-│   │   ├── notifications.tsx
-│   │   ├── location.tsx
 │   │   ├── preferences.tsx
-│   │   ├── journey.tsx
 │   │   ├── details.tsx
 │   │   ├── media.tsx
-│   │   ├── ready.tsx
-│   │   └── friends.tsx         # after the last step
+│   │   ├── location.tsx
+│   │   └── ready.tsx
 │   ├── event/[id].tsx          # Event detail modal (slide_from_bottom)
 │   ├── chat/[id].tsx           # Group chat screen
 │   ├── private-chat/[conversationId].tsx  # 1-on-1 DM screen

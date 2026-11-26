@@ -22,7 +22,7 @@ import { anonymousByDefault, isUnder18, orientationConsent } from '../../lib/onb
 import { useOnboarding } from '../../lib/useOnboarding'
 
 /**
- * Step four — orientation, and what you are here for.
+ * Step two — orientation, and what you are here for.
  *
  * ## The orientation switch, and what it actually does
  *

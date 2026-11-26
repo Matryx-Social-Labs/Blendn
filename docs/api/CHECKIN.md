@@ -1,6 +1,6 @@
 <!--
   MIRROR — do not edit here. Edits belong in Blendn-Admin/docs/CHECKIN.md.
-  From Blendn-Admin @ 257e570c (v0.69.0, 2026-10-11).
+  From Blendn-Admin @ 33eea380 (v0.69.0, 2026-11-26).
   Refresh: ./scripts/sync-api-docs.sh
 -->
 
@@ -158,10 +158,11 @@ judgment belongs somewhere cheap to test.
 ping inside                        ─▶  stay
 ping inside, was out               ─▶  clear_departure
 ping outside, first                ─▶  record_departure
-outside, past grace, not asked     ─▶  prompt
-outside, past prompt timeout       ─▶  auto_checkout
+ping outside, past 20 min          ─▶  auto_checkout
+weak fix (> 150 m) reading outside ─▶  as no ping    (SCRUM-1326)
 no ping, never left                ─▶  stay          (silence is ambiguous)
-no ping, was outside               ─▶  clock keeps running
+no ping, one outside reading only  ─▶  stay          (SCRUM-1326)
+no ping, out twice ≥ 10 min apart  ─▶  clock keeps running
 occurrence ended                   ─▶  auto_checkout
 staff, mid-event                   ─▶  stay
 ```
@@ -170,7 +171,7 @@ staff, mid-event                   ─▶  stay
 |---|---|
 | `PING_INTERVAL_MINUTES` | 5 |
 | `DEPARTURE_GRACE_MINUTES` | 10 |
-| `PROMPT_TIMEOUT_MINUTES` | 10 |
+| `DEPARTURE_ALLOWANCE_MINUTES` | 20 |
 | `OCCURRENCE_GRACE_MINUTES` | 60 |
 
 Out-of-fence is judged by **calling `evaluateCheckIn`** — the same function that
@@ -184,9 +185,13 @@ battery, a revoked permission, airplane mode. **None of those mean the person
 left.**
 
 The distinction that makes the sweeper work: silence with *no evidence* they
-left does nothing; silence *after* a confirmed out-of-fence reading lets the
-clock run, because there we have positive evidence, we asked, and they did not
-answer.
+left does nothing; silence after **two** out-of-fence readings at least
+`DEPARTURE_GRACE_MINUTES` apart lets the clock run. One reading is not enough
+(SCRUM-1326): a phone opened once at the gate and pocketed on the way back in
+would otherwise be checked out 20 minutes later. A fix worse than the door's
+`MAX_GPS_ACCURACY_METERS` (150 m: Balanced indoors, iOS approximate, Android
+coarse) that reads outside is silence too: the ping answers `status: "unknown"`,
+moves the presence session's heartbeat, and writes nothing on the check-in.
 
 An earlier version got this wrong — it short-circuited on any missing ping, and
 the sweeper never carries one, so the grace and prompt clocks were unreachable
@@ -241,6 +246,20 @@ Manual and event-switch still do. At a venue day every checkout cuts it — see
 Go Live. Reasons: `manual` → `user`, `switched_event` → `switch`, `left_area`
 and `occurrence_ended` → `sweeper`, `expired` → `expired`, `event_started` →
 `ended`.
+
+**One open check-in per person** (SCRUM-705), in the database: the partial
+unique index `event_check_ins_one_open_per_user` (`WHERE status =
+'checked_in'`), venue days included. Before it, the switch
+(`checkOutOfOtherEvents`) and the new row were two statements with nothing
+beneath them, so two doors at once could both stay open. Now the door that
+loses that race gets the index's refusal, switches out of the winner's room
+and writes again (`openCheckIn`, by the index's name, as `venueDayFor` does) —
+the later door wins. The switch closes every other open row for what ended it:
+another room is `switched_event`, a Go Live already over is `expired` at its
+own end, and an earlier day of the same event is `occurrence_ended` (it used to
+be skipped and stayed open beside today's). Only the switch is returned to the
+door, as `left`, so the app says "You left {A}." (SCRUM-635). Where you could
+check in is `POST /checkins/inside` (`lib/places-inside.ts`, SCRUM-704).
 
 Relative imports throughout — reachable from `server.ts`, and `build:server`
 compiles with plain `tsc`, which emits the `@/` alias verbatim into the
@@ -361,7 +380,7 @@ at `expires_at` it is checked out `expired`, which evicts the person's sockets
 from the venue's rooms (`live:ended` to their `user:` room). The timers live in
 the process; the expiry pass every 30 s is the backstop for any a restart lost.
 With more than one replica, the eviction reaches sockets held by the others
-only through the Socket.io Redis adapter — `REDIS_URL` must be set wherever
+only through the Socket.io Redis adapter — `SOCKET_REDIS_ADAPTER=1` (with `REDIS_URL`) must be set wherever
 more than one replica runs. The per-emit filter above holds either way.
 
 Two people count as having met at a venue's day (message requests,
@@ -426,11 +445,31 @@ Tests: `presence`, `checkin-kind`, `occurrences`, `event-phase`, `go-live`,
 
 ---
 
+## Ticketed events: the ticket, then the door, then check-in (SCRUM-1014)
+
+While `TICKETING` is on, an event selling tickets here (`ticketing_mode =
+'native'`) lets in at check-in only someone who holds a ticket whose order is
+paid, redeemed at the door or not, and the event's own staff (its
+organization, or the organization that owns its venue). Anyone else gets 403
+`tickets_required`. A refunded order's ticket does not count. Free and
+external-link events are unchanged. The guard is `missingTicketAtCheckIn`
+(`lib/ticket-views.ts`), called by `POST /events/:eventId/checkin` after the
+person checks (onboarding, age) and before the day and the fence.
+
+**Redeeming a ticket at the door does not check its holder in.** They are two
+acts by two people: the door (`/dashboard/events/[id]/door`, `redeemTicket`)
+is staff admitting a ticket, one write, with no person on screen; check-in is
+the attendee's own, from their phone, at the venue, and it is what opens the
+Room and counts them inside. Checking someone in from the door would put a
+person in a room by staff action, without their GPS fix and without them
+opening the app, and would make the door a reader of who people are. So a
+redeemed ticket is not a check-in, and a check-in needs a ticket, not a
+redemption. Presence, occupancy and attendance keep counting check-ins; the
+door's own count is "N of M in" on the door page.
+
 ## Known gaps
 
 - **No client yet sends presence pings.** The endpoint and sweeper are live; the
   mobile app has to start calling it for the loop to close.
-- **The attendance panel has no UI.** `docs/CLAUDE_DESIGN_BRIEF_ATTENDANCE.md`
-  is written and waiting on a design round.
 - **`events.current_capacity` still exists.** Nothing writes it and nothing
   reads it; drop it once production logs confirm that.
