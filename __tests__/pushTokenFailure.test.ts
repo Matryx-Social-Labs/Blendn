@@ -55,10 +55,10 @@ function firebaseError(code = 'E_REGISTRATION_FAILED'): Error {
   return Object.assign(new Error(SECRET_BEARING), { code })
 }
 
-/** A fresh launch on an Android phone: module state (what was already reported) starts empty. */
-function launch() {
+/** A fresh launch on a phone (Android unless said): module state (what was already reported) starts empty. */
+function launch(os: 'android' | 'ios' = 'android') {
   jest.resetModules()
-  jest.replaceProperty(require('react-native').Platform, 'OS', 'android')
+  jest.replaceProperty(require('react-native').Platform, 'OS', os)
   const notifications = require('../lib/notifications') as typeof import('../lib/notifications')
   return {
     ...notifications,
@@ -123,6 +123,26 @@ describe('a real phone whose token request throws', () => {
     await app.initializePushNotifications()
 
     expect(app.Sentry.captureMessage.mock.calls[0][1].extra).toEqual({ platform: 'android', code: 'TypeError', hasProjectId: true })
+  })
+
+  it('sends the platform it ran on: an iPhone says ios', async () => {
+    const app = launch('ios')
+    app.Notifications.getExpoPushTokenAsync.mockRejectedValue(firebaseError('ERR_NOTIFICATIONS_SERVER_ERROR'))
+
+    await app.initializePushNotifications()
+
+    expect(app.Sentry.captureMessage.mock.calls[0][1].extra).toEqual({ platform: 'ios', code: 'ERR_NOTIFICATIONS_SERVER_ERROR', hasProjectId: true })
+  })
+
+  it('a rejection that is not an Error is still reported once, as unknown', async () => {
+    const app = launch()
+    app.Notifications.getExpoPushTokenAsync.mockRejectedValue(null)
+
+    await expect(app.initializePushNotifications()).resolves.toBeNull()
+
+    expect(app.Sentry.captureMessage).toHaveBeenCalledTimes(1)
+    expect(app.Sentry.captureMessage.mock.calls[0][1].extra).toEqual({ platform: 'android', code: 'unknown', hasProjectId: true })
+    expect(app.Sentry.captureException).not.toHaveBeenCalled()
   })
 })
 

@@ -320,7 +320,9 @@ Without either half, `getExpoPushTokenAsync` throws on Android and no token is
 stored. A real phone with permission granted that gets no token reports it to
 Sentry once per launch, as `[notifications] Push token unavailable: <code>`
 with the platform, the code and whether the EAS project id was present
-(`lib/notifications.ts`, SCRUM-1312); nothing is registered in its place. iOS needs no Firebase file; there is no `GoogleService-Info.plist`.
+(`lib/notifications.ts`, SCRUM-1312); nothing is registered in its place.
+
+iOS needs no Firebase file; there is no `GoogleService-Info.plist`.
 
 ### Building a branch other than `stage` or `prod`
 
