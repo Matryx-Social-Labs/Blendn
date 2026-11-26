@@ -607,7 +607,7 @@ Prefer one of these:
 - `node_modules/`, `.git/`, `package-lock.json`
 - `__tests__/` (160 files), `.maestro/`, `scripts/`, `.eas/`, `.github/`
 - `.agents/`, `.continue/`, `.qoder/`, `.windsurf/`, `skills/` (a third-party "refero-design" skill that would bias the look)
-- `.idea/`, `artifacts/` (old debug screenshots), `ROADMAP.md`, `tasks/`, `SECURITY_RELIABILITY_BACKLOG.md`
+- `.idea/`, `artifacts/` (old debug screenshots), `ROADMAP.md`, `tasks/`
 - any `.env*`
 
 **Upload as files:**

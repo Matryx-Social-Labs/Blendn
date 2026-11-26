@@ -22,6 +22,8 @@ screen was built from, where the build deliberately departs from it, and what is
 still an open question. **Read the one for a screen before changing it**; they
 exist because the same mistakes were otherwise made twice.
 
+Security findings live in Jira (Epic SCRUM-1126), not in this public repo. A gap that is still open stays out of repo files, code comments, commits and PR text until it is fixed; once fixed, the commit and its test explain it.
+
 ## Running the app
 
 ```bash
