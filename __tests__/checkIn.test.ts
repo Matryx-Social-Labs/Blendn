@@ -7,6 +7,7 @@
  */
 jest.mock('../lib/apiClient', () => ({
   apiClient: { checkIn: jest.fn(), checkOut: jest.fn(), forgetActiveCheckins: jest.fn(), forgetVenues: jest.fn(), forgetEvent: jest.fn() },
+  currentSession: () => 1,
 }))
 jest.mock('../lib/rosterMemory', () => ({ forgetRoster: jest.fn() }))
 jest.mock('../lib/roomVisibilityStorage', () => ({

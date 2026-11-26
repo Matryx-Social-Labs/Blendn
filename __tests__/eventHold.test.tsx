@@ -110,6 +110,13 @@ describe('the hold is the button', () => {
     expect(screen.getByText('You’re too far away', HIDDEN)).toBeTruthy()
   })
 
+  it('held to the end: the fill stays full under "Checking you in…" while the fix and the request are out (Flow 4 R4-1 #05, SCRUM-1189)', async () => {
+    submit.mockReturnValue(new Promise(() => {}))
+    await render(<Page />)
+    await activate()
+    expect(screen.getByRole('button', { name: 'Checking you in…' }).props.accessibilityState).toMatchObject({ busy: true })
+  })
+
   it('location off: dimmed, "Location is off"', async () => {
     mockFix.mockResolvedValue({ coords: null, location: 'off' })
     await render(<Page />)

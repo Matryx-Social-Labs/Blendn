@@ -4,7 +4,9 @@
  */
 export const SWITCH_LABEL = 'Hold to switch'
 export const CHECK_OUT_LABEL = 'Hold to check out'
-/** The hold's busy words once held to the end, as the check-in's "Checking you in…". */
+/** The check-in hold's busy words once held to the end, the VenuePass's own default (Flow 4 R4-1 #05: the fill stays full while the server is asked). */
+export const CHECKING_IN_LABEL = 'Checking you in…'
+/** The hold's busy words once held to the end, as the check-in's. */
 export const CHECKING_OUT_LABEL = 'Checking you out…'
 export const OPEN_ROOM_LABEL = 'Open the room'
 

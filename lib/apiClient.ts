@@ -349,6 +349,8 @@ export const nextSession = (): number => {
   lastRefreshFailedAt = 0
   return ++sessionEpoch
 }
+/** Which session is signed in now: work started in one compares it before writing into the next (a late check-in, SCRUM-1189). */
+export const currentSession = (): number => sessionEpoch
 
 /*
  * Why the reads stay on SecureStore's async API (RC drive D1). expo-secure-store's async functions have no `.runOnQueue`, so
