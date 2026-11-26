@@ -46,7 +46,7 @@ The demo event is unlisted, so other users never see it.
 WHAT ROOMS ARE
 Blend'n is for the people at the event you are already at. It is not random or anonymous chat:
 - Everyone signs in with Apple, Google or email and gives a date of birth. Under-18s are refused, by the app and by our server.
-- A room is open only to people checked in at that event, at a real place, from shortly before the event starts until a day after it ends.
+- A room is open only to people checked in at that event, at a real place, from 90 minutes before it starts until a day after it ends.
 - In a room you appear under a nickname the app gives you, so other guests don't see your name until you choose to show it. Every message is still tied to the signed-in account, so reports and bans act on the person.
 - Word, spam and contact-information checks run before a message is delivered. An automated content check (OpenAI's moderation model) runs as it is sent. Reports are reviewed by our staff, who can remove messages and suspend accounts.
 
@@ -91,7 +91,7 @@ The app is 18+ only: a date-of-birth gate in onboarding, enforced by the server 
 | Messaging and chat | Yes |
 | Advertising | Yes (the "Sponsored" room notice, see [Contains ads](#play-contains-ads)) |
 | Unrestricted web access | No |
-| Mature or suggestive themes | Infrequent: the profile has an optional "what you're here for" intent. Re-answer if the owner removes it (`OWNER.md`, the open question on that intent) |
+| Mature or suggestive themes | Infrequent: the profile has an optional "why you go out" intent. Re-answer if the owner removes it (`OWNER.md`, the open question on that intent) |
 | Profanity or crude humour | Infrequent (rooms are written by users) |
 | Location shared with other users | No: it never is |
 | Gambling, contests, violence, horror, medical, alcohol and drug references, sexual content | None |
@@ -172,7 +172,7 @@ Hosting and storage (Railway, Tigris) are processors, not partners. Legal decide
 
 ## Storefronts
 
-**Decided: India only, on both stores, for 1.0**, because the published privacy policy says Blend'n "is offered only in India". The retention and grievance runbook, the age gate and the listing are written for India too.
+**Decided: India only, on both stores, for 1.0**, because the published privacy policy says "Blend'n is offered only in India" (`https://www.blendn.app/privacy`, read 2026-11-26). The retention and grievance runbook, the age gate and the listing are written for India too.
 
 - Fable advisor pick, 2026-11-26. It reconciles "India and Canada at launch" (seo `FACTS.md` fact 5) with the task's "India only".
 - **Canada joins by a console change** (no new binary, no review) once both hold:
