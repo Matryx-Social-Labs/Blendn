@@ -8,7 +8,7 @@
  * imported under `testEnvironment: node`, and the logic worth testing is the
  * part that has no I/O in it.
  *
- * ## Why a step list and not eight screens that each know the next one
+ * ## Why a step list and not screens that each know the next one
  *
  * Because resume-on-quit needs to answer "where was I?" from a stored value,
  * and skipping needs to answer "what comes after this?" without the skipped
@@ -71,7 +71,7 @@ export function previousStep(step: OnboardingStep): OnboardingStep | null {
  * The Figma frames disagree with each other about this and cannot all be
  * right: one header reads "STEP 02/05", another "Step 2 of 4", another
  * "Step 4 of 5", and the percentages run 30 / 70 / 80 / 100 across four
- * screens of eight. Those are mock values from separate design passes. One
+ * of the frames. Those are mock values from separate design passes. One
  * honest computation is better than reproducing four contradictory ones, and
  * it stays right when a step is added.
  */

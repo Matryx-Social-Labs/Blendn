@@ -222,7 +222,7 @@ imports that `tsc` and `jest` both pass.
 
 - `docs/HOMEPAGE_AUDIT.md` — frame-by-frame audit of all nine screens, every gap
   named, what is backed by real tables and what is not
-- `docs/ONBOARDING.md` — the eight screens, how resume and per-step saving work,
+- `docs/ONBOARDING.md` — the steps, how resume and per-step saving work,
   and every place the build departs from the frames with the reason
 - `docs/DESIGN_SYSTEM.md` — the tokens every screen uses, and the rules the check enforces
 - `ROADMAP.md` (app) and `docs/ROADMAP.md` (API) — the ledgers, including the

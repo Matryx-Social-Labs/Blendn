@@ -1,7 +1,7 @@
 /**
  * An onboarded account is not sent through onboarding again.
  *
- * Driven on the iOS simulator: sign up → finish all eight steps → sign out →
+ * Driven on the iOS simulator: sign up → finish onboarding → sign out →
  * sign in with the same email → the app landed on "The basics" with the date
  * of birth empty. The server said `onboarded: true`; the client's routing
  * effect asks `resumeStep({ isNewAccount })`, and `isNewAccount` was still

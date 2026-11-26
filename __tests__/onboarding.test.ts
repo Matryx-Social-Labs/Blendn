@@ -2,7 +2,7 @@
  * The onboarding step model.
  *
  * Two things here are worth testing and the rest is a list. The first is
- * **resume**: nine screens is long enough that quitting partway through is
+ * **resume**: the flow is long enough that quitting partway through is
  * normal, and the rule for where someone lands on relaunch has three inputs
  * that can each be wrong independently. The second is **partial saves**: each
  * step sends only its own fields, and getting that wrong does not fail loudly —
