@@ -502,7 +502,9 @@ class TokenStorage {
     const userStr = await this.secureGet(USER_KEY)
     if (!userStr) return null
     try {
-      return JSON.parse(userStr)
+      const user = JSON.parse(userStr)
+      // Only a user is one: the launch opens as it before the server has answered (SCRUM-1187).
+      return typeof user?.id === 'string' && user.id ? user : null
     } catch {
       return null
     }
@@ -1587,9 +1589,11 @@ let lastProactiveRefreshAt = 0
  * On a cold start against a hung server the proactive refresh times out, then the
  * session read, then the launch path asked for a refresh again: a third deadline
  * for the same silence. `refreshSessionOutcome` reads this and does not ask again
- * inside the window; the background retries and the 401 path still do.
+ * inside the window; the background retries and the 401 path still do. As long as
+ * a refresh may take (SCRUM-1187): at 10 s, a session read slower than that between
+ * the two still sent the second.
  */
-const FAILED_REFRESH_COOLDOWN_MS = 10_000
+const FAILED_REFRESH_COOLDOWN_MS = REFRESH_DEADLINE_MS
 let lastRefreshFailedAt = 0
 /**
  * The refresh token the server last refused (401/403). It is dead: a launch that
