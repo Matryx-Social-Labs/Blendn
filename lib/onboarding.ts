@@ -8,7 +8,7 @@
  * imported under `testEnvironment: node`, and the logic worth testing is the
  * part that has no I/O in it.
  *
- * ## Why a step list and not eight screens that each know the next one
+ * ## Why a step list and not screens that each know the next one
  *
  * Because resume-on-quit needs to answer "where was I?" from a stored value,
  * and skipping needs to answer "what comes after this?" without the skipped

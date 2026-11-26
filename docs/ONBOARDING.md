@@ -1,6 +1,7 @@
 # Onboarding
 
-Eight screens, built against the Figma file `Zi2KcUzhEcLRdqyit22LdQ`, canvas
+One screen per step under `app/onboarding/`, in the order `ONBOARDING_STEPS`
+(`lib/onboarding.ts`) gives, built against the Figma file `Zi2KcUzhEcLRdqyit22LdQ`, canvas
 **🕓 Updates**. For designers, for testers, and for whoever changes a step next.
 
 Design tokens are in [`DESIGN_SYSTEM.md`](./DESIGN_SYSTEM.md).
@@ -28,7 +29,7 @@ Design tokens are in [`DESIGN_SYSTEM.md`](./DESIGN_SYSTEM.md).
 screens would collect a number nothing can verify and hand back a code nothing
 issued.
 
-**Step one and step eight cannot be skipped.** One carries the birth date every
+**The first step and the last (`ready`) cannot be skipped.** One carries the birth date every
 age rule derives from; the other is the only place `onboarded` is written, so
 skipping it would leave the account permanently mid-funnel.
 
@@ -41,8 +42,8 @@ skipping it would leave the account permanently mid-funnel.
 There is no context provider. expo-router gives each step its own route and
 therefore its own mount, so there is no common React parent that survives
 navigation. **AsyncStorage is the shared parent**, keyed per user id — which is
-also what makes resume work: the same mechanism that carries an answer from step
-three to step seven carries it across a force-quit.
+also what makes resume work: the same mechanism that carries an answer from one
+step to a later one carries it across a force-quit.
 
 Keyed per account because two accounts on one device — every tester's device —
 would otherwise share one record, and the second person to sign in would resume
@@ -57,13 +58,13 @@ into the first one's half-finished flow.
 
 Sending the whole draft on every step would mean going back to fix a typo in
 your name re-sends an empty `bio` — and the API reads a present key as "set
-this". A correction on step one would silently wipe an answer from step six.
+this". A correction on step one would silently wipe an answer from a later step.
 `stepPayload` in `lib/onboarding.ts` is what narrows it, and
 `__tests__/onboarding.test.ts` pins it.
 
 **A failed server save stops on the step and says so.** It used to move on
-silently, trusting step eight to re-send everything; in practice that walked
-somebody through six screens of answers the server had not taken, to a final
+silently, trusting the last step to re-send everything; in practice that walked
+somebody through the rest of the flow on answers the server had not taken, to a final
 save that failed on the same field. Now a toast says what failed and Continue
 is the retry. The local draft is kept either way, and the step is only marked
 done once the server has it, so resume lands back on it.
@@ -168,7 +169,7 @@ be authentic.
 | No duplicates | Same |
 | "Prefer not to say" is exclusive | Same, and the server rejects the pair |
 
-Two screens write orientation — onboarding step four and Edit profile (through
+Two screens write orientation — onboarding's `preferences` step and Edit profile (through
 `MatchingFields`). A cap enforced in one of them is a 400 from the other, so
 `toggleOrientation` and `orientationDisabled` are shared and tested once.
 
@@ -251,7 +252,7 @@ after the upload had finished.
 
 The frames disagree with each other and cannot all be right: one header reads
 **"STEP 02/05"**, another **"Step 2 of 4"**, another **"Step 4 of 5"**, and the
-percentages run 30 / 70 / 80 / 100 across four screens of eight.
+percentages run 30 / 70 / 80 / 100 across four of the frames.
 
 Those are mock values from separate design passes. `progressPercent` computes
 one honest number and stays right when a step is added.
@@ -282,7 +283,7 @@ Fixed in code; recorded here so the next pass does not rediscover it:
 - **`location`** was missing the frame's reassurance line under "Maybe
   later" — *"Your precise location is never shared with strangers."* Added as
   a `footerNote` prop on `OnboardingScreen`, available to any screen that needs
-  one (none of the other seven currently do).
+  one (none of the other steps currently do).
 - **`details`**'s bio counter read `0/500`; the frame's is `0/300`.
   `BIO_LIMIT` corrected to 300.
 - **`details`** was also missing the frame's three bio-writing prompts
@@ -314,7 +315,7 @@ Fixed in code; recorded here so the next pass does not rediscover it:
   "PROFILE STATUS 100%" progress header (the shared `OnboardingScreen` header
   already shows this on every step, so a second one on the last step alone
   would be redundant) and the frame's decorative slide-icon CTA button
-  (`EmberButton` is shared across all eight screens; changing it for one frame
+  (`EmberButton` is shared across every step; changing it for one frame
   would break the consistency the shared component exists to guarantee).
 
 **One thing this pass did not check**: whether the shared unified header
