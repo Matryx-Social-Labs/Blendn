@@ -110,12 +110,11 @@ live again; on the Banter its Live now row says "You’re here" (5-3). The sheet
 - **The unread divider** reads "2 UNREAD" (the DM frame's word).
 - **Ended** (the server's 404): the composer goes, and it never says whether
   you were blocked.
-- **Photos** (R9, 5.9): once you can both see each other (or the conversation
-  never hid anyone), the composer gains Send a photo → the preview with a
-  caption → the photo is re-encoded on the phone (`uploadChatPhoto`: a fresh
-  JPEG keeps no location) → a determinate ring while it uploads → the bubble;
-  refusals are the server's sentence on the bubble. Tapping a photo opens the
-  viewer, with Report on theirs.
+- **Photos** are off at 1.0 (register D-024): the DM composer has no photo
+  control, and the send path (preview sheet, upload, ring) is deleted. A photo
+  already in a thread still draws; tapping it opens the viewer, with Report on
+  theirs. Turning them back on is the button plus the server route, with the
+  blur and image check D-024 asks for.
 
 ---
 

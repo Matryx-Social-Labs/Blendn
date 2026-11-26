@@ -47,7 +47,7 @@ const EMOJI_ONLY_TYPE = { fontSize: 32, lineHeight: 40 }
 const PHOTO = { width: 220, height: 160 }
 /** The removed message's words, said and shown (Flow 5 #11; round 4 #37 for a photo). */
 const REMOVED_WORDS = { text: 'This message was removed by moderation', photo: 'Photo removed by moderation', photoShown: 'Removed by moderation' }
-/** R3-D5 5.9: a 44 pt ring with a 3 pt stroke; the veil is the photo dimmed to 65%. */
+/** `UploadRing` (R3-D5 5.9): a 44 pt ring with a 3 pt stroke; the veil is the photo dimmed to 65%. */
 const RING = { size: SIZE.circleButton, stroke: 3 }
 const VEIL_ALPHA = 0.35
 // design-exception: the board's bubble words are 16/22 (`.xb`, Flow 5 F-A), between `button` 16/20 and `rowTitle` 17/22
@@ -80,8 +80,8 @@ export type ChatBubbleProps = {
   first?: boolean
   last?: boolean
   text?: string
-  /** A photo message: tapping it opens the viewer from the bubble's frame. `progress` (0–1) while it uploads: a determinate ring, never a spinner (R3-D5 5.9). */
-  photo?: { uri: string; onPress: (from: Rect) => void; progress?: number }
+  /** A photo message: tapping it opens the viewer from the bubble's frame. */
+  photo?: { uri: string; onPress: (from: Rect) => void }
   replyTo?: { name: string; text: string; onPress?: () => void }
   reactions?: BubbleReaction[]
   onReactionPress?: (emoji: string) => void
@@ -492,10 +492,7 @@ function Message({
           </Text>
         </>
       ) : photo && !removed ? (
-        <View>
-          <Image source={{ uri: photo.uri }} style={styles.photo} contentFit="cover" accessible={false} />
-          {photo.progress !== undefined ? <UploadRing progress={photo.progress} /> : null}
-        </View>
+        <Image source={{ uri: photo.uri }} style={styles.photo} contentFit="cover" accessible={false} />
       ) : (
         <Text
           // Reading text grows to body's cap; a 32 pt emoji-only message is already large, so it stops at display's.
@@ -522,10 +519,10 @@ function Message({
 }
 
 /**
- * The upload's determinate ring over a 35% veil (R3-D5 5.9 #33): a fraction, read as a percentage. A photo message's, and the
- * onboarding photo tile's (`label`: what a screen reader says it is doing).
+ * The upload's determinate ring over a 35% veil (R3-D5 5.9 #33): a fraction, read as a percentage. The Lobby photo's and
+ * the onboarding photo tile's (`label`: what a screen reader says it is doing).
  */
-export function UploadRing({ progress, label = 'Sending photo' }: { progress: number; label?: string }) {
+export function UploadRing({ progress, label }: { progress: number; label: string }) {
   const r = (RING.size - RING.stroke) / 2
   const around = 2 * Math.PI * r
   const done = Math.max(0, Math.min(1, progress))

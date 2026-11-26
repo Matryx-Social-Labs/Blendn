@@ -51,11 +51,10 @@ describe('the chat screens say what failed', () => {
 
   it('keeps a failed send as a marked bubble in both', () => {
     // The rows draw it; the screens never put the text back in the composer.
-    for (const row of ['components/chat/RoomFeed.tsx', 'components/chat/DmParts.tsx']) {
-      const src = read(row)
-      expect(src).toMatch(/failed(=\{|: )item\.failed \? item\.failedLine \|\| true : false/)
-      expect(src).toContain('handlers.retry(item)')
-    }
+    // The room says why in its own line (links); a DM is text only (D-024), so it has no reason line of its own.
+    expect(read('components/chat/RoomFeed.tsx')).toMatch(/failed=\{item\.failed \? item\.failedLine \|\| true : false\}/)
+    expect(read('components/chat/DmParts.tsx')).toContain('failed: !!item.failed,')
+    for (const row of ['components/chat/RoomFeed.tsx', 'components/chat/DmParts.tsx']) expect(read(row)).toContain('handlers.retry(item)')
     for (const screen of ['components/chat/RoomChat.tsx', 'app/private-chat/[conversationId].tsx']) {
       expect(read(screen)).not.toMatch(/setNewMessage\(messageText\)/)
     }

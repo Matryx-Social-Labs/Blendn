@@ -1,5 +1,4 @@
-import { Image } from 'expo-image'
-import { memo, useState } from 'react'
+import { memo } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 import Animated, { FadeOut } from 'react-native-reanimated'
 
@@ -14,11 +13,8 @@ import type { Face } from '../ds/Facepile'
 import type { Receipt } from '../ds/ReceiptMark'
 import { CONTROL_FONT_CAP, font, useBoldText } from '../ds/shared'
 import { Sheet } from '../ds/Sheet'
-import { TextField } from '../ds/TextField'
 import { Icon } from '../ui/Icon'
 
-/** The photo preview's height (R3-D5 5.9 #32). */
-const PREVIEW_HEIGHT = 280
 /** The opener's two faces, 44 pt, overlapping by 10. */
 const OPENER_FACE = 44
 const OPENER_OVERLAP = SPACE.sm + SPACE.xxs
@@ -54,49 +50,6 @@ export function SayHi({ line, onPress }: { line: string | null; onPress: () => v
       {line ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>{line}</Text> : null}
       <Button kind="lit" size="md" icon="hand" label="Say hi" onPress={onPress} accessibilityHint="Sends “Hey 👋”" testID="dm-say-hi" />
     </Animated.View>
-  )
-}
-
-/**
- * A photo before it goes (R3-D5 5.9 #32): the picked photo, a caption, and the
- * promise that it is re-encoded on the phone first. Send is the screen's
- * primary (`H.send` follows on the composer's rule); Cancel puts it away.
- */
-export function PhotoPreviewSheet({
-  uri,
-  name,
-  onSend,
-  onClose,
-}: {
-  uri: string | null
-  name: string
-  onSend: (caption: string) => void
-  onClose: () => void
-}) {
-  const bold = useBoldText()
-  const [caption, setCaption] = useState('')
-  const [shownFor, setShownFor] = useState(uri)
-  // A new photo starts without the last one's caption (adjusted in render).
-  if (uri && uri !== shownFor) {
-    setShownFor(uri)
-    setCaption('')
-  }
-  return (
-    <Sheet
-      visible={!!uri}
-      onClose={onClose}
-      title={`Send to ${name}`}
-      actions={[
-        // H.send is the send's own (the composer's rule), so no press haptic on top.
-        { label: 'Send', kind: 'primary', onPress: () => onSend(caption.trim()), pressHaptic: false, testID: 'dm-photo-send' },
-        { label: 'Cancel', kind: 'tertiary', onPress: onClose },
-      ]}
-      testID="dm-photo-preview"
-    >
-      {uri || shownFor ? <Image source={{ uri: (uri || shownFor) as string }} contentFit="cover" style={styles.preview} accessibilityLabel="The photo you picked" /> : null}
-      <TextField value={caption} onChangeText={setCaption} placeholder="Add a caption" />
-      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>Re-encoded on your phone before upload: no location data leaves it.</Text>
-    </Sheet>
   )
 }
 
@@ -169,7 +122,7 @@ export const DmMessageRow = memo(function DmMessageRow({
   animate: boolean
   handlers: DmRowHandlers
 }) {
-  const photoUri = item.localUri || item.mediaUrl
+  const photoUri = item.mediaUrl
   const text = item.text ?? ''
   const shared = {
     surface: 'dm' as const,
@@ -177,7 +130,7 @@ export const DmMessageRow = memo(function DmMessageRow({
     sender: { name: mine ? 'You' : name },
     time: clockTime(item.createdAt),
     removed: item.removed,
-    failed: item.failed ? item.failedLine || true : false,
+    failed: !!item.failed,
     onRetry: () => handlers.retry(item),
     onReply: item.failed || item.removed || item.waiting || item.id.startsWith('local-') ? undefined : () => handlers.reply(item),
     onLongPress: item.removed ? undefined : (anchor: Rect) => handlers.menu(item, anchor),
@@ -201,7 +154,7 @@ export const DmMessageRow = memo(function DmMessageRow({
           testID={`dm-photo-${item.id}`}
           first={first}
           last={last && !text}
-          photo={{ uri: photoUri, progress: item.progress, onPress: (from) => handlers.photo(item, from) }}
+          photo={{ uri: photoUri, onPress: (from) => handlers.photo(item, from) }}
           receipt={!text && receipt ? receipt : undefined}
           waiting={!text && item.waiting}
         />
@@ -243,7 +196,6 @@ const styles = StyleSheet.create({
   faces: { flexDirection: 'row' },
   overlap: { marginLeft: -OPENER_OVERLAP },
   sayHi: { alignItems: 'center', gap: SPACE.md, paddingVertical: SPACE.xl },
-  preview: { height: PREVIEW_HEIGHT, borderRadius: RADIUS.rowInCard, backgroundColor: COLOR.surface },
   runStart: { marginTop: SPACE.lg },
   inRun: { marginTop: SPACE.xs },
   ink: { color: COLOR.textPrimary },

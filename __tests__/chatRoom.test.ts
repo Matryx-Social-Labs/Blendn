@@ -76,15 +76,16 @@ describe('a paid message cannot be mistaken for the room’s own voice', () => {
 })
 
 describe('the composer offers only what the server accepts', () => {
-  it('offers a photo in a DM that can take one, and never in a room', () => {
+  it('offers a photo nowhere: never in a room (R9), and not in a DM at 1.0 (D-024)', () => {
     /*
-     * Attendees post no media in a room (R9; the server refuses it, admin
-     * #697). A DM takes a photo once both are named to each other.
+     * Attendees post no media in a room (the server refuses it, admin #697), and DM photos are off at 1.0 (D-024): the
+     * photo control, its preview sheet and the DM upload are deleted, not hidden. Negative control: today's DM screen
+     * imports pickImage and uploadChatPhoto and passes onAttach, and the DS Composer still draws the control.
      */
     expect(codeOnly(read('components/chat/RoomChat.tsx'))).not.toMatch(/onAttach|ImagePicker|pickImage/)
-    const dm = codeOnly(read('app/private-chat/[conversationId].tsx'))
-    expect(dm).toContain('const photosAllowed = !!reveal && (!reveal.pseudonymous || (reveal.youRevealed && reveal.theyRevealed))')
-    expect(dm).toContain('onAttach={photosAllowed ? () => void attach() : undefined}')
+    expect(codeOnly(read('app/private-chat/[conversationId].tsx'))).not.toMatch(/onAttach|pickImage|uploadChatPhoto|PhotoPreviewSheet|localUri/)
+    expect(codeOnly(read('components/ds/Composer.tsx'))).not.toMatch(/onAttach|Send a photo/)
+    expect(codeOnly(read('components/chat/DmParts.tsx'))).not.toMatch(/PhotoPreviewSheet|localUri/)
   })
 })
 

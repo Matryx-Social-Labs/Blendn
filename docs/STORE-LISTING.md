@@ -171,7 +171,7 @@ $ node -e 'const s=require("fs").readFileSync("docs/STORE-LISTING.md","utf8").ma
 
 **Left out on purpose:**
 - **Dating as a reason to be there.** Removed for 1.0 (register D-002); the app no longer offers it (client/09).
-- **Photo checks.** DM photos are not checked (trust lane).
+- **Photos in DMs.** Off at 1.0 (register D-024): the app sends none (client/10).
 - **Canada.** No Canadian city is live.
 - **Everything in "Do not do"** in the seo lane README.
 

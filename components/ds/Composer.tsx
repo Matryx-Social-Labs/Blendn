@@ -21,8 +21,6 @@ const COUNT_FROM = 900
 const FIELD_MAX_HEIGHT = 132
 /** The locked reason's glyph well: the page's 40 pt circle. */
 const WELL = SIZE.control - SPACE.sm
-/** R3-D5 5.9: the attach control, 40 pt, narrowing the field by as much. */
-const ATTACH = SIZE.control - SPACE.sm
 
 export type ComposerState =
   | 'normal'
@@ -80,8 +78,6 @@ export type ComposerProps = {
   action?: { label: string; onPress: () => void; loading?: boolean }
   placeholder?: string
   onFocus?: () => void
-  /** R3-D5 5.9: a DM once both have revealed (or are friends) — the 40 pt photo control before the field. */
-  onAttach?: () => void
   /** The design gallery only: draws a transient state with no finger or keyboard. */
   previewState?: 'pressed' | 'focused'
   testID?: string
@@ -120,7 +116,6 @@ export function Composer({
   action,
   placeholder = 'Say something to the room',
   onFocus,
-  onAttach,
   previewState,
   testID,
 }: ComposerProps) {
@@ -161,7 +156,6 @@ export function Composer({
               onSend={onSend}
               placeholder={placeholder}
               onFocus={onFocus}
-              onAttach={onAttach}
               pressed={previewState === 'pressed'}
               slow={slow ? { line: reason ?? `${LOCKED.ratelimited.title}. ${LOCKED.ratelimited.body}`, countdown } : undefined}
               testID={testID && `${testID}-field`}
@@ -225,11 +219,10 @@ function Field({
   onSend,
   placeholder,
   onFocus,
-  onAttach,
   pressed,
   slow,
   testID,
-}: Pick<ComposerProps, 'value' | 'onChangeText' | 'onSend' | 'onFocus' | 'onAttach' | 'testID'> & {
+}: Pick<ComposerProps, 'value' | 'onChangeText' | 'onSend' | 'onFocus' | 'testID'> & {
   placeholder: string
   pressed: boolean
   /** Rate-limited: this line in place of the field until it lifts, and nothing to send. */
@@ -243,21 +236,10 @@ function Field({
 
   return (
     <>
-      <View testID={testID} style={[styles.row, onAttach && styles.rowAttach]}>
-        {onAttach ? (
-          <Pressable
-            onPress={onAttach}
-            hitSlop={(minTarget() - ATTACH) / 2}
-            accessibilityRole="button"
-            accessibilityLabel="Send a photo"
-            style={styles.attach}
-          >
-            <Icon name="image" size={ICON.control} color={COLOR.textSecondary} />
-          </Pressable>
-        ) : null}
+      <View testID={testID} style={styles.row}>
         {/* Over the empty field, where the placeholder was: the keyboard stays up and the next message can be typed. */}
         {slow && !value ? (
-          <View pointerEvents="none" style={[styles.slow, onAttach && styles.slowAttach]}>
+          <View pointerEvents="none" style={styles.slow}>
             <Text
               accessibilityHint={slow.countdown ? `You can post again in ${slow.countdown}` : undefined}
               maxFontSizeMultiplier={MAX_FONT_SCALE.note}
@@ -378,9 +360,7 @@ const styles = StyleSheet.create({
     paddingRight: (SIZE.input - SIZE.circleButton) / 2,
     paddingLeft: SPACE.lg,
   },
-  rowAttach: { paddingLeft: SPACE.xs },
   // Centred on the Send disc beside it.
-  attach: { width: ATTACH, height: ATTACH, marginBottom: (SIZE.circleButton - ATTACH) / 2, alignItems: 'center', justifyContent: 'center' },
   field: {
     flex: 1,
     color: COLOR.textPrimary,
@@ -399,7 +379,6 @@ const styles = StyleSheet.create({
   idle: { backgroundColor: MATERIAL.fillOnGlass },
   // Centred on the Send disc, as the field's one line is.
   slow: { position: 'absolute', left: SPACE.lg, right: SIZE.circleButton + SPACE.sm + (SIZE.input - SIZE.circleButton) / 2, top: 0, bottom: 0, justifyContent: 'center' },
-  slowAttach: { left: SPACE.xs + ATTACH + SPACE.sm },
   pressedIos: { transform: [{ scale: PRESS.scaleDisc }] },
   wash: { backgroundColor: PRESSED_WASH.android },
   counter: { alignSelf: 'flex-end', color: COLOR.textSecondary, paddingHorizontal: SPACE.lg, paddingBottom: SPACE.sm },

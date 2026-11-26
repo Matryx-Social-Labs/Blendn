@@ -10,7 +10,7 @@ import { KeyboardFrame } from '../../components/chat/KeyboardFrame'
 import { ChatHeader, chatFeedFrame, chatHeaderBottom } from '../../components/chat/ChatHeader'
 import { FeedSkeleton, HEADER_FACE, LoadOlder, NewestChip } from '../../components/chat/ChatParts'
 import { useSkeletonCrossfade } from '../../components/motion/useSkeletonCrossfade'
-import { DmMessageRow, MatchOpenerCard, PhotoPreviewSheet, quoteText, RevealLine, SayHi, SwapNotYetSheet, type DmRowHandlers } from '../../components/chat/DmParts'
+import { DmMessageRow, MatchOpenerCard, quoteText, RevealLine, SayHi, SwapNotYetSheet, type DmRowHandlers } from '../../components/chat/DmParts'
 import { personFace } from '../../lib/personFace'
 import { Avatar } from '../../components/ds/Avatar'
 import { ChatBubble } from '../../components/ds/ChatBubble'
@@ -60,7 +60,6 @@ import { mergeNewestPage } from '../../lib/mergeNewestPage'
 import { messageMenu } from '../../lib/messageMenu'
 import { useActiveThread } from '../../lib/notifications'
 import { ScreenProfiler } from '../../lib/perf'
-import { pickImage, uploadChatPhoto } from '../../lib/photoUtils'
 import { queryCache } from '../../lib/queryCache'
 import { RECEIPT_POLL_MS, receiptFor, receiptPollLimit } from '../../lib/receipts'
 import { messageReportStep, showConversationOptions } from '../../lib/safetyUtils'
@@ -175,7 +174,6 @@ function PrivateChatInner() {
   const [loadError, setLoadError] = useState(false)
   const [menu, setMenu] = useState<{ message: PrivateMessage; anchor: Rect } | null>(null)
   const [viewer, setViewer] = useState<{ message: PrivateMessage; from: Rect } | null>(null)
-  const [picked, setPicked] = useState<string | null>(null)
   const [dockHeight, setDockHeight] = useState<number>(SIZE.input)
   const [barHeight, setBarHeight] = useState(0)
   /** The reveal panel the person folded away (`revealPanelKey`): the feed is theirs again until it changes. */
@@ -491,26 +489,17 @@ function PrivateChatInner() {
   /*
    * One send of one message, first time or retry. The bubble is already on
    * screen under a `local-` id; the answer swaps it for the server's, drops it
-   * to the removed placeholder (moderation), or marks it "Not sent" with the
-   * server's reason — a photo's refusal verbatim, on the bubble (R3-D5 5.9).
+   * to the removed placeholder (moderation), or marks it "Not sent". Text
+   * only: photos in a DM are off at 1.0 (D-024).
    */
   const deliver = async (local: PrivateMessage) => {
-    const fail = (line?: string) => {
+    const fail = () => {
       H.error()
-      setMessage(local.id, (m) => ({ ...m, failed: true, waiting: false, progress: undefined, failedLine: line }))
+      setMessage(local.id, (m) => ({ ...m, failed: true, waiting: false }))
     }
     try {
-      let mediaUrl = local.mediaUrl ?? undefined
-      if (local.localUri && !mediaUrl) {
-        setMessage(local.id, (m) => ({ ...m, progress: 0 }))
-        const up = await uploadChatPhoto(local.localUri, (p) => setMessage(local.id, (m) => ({ ...m, progress: p })))
-        if (!up.ok) return fail(up.error)
-        mediaUrl = up.url
-        setMessage(local.id, (m) => ({ ...m, mediaUrl: up.url }))
-      }
       const result = await apiClient.sendPrivateMessage(conversation, {
         ...(local.text ? { text: local.text } : {}),
-        ...(mediaUrl ? { mediaUrl, mediaType: 'image' as const } : {}),
         clientId: local.clientId ?? newClientId(),
         ...(local.replyToId && { replyToId: local.replyToId }),
       })
@@ -520,14 +509,13 @@ function PrivateChatInner() {
         composer.apply(result.errorCode, result.retryAfter, result.error)
         // Gone or barred: they may have left or blocked, which the socket never says. The read decides whether it has ended.
         if (result.errorCode === 'NOT_FOUND' || result.errorCode === 'FORBIDDEN') void loadMessages()
-        if (mediaUrl) return fail(result.error || outcome.reason)
         fail()
         if (result.errorCode !== 'RATE_LIMITED' && result.errorCode !== 'SPAM_BLOCKED') showToast(outcome.reason, 'error')
         return
       }
       composer.apply(null)
       if (outcome.kind === 'withheld') {
-        setMessage(local.id, (m) => ({ ...m, id: result.data?.id ?? m.id, removed: true, failed: false, progress: undefined }))
+        setMessage(local.id, (m) => ({ ...m, id: result.data?.id ?? m.id, removed: true, failed: false }))
         showToast('That message wasn’t delivered.', 'info')
         return
       }
@@ -552,18 +540,16 @@ function PrivateChatInner() {
     expire: (id) => setMessage(id, (m) => (m.waiting ? { ...m, waiting: false, failed: true } : m)),
   })
 
-  const send = async (text: string, photo?: string) => {
-    if ((!text && !photo) || sending || !myId) return
+  const send = async (text: string) => {
+    if (!text || sending || !myId) return
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
     stopPrivateTyping(conversation)
     const replyTo = replyingTo
     const offline = isOffline()
     const local: PrivateMessage = {
-      ...optimisticDirectMessage(text || '', conversation, myId),
-      ...(text ? {} : { text: null }),
+      ...optimisticDirectMessage(text, conversation, myId),
       // The same id on every try of this send (SCRUM-410), and what it replies to.
       clientId: newClientId(),
-      ...(photo ? { localUri: photo } : {}),
       ...(replyTo && !replyTo.failed && { replyToId: replyTo.id, replyTo: quoteFrom(replyTo) }),
       ...(offline ? { waiting: true } : {}),
     }
@@ -575,7 +561,7 @@ function PrivateChatInner() {
     setNewWhileAway(0)
     setTimeout(() => scrollToBottom(true), 80)
     if (myId) queryCache.invalidate(`personal_chats_${myId}`)
-    emitChatListUpdate({ type: 'personal', conversationId: conversation, lastMessage: text || 'Photo', lastMessageTime: local.createdAt })
+    emitChatListUpdate({ type: 'personal', conversationId: conversation, lastMessage: text, lastMessageTime: local.createdAt })
     if (offline) holdForConnection(local.id)
     else await deliver(local)
     setSending(false)
@@ -589,15 +575,8 @@ function PrivateChatInner() {
   }
 
   const retrySend = (message: PrivateMessage) => {
-    setMessage(message.id, (m) => ({ ...m, failed: false, failedLine: undefined }))
-    void deliver({ ...message, failed: false, failedLine: undefined })
-  }
-
-  /* A photo: the library (no permission asked), then the preview (R3-D5 5.9). */
-  const attach = async () => {
-    const result = await pickImage('library')
-    const uri = result?.assets?.[0]?.uri
-    if (uri) setPicked(uri)
+    setMessage(message.id, (m) => ({ ...m, failed: false }))
+    void deliver({ ...message, failed: false })
   }
 
   const chatItems: ChatListItem[] = useMemo(
@@ -804,8 +783,6 @@ function PrivateChatInner() {
   // Yours as they see it: your pseudonym's creature until you have both swapped (a one-sided tap shows nothing), then your photo.
   const swapped = !!reveal && reveal.pseudonymous && reveal.theyRevealed
   const youFace: Face = swapped ? personFace({ named: true, name: authUser?.name || YOU, photo: authUser?.image }) : { kind: 'creature', pseudonym: yourPseudonym || 'You' }
-  // Photos once you can both see each other, or the conversation never hid anyone (R9, admin #697).
-  const photosAllowed = !!reveal && (!reveal.pseudonymous || (reveal.youRevealed && reveal.theyRevealed))
   const { fontScale } = useWindowDimensions()
   const top = chatHeaderBottom(insets.top, fontScale)
   // The feed starts under the reveal bar while there is one.
@@ -964,7 +941,6 @@ function PrivateChatInner() {
                   onCancelReply={() => setReplyingTo(null)}
                   // A real name by its first name, so the placeholder holds one line (C30); a pseudonym is whole ("Arctic Falcon").
                   placeholder={`Message ${reveal && (!reveal.pseudonymous || reveal.theyRevealed) ? firstNameOf(name) : name}`}
-                  onAttach={photosAllowed ? () => void attach() : undefined}
                   onFocus={() => setTimeout(() => scrollToBottom(false), 120)}
                 />
               </View>
@@ -1041,7 +1017,7 @@ function PrivateChatInner() {
       <ImageViewer
         testID="dm-viewer"
         visible={!!viewer}
-        uri={viewer ? viewer.message.mediaUrl || viewer.message.localUri || '' : ''}
+        uri={viewer ? viewer.message.mediaUrl || '' : ''}
         sender={{ name: viewer && viewer.message.senderId === myId ? 'You' : name }}
         time={viewer ? clockTime(viewer.message.createdAt) : ''}
         from={viewer?.from}
@@ -1056,18 +1032,6 @@ function PrivateChatInner() {
               }
             : undefined
         }
-      />
-
-      <PhotoPreviewSheet
-        uri={picked}
-        name={name}
-        onClose={() => setPicked(null)}
-        onSend={(caption) => {
-          const uri = picked
-          setPicked(null)
-          H.send()
-          if (uri) void send(caption, uri)
-        }}
       />
 
       <SwapNotYetSheet
