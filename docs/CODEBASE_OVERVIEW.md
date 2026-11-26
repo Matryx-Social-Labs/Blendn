@@ -46,14 +46,14 @@ Blendn is an **event networking app** — users discover events nearby, GPS-vali
 
 | Layer | Choice |
 |-------|--------|
-| Framework | Expo 53 (managed workflow with prebuild) |
-| Language | TypeScript 5.8 |
-| Navigation | Expo Router 5 (file-based) |
-| Styling | `StyleSheet.create` + `lib/theme.ts` tokens; NativeWind v4 also available |
-| Animations | `react-native-reanimated` ~3.17, custom motion utilities in `lib/motion.ts` |
+| Framework | Expo SDK 57 (managed workflow with prebuild) |
+| Language | TypeScript 6.0 |
+| Navigation | Expo Router, versioned with the SDK (file-based) |
+| Styling | `StyleSheet.create` + `lib/theme.ts` tokens (no NativeWind or Tailwind) |
+| Animations | `react-native-reanimated` 4.5, custom motion utilities in `lib/motion.ts` |
 | Auth | JWT via custom REST API; Google OAuth via `@react-native-google-signin/google-signin` |
 | Token storage | `expo-secure-store` (keychain), with `AsyncStorage` fallback |
-| Real-time | `socket.io-client` ^4.7 |
+| Real-time | `socket.io-client` ^4.8 |
 | HTTP client | Custom `ApiClientClass` in `lib/apiClient.ts` |
 | Images | `expo-image` with `OptimizedImage` wrapper |
 | Push notifications | `expo-notifications` + Expo push service |
@@ -209,9 +209,9 @@ interface AuthState {
 2. Reads `blendn_access_token` from SecureStore.
 3. If token exists → `GET /api/mobile/auth/session` to validate.
 4. If 401 → attempt `POST /api/mobile/auth/refresh`.
-5. If refresh fails → clear tokens, user=null → redirect to login.
+5. If the server refuses the refresh → clear tokens, user=null → redirect to login. If it never answers, the tokens are kept and the stored user stays signed in.
 
-Session is refreshed **every 10 minutes** via `setInterval` while the app is active. The interval is paused when the app is backgrounded and resumed on foreground.
+There is no refresh timer: the session is refreshed on a 401 (`lib/apiClient.ts`) and before a socket connects (`lib/socketAuth.ts`).
 
 ### Auth actions
 
@@ -227,7 +227,7 @@ Session is refreshed **every 10 minutes** via `setInterval` while the app is act
 
 ### Token storage
 
-Keys stored in SecureStore under keychain service `blendn.api.auth` (`WHEN_UNLOCKED_THIS_DEVICE_ONLY`):
+Keys stored in SecureStore under keychain service `blendn.api.auth.v2` (`AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY`); builds before SCRUM-878 used `blendn.api.auth`, which is read as a fallback and deleted once the new service holds the session:
 
 | Key | Contents |
 |-----|---------|
@@ -282,7 +282,7 @@ GET requests with identical URL+auth are deduplicated — concurrent callers sha
 
 - `GET` requests retry up to 2× with exponential backoff (800 ms base, max 6 s).
 - Mutations do not retry.
-- 401 → attempt single token refresh → retry once → if still 401, clear tokens.
+- 401 → attempt single token refresh → retry once. Tokens are cleared only if the server refuses the refresh; if it never answers they are kept.
 - Network error → `markOffline()`, return `{ success: false, error: 'No internet...' }`.
 
 ### Key exported types

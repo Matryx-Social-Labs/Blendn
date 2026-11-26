@@ -31,7 +31,7 @@ Uploading Satoshi to Claude Design for your own team is a grey zone. Exported ZI
 
 A GitHub import of the whole repo also brings in files that would mislead Claude Design:
 - a third-party design skill under `skills/` and `.agents/`;
-- stale design docs (`docs/DESIGN_SYSTEM.md`, `docs/api/DESIGN_SYSTEM.md`, `docs/UI_IMPROVEMENTS_PRIORITY.md`).
+- stale design docs (`docs/DESIGN_SYSTEM.md`, `docs/api/DESIGN_SYSTEM.md`; a Feb-2026 UI backlog that was here is deleted, SCRUM-1294).
 
 So attach **only these folders, from a fresh `origin/dev` worktree**:
 - `docs/redesign/` (this pack)

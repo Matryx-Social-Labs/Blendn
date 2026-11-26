@@ -4,7 +4,7 @@
 Read-only audit of `the client repo (a clean origin/dev worktree)` at `54481d2` (origin/dev, "feat(board): turn the board on (step 6c) (#362)"), 2026-10-02.
 All paths below are relative to that worktree. `file:line` refers to that commit.
 
-Docs read first: `docs/PULSE.md`, `docs/SCENE.md`, `docs/HOMEPAGE_AUDIT.md`, `docs/PLACEHOLDER_SCREENS.md`, `docs/UI_IMPROVEMENTS_PRIORITY.md`, `docs/DESIGN_SYSTEM.md`. Also `tasks/lessons.md`, `lib/theme.ts`, `scripts/check-design-tokens.js`.
+Docs read first: `docs/PULSE.md`, `docs/SCENE.md`, `docs/HOMEPAGE_AUDIT.md`, `docs/PLACEHOLDER_SCREENS.md`, a Feb-2026 UI backlog (deleted since, SCRUM-1294), `docs/DESIGN_SYSTEM.md`. Also `tasks/lessons.md`, `lib/theme.ts`, `scripts/check-design-tokens.js`.
 
 **Material legend** used in the component entries (the target redesign):
 - **GLASS-CTRL**: translucent floating control and navigation layer (top bar, bar buttons, floating CTA dock, tab bar, pinned search).

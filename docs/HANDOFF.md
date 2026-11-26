@@ -3,10 +3,8 @@
 Written at the end of a session that finished onboarding. Everything below is
 either settled or explicitly open; nothing here needs re-deriving.
 
-**Repos.** App: `/Users/sagarkishore/conductor/workspaces/blendn/ashgabat`.
-API: `/Users/sagarkishore/conductor/workspaces/blendn-admin/seville`.
-Work in the **workspace** paths, not `conductor/repos/*` — those are stale
-clones and one of them is 104 commits behind on `prod`.
+**Repos.** App: this repo. API: the admin repo. Work in a fresh checkout of
+`dev`, not an old clone.
 
 **State.** App `dev` green, 239 tests. API `dev` and `staging` current, 1192
 tests. Onboarding complete: eight screens, design fidelity done.
