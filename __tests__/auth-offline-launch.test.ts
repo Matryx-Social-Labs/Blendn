@@ -58,8 +58,11 @@ const comeToForeground = () => {
 
 import { apiClient, TokenStorage } from '../lib/apiClient'
 import { queryCache } from '../lib/queryCache'
-import { markSessionExpired } from '../lib/sessionEvents'
-import { cleanupAuth, getCurrentUser, reinitializeAuth, retryAuth, signInWithEmail, signOut } from '../lib/useAuth'
+import { markSessionExpired, subscribeSessionExpired } from '../lib/sessionEvents'
+import { cleanupAuth, getCurrentUser, refreshAuthUser, reinitializeAuth, retryAuth, signInWithEmail, signOut } from '../lib/useAuth'
+
+/** What `useAuth` subscribed at import: run by `request()` when its own 401 finds the session refused. */
+const sessionExpired = (subscribeSessionExpired as jest.Mock).mock.calls[0][0] as () => void
 
 const api = apiClient as jest.Mocked<typeof apiClient>
 const store = TokenStorage as jest.Mocked<typeof TokenStorage>
@@ -296,6 +299,58 @@ describe('a stored sign-in opens the app before the session check answers (SCRUM
 
     expect(await getCurrentUser()).toBeNull()
     expect(markSessionExpired).toHaveBeenCalledTimes(1)
+    expect(api.refreshSessionOutcome).toHaveBeenCalledTimes(1)
+    expect(api.getSession).toHaveBeenCalledTimes(2)
+  })
+
+  it("a refresh that lands, then a re-read that lands: the server's user replaces the stored one", async () => {
+    api.getSession.mockResolvedValueOnce(TIMED_OUT as never).mockResolvedValueOnce({ success: true, data: SERVER } as never)
+    api.refreshSessionOutcome.mockResolvedValue('ok')
+
+    expect(await launch()).toMatchObject({ user: STORED, loading: false })
+    await settle()
+
+    expect(await getCurrentUser()).toBe(SERVER)
+  })
+
+  it('a check that throws keeps the stored sign-in and clears nothing', async () => {
+    api.getSession.mockRejectedValue(new Error('boom'))
+
+    expect(await launch()).toMatchObject({ user: STORED, loading: false })
+    await settle()
+
+    expect(await getCurrentUser()).toBe(STORED)
+    expect(store.clearAll).not.toHaveBeenCalled()
+    expect(markSessionExpired).not.toHaveBeenCalled()
+  })
+
+  it("a refusal another request found first: signed out once, and the check's late refusal adds nothing", async () => {
+    const session = held<unknown>()
+    api.getSession.mockReturnValue(session.promise as never)
+    api.refreshSessionOutcome.mockResolvedValue('rejected')
+    expect(await launch()).toMatchObject({ user: STORED })
+
+    // `request()` met the refusal on a screen's read: it recorded the notice itself and told `useAuth`.
+    sessionExpired()
+    expect(await getCurrentUser()).toBeNull()
+    session.answer({ success: false, error: 'Unauthorized' })
+    await settle()
+
+    expect(store.clearAll).toHaveBeenCalledTimes(1)
+    expect(markSessionExpired).not.toHaveBeenCalled()
+  })
+
+  it("a fresher read of the user that lands first is not overwritten by the check's late answer", async () => {
+    const FRESHER = { id: 'u1', email: 'a@b.c', name: 'Asha Rao' } as never
+    const session = held<unknown>()
+    api.getSession.mockReturnValueOnce(session.promise as never).mockResolvedValueOnce({ success: true, data: FRESHER } as never)
+    expect(await launch()).toMatchObject({ user: STORED })
+
+    await refreshAuthUser()
+    session.answer({ success: true, data: SERVER })
+    await settle()
+
+    expect(await getCurrentUser()).toBe(FRESHER)
   })
 
   it.each([

@@ -250,8 +250,8 @@ describe('around the refresh', () => {
       const outcome = await apiClient.refreshSessionOutcome()
 
       expect(session.success).toBe(false)
+      expect(outcome).toBe('failed')
       expect(seen.filter((u) => u === '/api/mobile/auth/refresh')).toHaveLength(refreshes)
-      if (refreshes === 1) expect(outcome).toBe('failed')
     } finally {
       jest.clearAllTimers()
       jest.useRealTimers()
