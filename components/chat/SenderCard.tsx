@@ -20,8 +20,8 @@ export type Sender = { id: string; name: string }
 /**
  * A message's sender, tapped (R1, ROUND3 D 5.1): the same PersonCard the Room
  * opens from a face, on `M.travel`, silently. What it knows comes from the
- * event's roster (the Room's own read, cached 30 s): their reason, age and
- * whether you liked them; somebody the roster doesn't list (they hid
+ * event's roster (the Room's own read, cached 30 s): their reason, their age
+ * once they are shown to you, and whether you liked them; somebody the roster doesn't list (they hid
  * themselves) gets the thin card, which never says why.
  *
  * Like and Wave are the Room's calls; a like that turns mutual opens the
@@ -150,7 +150,7 @@ export function SenderCard({
                 lensPerson,
                 lens,
                 eventTitle ? { title: eventTitle } : null,
-                !!card.photo
+                card.revealed === true
               )
             : {}),
         }}

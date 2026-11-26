@@ -271,10 +271,13 @@ describe('the variants', () => {
     expect(onClose).toHaveBeenCalledTimes(1)
   })
 
-  it('h · thin: the pseudonym and its meta line; Message and ⋯; never why', async () => {
-    await draw({ variant: 'thin', person: { face: { kind: 'creature', pseudonym: 'Cosmic Panda' }, name: 'Cosmic Panda', meta: 'Anonymous', lead: [{ icon: 'users', label: 'x', lit: true }], common: { label: 'In common', items: ['y'] }, tonight: { question: 'q', answer: 'z' } } })
+  it('h · thin: the pseudonym and its meta line, never a stray age or city (D-030); Message and ⋯; never why', async () => {
+    // An age and a city a caller still sends (the props are gone from the type) are never drawn.
+    const stray = { age: 27, city: 'Bengaluru' } as object
+    await draw({ variant: 'thin', person: { face: { kind: 'creature', pseudonym: 'Cosmic Panda' }, name: 'Cosmic Panda', meta: 'Anonymous', ...stray, lead: [{ icon: 'users', label: 'x', lit: true }], common: { label: 'In common', items: ['y'] }, tonight: { question: 'q', answer: 'z' } } })
     expect(text('z')).toBeNull()
     expect(text('Anonymous')).toBeTruthy()
+    expect(text(/27|Bengaluru/)).toBeNull()
     expect(text('x')).toBeNull()
     expect(text('y')).toBeNull()
     expect(screen.queryByRole('button', { name: 'Like' })).toBeNull()

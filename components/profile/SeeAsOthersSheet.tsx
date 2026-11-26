@@ -120,7 +120,7 @@ function AnonymousSide({ card }: { card: MePreview['anonymous'] }) {
     <>
       <PersonCardContent
         variant="preview"
-        person={{ face: personFace({ named: false, name: card.name }), name: card.name, meta: metaLine(false, card.age) }}
+        person={{ face: personFace({ named: false, name: card.name }), name: card.name, meta: metaLine(false, null) }}
         testID="see-as-card"
       />
       <Note icon="eye-off" text={ANONYMOUS_NOTE} />

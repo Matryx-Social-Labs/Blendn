@@ -76,7 +76,7 @@ export function profileIdentity(
       seed: markSeed(pseudonym ?? profile?.name, fallbackSeed),
     }
   }
-  return { revealed, title: pseudonym ?? 'Someone', name: pseudonym ?? 'Someone', age, seed: markSeed(pseudonym, fallbackSeed) }
+  return { revealed, title: pseudonym ?? 'Someone', name: pseudonym ?? 'Someone', age: null, seed: markSeed(pseudonym, fallbackSeed) }
 }
 
 /**

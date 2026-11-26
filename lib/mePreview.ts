@@ -5,8 +5,8 @@
 import { interestNames } from './meProfile'
 
 export interface MePreview {
-  /** Your card before you show who you are: the name you carried in the room joined last. Null before a first room. */
-  anonymous: { name: string; age?: number } | null
+  /** Your card before you show who you are: the name you carried in the room joined last, and no age (D-030). Null before a first room. */
+  anonymous: { name: string } | null
   named: { name: string; age?: number; photo: string | null; about: string | null; interests: string[]; work: string | null }
 }
 
@@ -23,7 +23,7 @@ export function mePreviewFrom(data: unknown): MePreview | null {
   const pseudonym = text(raw.pseudonym)
   const photos = Array.isArray(named.photos) ? named.photos : []
   return {
-    anonymous: pseudonym ? { name: pseudonym, age: ageOf(raw.anonymous.age) } : null,
+    anonymous: pseudonym ? { name: pseudonym } : null,
     named: {
       name,
       age: ageOf(named.age),

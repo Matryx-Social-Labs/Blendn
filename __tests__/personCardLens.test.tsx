@@ -184,7 +184,6 @@ describe('state 2 on the sheet (SCRUM-1042, combined board): shown to you', () =
   const divya = (shared: PersonCardPerson['shared'] = { latest: 'Riso Night at Champaca', more: 1 }): PersonCardPerson => ({
     face: { kind: 'creature', pseudonym: 'Gentle Bison' },
     name: 'Divya',
-    age: 30,
     shared,
     interests: ['Bakeries', 'PBKS'],
     ...lensView({ ...deck, tonightAnswer: null, arrivedAt: new Date(Date.parse('2026-11-12T20:00:00Z') - 40 * 60_000).toISOString() }, work, { title: 'Junction Tech Mixer' }, true, Date.parse('2026-11-12T20:00:00Z')),

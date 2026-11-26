@@ -63,7 +63,7 @@ beforeEach(() => jest.clearAllMocks())
 describe('mePreviewFrom', () => {
   it('reads both cards; nothing named reaches the anonymous one', () => {
     expect(mePreviewFrom(payload)).toEqual({
-      anonymous: { name: 'Velvet Otter', age: 27 },
+      anonymous: { name: 'Velvet Otter' },
       named: { name: 'Marc-André', age: 27, photo: 'https://cdn/a.jpg', about: 'Terrible karaoke singer.', interests: ['Karaoke'], work: 'Product designer' },
     })
   })
