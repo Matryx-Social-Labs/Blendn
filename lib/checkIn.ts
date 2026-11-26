@@ -131,9 +131,12 @@ export async function submitCheckIn(
     request
       .then((late) => {
         const isIn = late.success || late.errorCode === CHECK_IN_CODES.ALREADY_CHECKED_IN
-        if (isIn && session === currentSession()) checkInChanged(eventId, Array.isArray(late.data?.left) ? late.data.left : [])
+        const sameSession = session === currentSession()
+        Logger.warn('events', 'checkin:late', { eventId, isIn, code: reasonOf(late), sameSession })
+        if (isIn && sameSession) checkInChanged(eventId, Array.isArray(late.data?.left) ? late.data.left : [])
       })
-      .catch((error: unknown) => Logger.error('events', 'checkin:late:failed', { eventId, error }))
+      // A sign-out clears the queue under a waiting request ("Request queue cleared"): expected, so a warning, not a report.
+      .catch((error: unknown) => (session === currentSession() ? Logger.error : Logger.warn)('events', 'checkin:late:failed', { eventId, error }))
     return { kind: 'timeout' }
   }
 

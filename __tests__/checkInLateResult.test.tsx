@@ -28,6 +28,7 @@ jest.mock('../lib/roomVisibilityStorage', () => ({}))
 
 const { apiClient: api } = jest.requireMock('../lib/apiClient') as { apiClient: Record<'checkIn' | 'forgetActiveCheckins' | 'forgetEvent', jest.Mock> }
 const { Logger } = jest.requireMock('../lib/logger') as { Logger: Record<'warn' | 'error', jest.Mock> }
+const lateLines = () => Logger.warn.mock.calls.filter((c) => c[1] === 'checkin:late').map((c) => c[2])
 
 const at = { latitude: 12.97, longitude: 77.59, accuracy: 18 }
 const yes = { success: true, data: { checkIn: { id: 'c1' }, left: [{ eventId: 'e0', kind: 'event', name: 'Vinyl Night' }] } }
@@ -80,6 +81,8 @@ describe('submitCheckIn, after it stopped waiting', () => {
     expect(heard).toHaveBeenCalledTimes(1)
     expect(api.forgetActiveCheckins).toHaveBeenCalled()
     expect(api.forgetEvent.mock.calls.map((c) => c[0])).toEqual(['e1', 'e0'])
+    // One line per late answer, kept in production (warn), so a drive can see how a timed-out check-in ended.
+    expect(lateLines()).toEqual([{ eventId: 'e1', isIn: true, code: undefined, sameSession: true }])
   })
 
   it('"already checked in" landing late is a yes too, as it is on time', async () => {
@@ -94,6 +97,7 @@ describe('submitCheckIn, after it stopped waiting', () => {
     const request = await timedOut()
     request.resolve({ success: false, errorCode: 'OUT_OF_RANGE', error: '120 m outside' })
     await settle()
+    expect(lateLines()).toEqual([{ eventId: 'e1', isIn: false, code: 'OUT_OF_RANGE', sameSession: true }])
     expect(heard).not.toHaveBeenCalled()
     expect(api.forgetActiveCheckins).not.toHaveBeenCalled()
   })
@@ -105,6 +109,15 @@ describe('submitCheckIn, after it stopped waiting', () => {
     await settle()
     expect(heard).not.toHaveBeenCalled()
     expect(Logger.error).toHaveBeenCalledWith('events', 'checkin:late:failed', expect.objectContaining({ eventId: 'e1' }))
+  })
+
+  it('a sign-out clearing the queue under it is expected: a warning, not an error report', async () => {
+    const request = await timedOut()
+    mockSession = 2
+    request.reject(new Error('Request queue cleared'))
+    await settle()
+    expect(Logger.error).not.toHaveBeenCalled()
+    expect(Logger.warn).toHaveBeenCalledWith('events', 'checkin:late:failed', expect.objectContaining({ eventId: 'e1' }))
   })
 
   // A control on dev (nothing reconciled then); it bites once the session check is taken out.
