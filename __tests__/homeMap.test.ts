@@ -6,6 +6,10 @@ import {
   buildingUnder,
   cameraMove,
   cityPickAction,
+  edgeBoxOf,
+  bannerReach,
+  bannerRide,
+  chipZoneOf,
   boxAround,
   insideLastBox,
   lightCandidates,
@@ -26,8 +30,10 @@ import {
   compassBelow,
 } from '../lib/homeMap'
 import { drawerSnapPoints } from '../lib/home'
-import { glowRadius } from '../lib/mapLit'
+import { edgeMarker } from '../lib/mapPresence'
+import { chipBox, glowRadius, pickChips } from '../lib/mapLit'
 import { CITY_BUILDINGS, EMBER_MAP_STYLE, homeMapStyle, styleHost } from '../lib/mapStyleEmber'
+import { SPACE } from '../lib/design/tokens'
 import { MAP_THEME } from '../lib/mapTheme'
 
 /**
@@ -276,10 +282,10 @@ describe('the check-in boundary is never drawn (HM-CU01, plan v2 §4)', () => {
 
   it('keeps every name out from under the edge marker (part 2 drive: it covered a chip)', () => {
     const lighting = code('components/home/useMapLighting.ts')
-    expect(lighting).toMatch(/const marker = edgeAt \? edgeMarker\(edgeAt, edge\?\.box \?\? zone, EDGE_BLOCK\) : null/)
-    expect(lighting).toMatch(/if \(marker\) blocked\.push\(/)
-    // The same box the marker itself keeps to.
-    expect(component).toMatch(/edge: edgeTarget \? \{ at: edgeTarget\.at, box: edgeBox \} : null/)
+    expect(lighting).toMatch(/if \(edge\) blocked\.push\(edge\)/)
+    // The marker as drawn (`onPlaced`), not a guess at its size (SCRUM-1096): the names keep off the real pill.
+    expect(component).toMatch(/onPlaced=\{setEdgeRect\}/)
+    expect(component).toMatch(/edge: edgeRect \? \{ left: edgeRect\.left, top: edgeRect\.top, right: edgeRect\.left \+ edgeRect\.width, bottom: edgeRect\.top \+ edgeRect\.height \} : null/)
     expect(component).toMatch(/box=\{edgeBox\}/)
   })
 
@@ -614,6 +620,54 @@ describe('"my location"', () => {
     // A screen with no room between half and full: never NaN (review L3).
     expect(locateRide(400, { half: 120, full: 120 }).opacity).toBe(1)
     expect(locateRide(120, { half: 120, full: 120 }).opacity).toBe(0)
+  })
+
+  it('keeps the edge marker above "my location", lifted by a banner too (SCRUM-1096: the pill drew over the lifted button)', () => {
+    const drawer = { half: 420, full: 120 }
+    const drawerTop = 420
+    const padding = { top: 100, bottom: 800 - drawerTop }
+    const pill = { width: 120, height: 28 }
+    // A venue far below and right, behind "my location": the marker as placed (`edgeMarker`) ends above the button.
+    const venue: [number, number] = [380, 790]
+    const markerFoot = (lift: number) => {
+      const spot = edgeMarker(venue, edgeBoxOf({ width: 390, height: 800, padding, lift }), pill)
+      return spot ? spot.top + pill.height : null
+    }
+    for (const lift of [0, 74, 120]) {
+      expect(markerFoot(lift)).toBeLessThanOrEqual(locateRide(drawerTop, drawer, lift).translateY)
+      expect(edgeBoxOf({ width: 390, height: 800, padding, lift })).toMatchObject({ left: 0, top: 100, right: 390 })
+    }
+    // Negative control: a box that ignores the lift puts the marker over the lifted button (the bug as found).
+    expect(markerFoot(0)).toBeGreaterThan(locateRide(drawerTop, drawer, 74).translateY)
+    // Wired: the screen hands the banner's lift to the box the marker and the names keep to.
+    expect(component).toMatch(/const edgeBox = edgeBoxOf\(\{ width, height, padding, lift \}\)/)
+    expect(component).toMatch(/useAnimatedReaction\(\s*\(\) => locateLift\?\.get\(\) \?\? 0,/)
+    // A banner landing after the map settled moves the marker with no camera move: the names are placed again (AX5 drive:
+    // a chip stayed under the lifted marker).
+    // ...at once: none of these moves the camera, so a still map draws no frame to run the pass on (drive: the banner
+    // dismissed, the chips stayed off the strip it gave back).
+    expect(component).toMatch(/useEffect\(\(\) => \{\s*relight\(\)\s*onFrame\(\)\s*\}, \[isStale, staleBelow, reading, lift, edgeRect\?\.left, edgeRect\?\.top, edgeRect\?\.width, edgeRect\?\.height\]\)/)
+  })
+
+  it('keeps the names above a banner on the map, and gives them its strip back without one (SCRUM-1096, AX5: a chip stood under the banner)', () => {
+    const drawer = { half: 420, full: 120 }
+    const drawerTop = 420
+    const padding = { top: 100, bottom: 800 - drawerTop }
+    const zoneOf = (lift: number) => ({ left: 16, right: 374, ...chipZoneOf({ height: 800, padding, lift }) })
+    const chipAt = (y: number) => ({ item: 'a', box: chipBox([200, y], 0, { width: 120, height: 52 }) })
+    // A short banner (its top at the board's 74) and a tall one (wrapped at large text): the zone ends at the banner's top.
+    for (const h of [40, 100]) {
+      const lift = bannerReach(h - SPACE.sm) // as HomeShell lifts "my location"
+      expect(chipZoneOf({ height: 800, padding, lift }).bottom).toBeLessThanOrEqual(bannerRide(drawerTop, drawer, h).translateY)
+      // A chip standing on a roof under the banner is not drawn...
+      expect(pickChips([chipAt(drawerTop - 30)], zoneOf(lift), [], 4)).toEqual([])
+    }
+    // ...and with no banner (negative control) the same chip is, as is one whose foot is just above the drawer.
+    expect(pickChips([chipAt(drawerTop - 30)], zoneOf(0), [], 4)).toEqual(['a'])
+    expect(pickChips([chipAt(drawerTop - SPACE.sm / 2)], zoneOf(0), [], 4)).toEqual(['a'])
+    expect(chipZoneOf({ height: 800, padding, lift: 0 })).toEqual({ top: 100, bottom: drawerTop })
+    // Wired: the names keep to that zone.
+    expect(component).toMatch(/visible: chipZoneOf\(\{ height, padding, lift \}\)/)
   })
 
   it('lands at its zoom on iOS when the ease also tilts the camera (review M2)', () => {

@@ -291,3 +291,20 @@ it('control: a view seen before with only clean passes since is not read again',
   await pass(result)
   expect(m.project.mock.calls.length).toBe(calls)
 })
+
+it('keeps names off the edge marker as it is drawn, whatever its size (SCRUM-1096: at AX5 a box too short for a guessed 44 pt marker blocked nothing while the 30 pt one drew over a chip)', async () => {
+  // One venue at the middle of the map: its chip stands just above (200, 400).
+  const pins = venues(1).map((p) => ({ ...p, latitude: 12.97, longitude: 77.59 }))
+  const m = fakeMap(async () => pins.map((p) => buildingAt(p.longitude, p.latitude)))
+  const visible = { top: 0, bottom: SIZE.height }
+  const chipsWith = async (edge: { left: number; top: number; right: number; bottom: number } | null) => {
+    const { result } = await renderHook(() => useMapLighting({ map: { current: m as never }, view: view(), pins, segment: 'places', size: SIZE, visible, edge }))
+    await pass(result)
+    return result.current.lit.chips.map((c) => c.id)
+  }
+  // The marker drawn across the chip's place: no chip.
+  expect(await chipsWith({ left: 100, top: 330, right: 300, bottom: 360 })).toEqual([])
+  // Controls: drawn far from it, or not drawn at all, the chip is there.
+  expect(await chipsWith({ left: 0, top: 700, right: 100, bottom: 730 })).toEqual([pins[0]!.id])
+  expect(await chipsWith(null)).toEqual([pins[0]!.id])
+})

@@ -33,7 +33,7 @@ import {
 import { buildingHeights, CITY_BUILDINGS, cityColour, EMBER_MAP_STYLE, LABELS_FROM_LAYER_ID } from '../lib/mapStyleEmber'
 import { MAP_THEME } from '../lib/mapTheme'
 import { refreshPhoneZone } from '../lib/time'
-import { COLOR } from '../lib/design/tokens'
+import { COLOR, MAX_FONT_SCALE } from '../lib/design/tokens'
 
 /**
  * The lit look of the home map (step 2c; research §4.2, prototype v2): what a
@@ -500,7 +500,7 @@ describe('chips on the screen (visual QA r5: they sat under the capsule and the 
   const ZONE: Box = { left: 16, right: 402 - 16, top: 126, bottom: 560 }
   const chip = (id: string, x: number, y: number, o: { lift?: number; title?: string; line?: string } = {}) => {
     const c = { id, title: o.title ?? 'Toit', line: o.line ?? 'Live', kind: 'event' }
-    return { item: id, box: chipBox([x, y], o.lift ?? 20, chipSizePx(c)) }
+    return { item: id, box: chipBox([x, y], o.lift ?? 20, chipSizePx(c, 1)) }
   }
 
   it('a chip stands centred on its roof, raised by its lift, as the marker draws it', () => {
@@ -508,12 +508,30 @@ describe('chips on the screen (visual QA r5: they sat under the capsule and the 
   })
 
   it('sizes a chip from its words, never past the chip’s own maximum, a venue wider by its glyph', () => {
-    const short = chipSizePx({ title: 'Toit', line: 'Live', kind: 'event' })
-    const venue = chipSizePx({ title: 'Toit', line: 'Live', kind: 'venue' })
-    const long = chipSizePx({ title: 'A name that goes on and on and on and on and on and on and on', line: '', kind: 'event' })
+    const short = chipSizePx({ title: 'Toit', line: 'Live', kind: 'event' }, 1)
+    const venue = chipSizePx({ title: 'Toit', line: 'Live', kind: 'venue' }, 1)
+    const long = chipSizePx({ title: 'A name that goes on and on and on and on and on and on and on', line: '', kind: 'event' }, 1)
     expect(venue.width).toBeGreaterThan(short.width)
     expect(long.width).toBe(MAP_THEME.chip.maxWidthPx)
     expect(short.height).toBeGreaterThanOrEqual(MAP_THEME.chip.minTouchPx)
+  })
+
+  it('sizes a chip at the OS text size, up to the caption’s cap (SCRUM-1096: at AX5 a chip drew 60 pt tall, 8 over its estimate, under the edge marker)', () => {
+    const c = { title: 'Audit FX Mysuru Meetup 52', line: 'Sun · 2:21 AM', kind: 'event' }
+    const at1 = chipSizePx(c, 1)
+    const capped = chipSizePx(c, MAX_FONT_SCALE.caption)
+    expect(capped.height).toBeGreaterThanOrEqual(60) // measured on the iOS sim at AX5: a 48 pt body and its 12 pt stem
+    expect(capped.height).toBeGreaterThan(at1.height)
+    expect(chipSizePx(c, 3.1)).toEqual(capped) // the chip's words stop growing at the cap, so its box does too
+    expect(chipSizePx(c, 0.8)).toEqual(at1) // smaller text keeps the 44 pt target
+  })
+
+  it('a chip at the largest text keeps clear of a block it would miss at the default size', () => {
+    // At 1 the chip's top is 228; a block ending at 221 clears it by the air. At the cap the chip reaches into it.
+    const block: Box = { left: 100, right: 300, top: 180, bottom: 221 }
+    const at = (scale: number) => ({ item: 'a', box: chipBox([200, 300], 20, chipSizePx({ title: 'Toit', line: 'Live', kind: 'event' }, scale)) })
+    expect(pickChips([at(1)], ZONE, [block], 4)).toEqual(['a'])
+    expect(pickChips([at(MAX_FONT_SCALE.caption)], ZONE, [block], 4)).toEqual([])
   })
 
   it('keeps the nearest first and up to the maximum', () => {
@@ -562,13 +580,15 @@ describe('chips on the screen (visual QA r5: they sat under the capsule and the 
 })
 
 describe('the home map hands the lighting pass what the person can see', () => {
-  it('passes the visible window (under the chrome, over the drawer) and their fix, and the pass picks chips through pickChips', () => {
+  it('passes the visible window (under the chrome, over the drawer and a banner) and their fix, and the pass picks chips through pickChips', () => {
     const map = readFileSync(join(__dirname, '..', 'components', 'home', 'HomeMap.tsx'), 'utf8')
-    expect(map).toMatch(/visible: \{ top: padding\.top, bottom: height - padding\.bottom \}/)
+    expect(map).toMatch(/visible: chipZoneOf\(\{ height, padding, lift \}\)/)
     expect(map).toMatch(/userAt: center \? \[center\.longitude, center\.latitude\] : null/)
     const hook = readFileSync(join(__dirname, '..', 'components', 'home', 'useMapLighting.ts'), 'utf8')
     expect(hook).toContain('pickChips(')
     expect(hook).toContain('m.project(c.at)')
+    // Sized at the OS text size (SCRUM-1096).
+    expect(hook).toContain('chipSizePx(c, fontScale)')
   })
 })
 
@@ -605,8 +625,8 @@ describe('one lit place carries every event in it', () => {
   })
 
   it('a chip with a count is wider by its badge', () => {
-    const one = chipSizePx({ title: 'Toit', line: 'Live', kind: 'event' })
-    const three = chipSizePx({ title: 'Toit', line: 'Live', kind: 'event', count: 3 })
+    const one = chipSizePx({ title: 'Toit', line: 'Live', kind: 'event' }, 1)
+    const three = chipSizePx({ title: 'Toit', line: 'Live', kind: 'event', count: 3 }, 1)
     expect(three.width).toBeGreaterThan(one.width)
   })
 })

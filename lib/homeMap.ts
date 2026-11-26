@@ -472,6 +472,22 @@ export function locateRide(drawerTop: number, drawer: { half: number; full: numb
 }
 
 /**
+ * Where the edge marker may sit (pulse-map 05 frame 6): the map you can see, above "my location", which a banner on
+ * the map lifts by `lift` (`locateRide`; SCRUM-1096: the pill drew over the lifted button).
+ */
+export function edgeBoxOf(s: { width: number; height: number; padding: { top: number; bottom: number }; lift: number }) {
+  return { left: 0, top: s.padding.top, right: s.width, bottom: s.height - s.padding.bottom - MAP_THEME.locate.sizePx - SPACE.sm - s.lift }
+}
+
+/**
+ * Where the names on the map may stand: below the top chrome, above the drawer, and above a banner on the map, whose top
+ * is `SPACE.sm` over the button's lift (`bannerReach`; SCRUM-1096: at AX5 a chip stood under the banner). No banner, no gap.
+ */
+export function chipZoneOf(s: { height: number; padding: { top: number; bottom: number }; lift: number }) {
+  return { top: s.padding.top, bottom: s.height - s.padding.bottom - (s.lift > 0 ? s.lift + SPACE.sm : 0) }
+}
+
+/**
  * The Pulse's banners on the map (Option C): a gap above "my location", riding the drawer and fading as it does
  * (`locateRide`). `height` is the banners' own. A worklet: it runs per frame.
  */
