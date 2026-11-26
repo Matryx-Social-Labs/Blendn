@@ -20,10 +20,10 @@ const SIDES = ['Anonymous', 'Shown'] as const
 const FACE = 72
 
 const ANONYMOUS_NOTE =
-  'People in a room see this and your city until you show who you are, plus what you answer and have in common there. This name is from your last room; each room gives you its own.'
+  'People in a room see this until you show who you are, plus what you answer and have in common there. This name is from your last room; each room gives you its own.'
 const SHOWN_NOTE = 'People you show yourself to see this. Each room also adds what you answer there.'
 const NO_ROOM_TITLE = 'You get a room name when you check in'
-const NO_ROOM_BODY = 'Until you show who you are, people there see that name, your age and your city.'
+const NO_ROOM_BODY = 'Until you show who you are, people there see that name.'
 const SPARSE = 'Your photo, bio, interests and work show here once you add them.'
 
 export interface SeeAsOthersSheetProps {
@@ -120,7 +120,7 @@ function AnonymousSide({ card }: { card: MePreview['anonymous'] }) {
     <>
       <PersonCardContent
         variant="preview"
-        person={{ face: personFace({ named: false, name: card.name }), name: card.name, age: card.age, meta: metaLine(false, card.age) }}
+        person={{ face: personFace({ named: false, name: card.name }), name: card.name, meta: metaLine(false, null) }}
         testID="see-as-card"
       />
       <Note icon="eye-off" text={ANONYMOUS_NOTE} />
@@ -136,7 +136,6 @@ function ShownSide({ card, sparse }: { card: MePreview['named']; sparse: boolean
         person={{
           face: personFace({ named: true, name: card.name, photo: card.photo }),
           name: card.name,
-          age: card.age,
           meta: metaLine(true, card.age),
           bio: { about: card.about, interests: card.interests, work: card.work },
         }}

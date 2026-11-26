@@ -123,7 +123,7 @@ describe('the lines around them', () => {
     expect(contextLine(null, { title: '' })).toBeNull()
   })
   it('says Anonymous until they have shown you who they are', () => {
-    expect(metaLine(false, 31)).toBe('Anonymous · 31')
+    expect(metaLine(false, 31)).toBe('Anonymous')
     expect(metaLine(true, 31)).toBe('Shown to you · 31')
     expect(metaLine(false, undefined)).toBe('Anonymous')
   })
@@ -163,7 +163,7 @@ describe('lensView (what the sheet draws)', () => {
     const view = lensView({ ...person, age: 31, tonightAnswer: 'A map of quiet cafés' }, lens('work', 'What are you working on?'), { title: 'Junction Tech Mixer' }, false)
     expect(view).toEqual({
       context: 'In the room at Junction Tech Mixer',
-      meta: 'Anonymous · 31',
+      meta: 'Anonymous',
       lead: leadFor(person, lens('work')),
       tonight: { question: 'What are you working on?', answer: 'A map of quiet cafés' },
       common: { label: 'In common', items: person.interests },
@@ -196,8 +196,8 @@ describe('state 1 A (SCRUM-1042): how long they have been here, and the venue ni
     expect(hereFor(new Date(at + 5 * 60_000).toISOString(), at)).toBe('Just got here')
   })
   it('joins the meta line after the age', () => {
-    expect(metaLine(false, 31, 'Here 40 min')).toBe('Anonymous · 31 · Here 40 min')
-    expect(metaLine(false, 31, null)).toBe('Anonymous · 31')
+    expect(metaLine(false, 31, 'Here 40 min')).toBe('Anonymous · Here 40 min')
+    expect(metaLine(false, 31, null)).toBe('Anonymous')
   })
   it('offers the three openers on a venue night only (control: any other lens, or none)', () => {
     expect(VENUE_OPENERS).toEqual(['First time here?', 'What’s good here?', 'Who are you here with?'])

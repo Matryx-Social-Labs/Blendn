@@ -483,8 +483,7 @@ function DoorCodes() {
 const PRIYA: PersonCardPerson = {
   face: photo(PHOTO_2),
   name: 'Priya',
-  age: 27,
-  meta: 'Anonymous · 27',
+  meta: 'Anonymous',
   context: 'In the room at Rooftop Sundowner: House & Disco',
   lead: [
     { icon: 'users', label: 'Here for friends', lit: true },
@@ -522,7 +521,7 @@ function PersonCards() {
     ['bothwaved', { variant: 'matched', here: true, wave: 'mutual' }],
     ['friend', { variant: 'friend', here: true }],
     ['gone', { variant: 'gone' }],
-    ['thin', { variant: 'thin', person: { face: creature('Cosmic Panda'), name: 'Cosmic Panda', age: 27, city: 'Bengaluru' } }],
+    ['thin', { variant: 'thin', person: { face: creature('Cosmic Panda'), name: 'Cosmic Panda' } }],
     ['requested', { variant: 'here', state: 'requested' }],
     ['sending', { variant: 'here', wave: 'sending' }],
     ['waved', { variant: 'here', wave: 'waved' }],

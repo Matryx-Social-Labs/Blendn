@@ -145,7 +145,7 @@ describe('the attendee profile fails closed', () => {
 
   it('titles them by the room’s pseudonym, never the leaked name or "Attendee"', () => {
     const who = profileIdentity({ ...leaked, identityVisible: false }, { pseudonym: 'Cosmic Panda', roomSeed: 'g1:rh_b' })
-    expect(who).toEqual({ revealed: false, title: 'Cosmic Panda', name: 'Cosmic Panda', age: 29, seed: 'Cosmic Panda' })
+    expect(who).toEqual({ revealed: false, title: 'Cosmic Panda', name: 'Cosmic Panda', age: null, seed: 'Cosmic Panda' })
     const nobody = profileIdentity({ name: 'Attendee', identityVisible: false })
     expect(nobody.title).toBe('Someone')
     expect(nobody.seed).not.toContain('Attendee')
@@ -193,7 +193,7 @@ describe('the attendee profile fails closed', () => {
 
     it('titles the page, over the profile’s own name', () => {
       const who = profileIdentity({ ...roomAnswer, name: 'Ben' }, { roomName: 'Cosmic Panda', roomSeed: 'g1:rh_abc' })
-      expect(who).toEqual({ revealed: false, title: 'Cosmic Panda', name: 'Cosmic Panda', age: 29, seed: 'Cosmic Panda' })
+      expect(who).toEqual({ revealed: false, title: 'Cosmic Panda', name: 'Cosmic Panda', age: null, seed: 'Cosmic Panda' })
     })
 
     it('comes after the link’s pseudonym: it is what the card that opened the page drew', () => {

@@ -13,12 +13,14 @@ import { markSeed } from './creatureSeed'
  * server bug — became a reveal nobody agreed to, with the real name as the
  * title. Now only `identityVisible === true` (or your own profile) shows
  * identity, and when it is anything else the photos, bio, occupation,
- * education and interests are dropped here, at the boundary, even if the payload had them.
+ * education, interests, age and location are dropped here, at the boundary, even if the payload had them
+ * (age and location: D-030, together they pick one person out across rooms).
  */
 
 export interface ProfileFields {
   name?: string
   age?: number
+  location?: string
   bio?: string
   occupation?: string
   education?: string
@@ -34,7 +36,7 @@ export interface ProfileFields {
 /** The payload with every identity field removed unless the server said you may see it. */
 export function withheldUnlessVisible<T extends ProfileFields>(profile: T): T {
   if (profile.identityVisible === true) return profile
-  return { ...profile, photos: [], bio: undefined, occupation: undefined, education: undefined, about: undefined, interests: [], sharedInterests: [] }
+  return { ...profile, photos: [], age: undefined, location: undefined, bio: undefined, occupation: undefined, education: undefined, about: undefined, interests: [], sharedInterests: [] }
 }
 
 export interface ProfileIdentity {
@@ -43,7 +45,7 @@ export interface ProfileIdentity {
   title: string
   /** The name alone ("Julian"; the pseudonym until then), for a hero that sets the age beside it in its own face. */
   name: string
-  /** Their age, when the server sent one: it is outside the identity gate, so a pseudonym carries it too. */
+  /** Their age once they are shown to you (`withheldUnlessVisible` drops it before): null for a pseudonym. */
   age: number | null
   /** What the generated mark is seeded on (`markSeed`) — never a user id. */
   seed: string
@@ -74,7 +76,7 @@ export function profileIdentity(
       seed: markSeed(pseudonym ?? profile?.name, fallbackSeed),
     }
   }
-  return { revealed, title: pseudonym ?? 'Someone', name: pseudonym ?? 'Someone', age, seed: markSeed(pseudonym, fallbackSeed) }
+  return { revealed, title: pseudonym ?? 'Someone', name: pseudonym ?? 'Someone', age: null, seed: markSeed(pseudonym, fallbackSeed) }
 }
 
 /**
