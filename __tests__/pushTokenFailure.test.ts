@@ -176,8 +176,8 @@ describe('where no token is expected, nothing is reported', () => {
 
   it('a person who declined notifications: not a failure, no event', async () => {
     const app = launch()
-    app.Notifications.getPermissionsAsync.mockResolvedValue({ status: 'denied', granted: false, canAskAgain: false, expires: 'never' })
-    app.Notifications.requestPermissionsAsync.mockResolvedValue({ status: 'denied', granted: false, canAskAgain: false, expires: 'never' })
+    app.Notifications.getPermissionsAsync.mockResolvedValue({ status: 'denied', granted: false, canAskAgain: false, expires: 'never' } as never)
+    app.Notifications.requestPermissionsAsync.mockResolvedValue({ status: 'denied', granted: false, canAskAgain: false, expires: 'never' } as never)
 
     await expect(app.initializePushNotifications()).resolves.toBeNull()
 
