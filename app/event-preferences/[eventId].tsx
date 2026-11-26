@@ -36,8 +36,8 @@ import { useReducedMotion } from '../../lib/motion'
 /**
  * Why you are here tonight, and whether people can see who you are (Flow 3 `prefs`).
  *
- * `DESIGN_HANDOFF.md` calls the reveal control "the single most important new
- * screen", because it is the counterpart to the whole pseudonymity model.
+ * The reveal control is the single most important new screen, because it is
+ * the counterpart to the whole pseudonymity model.
  *
  * ## Two questions, one primary
  *

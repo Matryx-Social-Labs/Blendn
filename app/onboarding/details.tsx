@@ -25,7 +25,7 @@ import { overCapMessage, PROFILE_LIMITS, serverLength } from '../../lib/profileL
 const BIO_PROMPTS = ['A perfect Sunday for me is…', 'Lately I’ve been learning…', 'Ask me about…']
 
 /**
- * Step six — interests, and a few sentences about yourself.
+ * Step three — interests, and a few sentences about yourself.
  *
  * The interest chips in the frame are invented labels — Web3, AI Synthesis,
  * Ceramics — grouped under headings that do not exist. The real list is the

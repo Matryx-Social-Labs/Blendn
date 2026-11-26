@@ -172,8 +172,8 @@ describe('docs a comment points at actually exist', () => {
       /*
        * `blendn-admin/docs/…` is skipped, not resolved.
        *
-       * Three docs a comment here points at -- CHECKIN, MEDIA, DESIGN_HANDOFF
-       * -- live in the API repo, and the reference was bare `docs/…` so it read
+       * Two docs a comment here points at -- CHECKIN, MEDIA -- live in the API
+       * repo, and the reference was bare `docs/…` so it read
        * as a file in *this* repo. Qualifying them is the fix; checking them
        * from here is not, because the sibling checkout may not exist on a given
        * machine and a test that depends on that is a flake.

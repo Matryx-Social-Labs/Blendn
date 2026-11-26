@@ -212,8 +212,8 @@ export function MatchingFields({
         {wantsDating ? (
           <>
             {/*
-              Only here, and only while dating is ticked. `blendn-admin/docs/DESIGN_HANDOFF.md`
-              is explicit: a networking user is never asked their gender.
+              Only here, and only while dating is ticked: a networking user is never
+              asked their gender.
             */}
             <View style={styles.set}>
               <ChipSet
