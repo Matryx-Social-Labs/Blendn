@@ -36,8 +36,7 @@ Mobile routes are served at `/api/mobile/v1/*`; middleware strips the version an
 rewrites to `/api/mobile/*`. Either works. Auth is a bearer JWT from
 `lib/mobile-auth.ts` — **not** the dashboard's NextAuth session.
 
-`SECURITY_RELIABILITY_BACKLOG.md` is a separate ledger for auth/session
-robustness. Items there are not duplicated here.
+Security findings are not tracked in this repo: see [`AGENTS.md`](AGENTS.md).
 
 ---
 
@@ -297,8 +296,7 @@ human. Runbook: [`docs/RELEASING.md`](docs/RELEASING.md).
 | **Xcode 26 image pin** | **Done** #79 — SDK 53 / RN 0.79.6 compiles under Xcode 26.0, confirmed |
 | App icon rebuilt — opaque, centred, on the brand gradient, both platforms | **Done** 2026-08-12 |
 | Maps API key — created, restricted to Maps Static API, set in EAS | **Done** 2026-08-12 |
-| Maps key — app restriction (two keys + request headers) | **Open** — see RELEASING.md; no quota cap exists, so this is the only real ceiling |
-| Maps proxy through `blendn-admin` | **Open** — Google's own recommendation, and worth more now |
+| Maps key — restrictions | Tracked privately (SCRUM-1388) |
 | ~~Sign in with Apple~~ | **Already built** — see correction below |
 
 **Nothing left here is code.** The repo half shipped in #72–#74.
@@ -329,7 +327,7 @@ RELEASING.md, because the same command will do the same thing again.
 refuses submissions built with older Xcode, and EAS's `image: auto` picks by SDK
 version — SDK 53 resolves to Xcode 16.4, so every build so far carries *"can no
 longer be submitted to the App Store"*. Upgrading the SDK is not the fix (54 was
-tried and rolled back — see `SECURITY_RELIABILITY_BACKLOG.md`); pinning
+tried and rolled back on 2026-08-11); pinning
 `macos-sequoia-15.6-xcode-26.0` in `eas.json` is. Deliberately the **lowest**
 Xcode 26 image, since the further from SDK 53, the likelier a native module
 fails to compile.
