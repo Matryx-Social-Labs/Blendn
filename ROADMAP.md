@@ -1235,7 +1235,7 @@ is allowed only as an opt-in chip:** off by default, picked by the person
 
   **Text entry is still open**, and the script records why. `type` reloads a
   dev build: the Expo dev client binds single letters as shortcuts (`r`
-  reload), and "tester@blendn.app" contains an `r` — every attempt bounced the
+  reload), and the test account's address contains an `r` — every attempt bounced the
   app to its intro, which looked like the tap failing rather than the typing
   working too well. `paste` (pbcopy + ⌘V) survives, but the text does not land:
   a synthetic click opens a *button* reliably and does not appear to give a

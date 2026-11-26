@@ -1516,11 +1516,13 @@ Two logins, because the product has two faces:
 
 | | |
 |---|---|
-| The app | a seeded attendee — `roomseed-<handle>@blendn.invalid` |
-| The dashboard | `roomseed-organiser@blendn.invalid` at `staging-dashboard.blendn.app` |
+| The app | a seeded attendee account |
+| The dashboard | the organizer test account, at `staging-dashboard.blendn.app` |
 
-Both come from `blendn-admin` `npm run seed:room`, and the password is whatever
-`SEED_ROOM_PASSWORD` was set to on that run. The organizer account is a verified
+Both come from `blendn-admin` `npm run seed:room`, which prints each sign-in
+address and the env var that holds its password when it finishes (attendees:
+`scripts/seed-room.ts`; the organizer: `TEST_ACCOUNTS` in
+`scripts/test-accounts.ts`). The organizer account is a verified
 organisation owning the seeded event, so the dashboard is **editable**, not just
 visible.
 

@@ -7,8 +7,9 @@ left here needs a phone, a simulator, or a human watching a screen.
 Each item names **what to do**, **what correct looks like**, and **what the bug
 looked like**, so a failure is recognisable rather than a judgement call.
 
-Sign in as any seeded attendee: `roomseed-<handle>@blendn.invalid`
-(`aisha`, `rohan`, `vikram`, `priya`, `meera`, `karthik`, …). The password is in
+Sign in as any seeded attendee: `npm run seed:room` (blendn-admin) prints a
+sign-in address when it finishes, and `scripts/seed-room.ts` defines the rest.
+The password is in
 `SEED_ROOM_PASSWORD` in the environment of whoever last ran `npm run seed:room`;
 re-run that script to set a fresh one — it re-asserts passwords by design.
 
