@@ -47,7 +47,7 @@ const EMOJI_ONLY_TYPE = { fontSize: 32, lineHeight: 40 }
 const PHOTO = { width: 220, height: 160 }
 /** The removed message's words, said and shown (Flow 5 #11; round 4 #37 for a photo). */
 const REMOVED_WORDS = { text: 'This message was removed by moderation', photo: 'Photo removed by moderation', photoShown: 'Removed by moderation' }
-/** R3-D5 5.9: a 44 pt ring with a 3 pt stroke; the veil is the photo dimmed to 65%. */
+/** `UploadRing` (R3-D5 5.9): a 44 pt ring with a 3 pt stroke; the veil is the photo dimmed to 65%. */
 const RING = { size: SIZE.circleButton, stroke: 3 }
 const VEIL_ALPHA = 0.35
 // design-exception: the board's bubble words are 16/22 (`.xb`, Flow 5 F-A), between `button` 16/20 and `rowTitle` 17/22
