@@ -144,6 +144,24 @@ it('leaves the intent alone when only the reveal was opened', async () => {
   expect(api.setMatchPreferences.mock.calls[0][1]).toMatchObject({ intent: undefined, revealed: false })
 })
 
+it('a stored event intent with dating loses it on the next save, the rest kept; one without is left alone (D-002)', async () => {
+  Object.assign(mockParams, { askIntent: undefined })
+  api.getMatchPreferences.mockResolvedValue({ success: true, data: { intent: ['dating', 'networking'], revealed: false } } as never)
+  await render(<EventPreferences />)
+  await fireEvent.press(await screen.findByRole('button', { name: 'Save' }))
+  await waitFor(() => expect(api.setMatchPreferences).toHaveBeenCalled())
+  expect(api.setMatchPreferences.mock.calls[0][1]).toMatchObject({ intent: ['networking'] })
+  expect(api.setMatchPreferences.mock.calls[0][1]).not.toHaveProperty('rememberIntent')
+
+  api.setMatchPreferences.mockClear()
+  api.getMatchPreferences.mockResolvedValue({ success: true, data: { intent: ['networking'], revealed: false } } as never)
+  await screen.unmount()
+  await render(<EventPreferences />)
+  await fireEvent.press(await screen.findByRole('button', { name: 'Save' }))
+  await waitFor(() => expect(api.setMatchPreferences).toHaveBeenCalled())
+  expect(api.setMatchPreferences.mock.calls[0][1]).toMatchObject({ intent: undefined })
+})
+
 it('leads with the intent question at the first door, and the reveal question otherwise', async () => {
   await render(<EventPreferences />)
   expect(await screen.findByText('Why do you go out?')).toBeTruthy()
@@ -158,13 +176,13 @@ it('asks "Why are you here tonight?" when only the reveal was opened', async () 
 })
 
 it("shows the server’s sentence when a save is refused, and stays on the screen", async () => {
-  // "Dating is for 18+" is something a person can act on; "could not save" is not.
-  api.setMatchPreferences.mockResolvedValue({ success: false, error: 'Dating is for 18+' } as never)
+  // A sentence a person can act on beats "could not save".
+  api.setMatchPreferences.mockResolvedValue({ success: false, error: 'Add your age to your profile first.' } as never)
   await render(<EventPreferences />)
   await fireEvent.press(await screen.findByRole('checkbox', { name: /^Making friends/ }))
   await fireEvent.press(screen.getByRole('button', { name: 'Save' }))
 
-  await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('Dating is for 18+', 'error', { haptic: 'error' }))
+  await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('Add your age to your profile first.', 'error', { haptic: 'error' }))
   expect(router.back).not.toHaveBeenCalled()
 })
 
@@ -178,13 +196,15 @@ it('says it could not save when a refusal carries no sentence', async () => {
   expect(router.back).not.toHaveBeenCalled()
 })
 
-it('never offers Dating to a minor', async () => {
+it('offers Dating to nobody (D-002): an adult sees Networking and Making friends only', async () => {
   api.getProfile.mockResolvedValue({
     success: true,
-    data: { name: 'Kid', profile: { age: 17, name: 'Kid', photos: [] } },
+    data: { name: 'Sam', profile: { age: 34, name: 'Sam', photos: [] } },
   } as never)
   await render(<EventPreferences />)
-  await waitFor(() => expect(screen.queryByRole('checkbox', { name: /^Dating/ })).toBeNull())
+  expect(await screen.findByRole('checkbox', { name: /^Making friends/ })).toBeTruthy()
+  expect(screen.queryByRole('checkbox', { name: /^Dating/ })).toBeNull()
+  expect(screen.queryByText('Dating', { includeHiddenElements: true })).toBeNull()
   // And with no photo, the reveal switch says what is missing.
   expect(await screen.findByText(/to your profile first/)).toBeTruthy()
 })
@@ -445,10 +465,10 @@ describe('the board’s cards (Flow 4 `prefs`, SCRUM-1025)', () => {
     expect(screen.getByText('Just for this room.')).toBeTruthy()
   })
 
-  it('the intents are onboarding’s photo tiles, Networking · Making friends · Dating, with "Just here" behind an "or"', async () => {
+  it('the intents are onboarding’s photo tiles, Networking · Making friends (no Dating, D-002), with "Just here" behind an "or"', async () => {
     await render(<EventPreferences />)
-    const tiles = screen.getAllByTestId(/^prefs-intent-(networking|friendship|dating)-tile$/)
-    expect(tiles.map((t) => t.props.testID)).toEqual(['prefs-intent-networking-tile', 'prefs-intent-friendship-tile', 'prefs-intent-dating-tile'])
+    const tiles = screen.getAllByTestId(/^prefs-intent-[a-z_]+-tile$/)
+    expect(tiles.map((t) => t.props.testID)).toEqual(['prefs-intent-networking-tile', 'prefs-intent-friendship-tile'])
     expect(screen.getByText('or', { includeHiddenElements: true })).toBeTruthy()
     expect(screen.getByRole('checkbox', { name: /^Just here for the event, Not looking to meet anyone$/ })).toBeTruthy()
   })

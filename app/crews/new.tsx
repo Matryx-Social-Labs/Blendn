@@ -13,6 +13,7 @@ import { useTagIdeas } from '../../lib/useTagIdeas'
 import { crewsApi } from '../../lib/crewsApi'
 import {
   cleanName,
+  intentChoice,
   intentOf,
   makeLabel,
   nameError,
@@ -79,7 +80,8 @@ function NewCrewScreenContent() {
   // Taken once it is on screen: a sheet the person closes themselves does not bring it back again.
   useEffect(() => setDraft(draftThread, ''), [draftThread])
   const [name, setName] = useState(kept.name ?? '')
-  const [choice, setChoice] = useState<IntentChoice>(kept.choice ?? 'friendship')
+  // A draft kept from before 1.0 can hold 'dating' or 'both' (D-002): read through `intentChoice`, it opens on Friendship.
+  const [choice, setChoice] = useState<IntentChoice>(() => intentChoice(kept.choice ? [kept.choice] : []) ?? 'friendship')
   const [tags, setTags] = useState<string[]>(kept.tags ?? [])
   const [openToSolo, setOpenToSolo] = useState(kept.openToSolo ?? false)
   const [keepAnonymous, setKeepAnonymous] = useState(kept.keepAnonymous ?? false)

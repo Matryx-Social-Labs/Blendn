@@ -436,13 +436,16 @@ describe('preferences', () => {
     expect(mockCommit).toHaveBeenCalledWith(expect.objectContaining({ reveal_by_default: true }))
   })
 
-  it('Show on profile is there but out of the tree until an orientation is chosen', async () => {
-    mockDraft = { dateOfBirth: '1990-01-01' }
+  it('asks an adult no orientation (D-002: it was for dating), and sends none from a resumed draft', async () => {
+    mockDraft = { dateOfBirth: '1990-01-01', orientations: ['queer'], show_orientation: true }
     await render(<PreferencesScreen />)
+    expect(screen.queryByText('Orientation')).toBeNull()
+    expect(screen.queryByLabelText(/^Bisexual/)).toBeNull()
     expect(screen.queryByTestId('onboarding-show-orientation')).toBeNull()
-    await fireEvent.press(screen.getByLabelText(/^Bisexual/))
-    expect(screen.getByTestId('onboarding-show-orientation')).toBeTruthy()
-    expect(screen.getByText('Only people you match or talk with will see it. Never a room.')).toBeTruthy()
+    await fireEvent.press(screen.getByTestId('onboarding-primary'))
+    const patch = mockCommit.mock.calls.at(-1)?.[0] as Record<string, unknown>
+    expect(patch).not.toHaveProperty('orientations')
+    expect(patch).not.toHaveProperty('show_orientation')
   })
 
   // What the hook sends: its merge of the draft and the patch, through the step's own fields.
@@ -460,52 +463,46 @@ describe('preferences', () => {
     expect(sentOnContinue(mockDraft).intent_default).toEqual(['friendship'])
   })
 
-  it('OUT-01: a minor whose draft holds a stale dating intent sends no intent at all', async () => {
-    mockDraft = { dateOfBirth: `${new Date().getFullYear() - 17}-01-01`, intent_default: ['dating'] }
+  it('a draft whose only intent is a stored dating sends an empty list: Continue leaves what the screen shows (D-002)', async () => {
+    mockDraft = { dateOfBirth: '1990-01-01', intent_default: ['dating'] }
     await render(<PreferencesScreen />)
     expect(screen.queryByTestId('looking-for-dating')).toBeNull()
     await fireEvent.press(screen.getByTestId('onboarding-primary'))
     // The hook spreads the patch over the draft, so the patch must overwrite the stale value, not omit it.
-    expect(sentOnContinue(mockDraft)).not.toHaveProperty('intent_default')
+    expect(sentOnContinue(mockDraft).intent_default).toEqual([])
   })
 
   const tile = (name: string) => screen.getByTestId(`looking-for-${name}`)
   // Tiles and Just here are all checkboxes now (multi-select, SCRUM-1025): `checked` is the one state.
   const picked = (name: string) => tile(name).props.accessibilityState.checked
 
-  it('Edit profile’s intents, in its words: Friendship, Networking and Dating tiles, and Just here (owner, 2026-11-01)', async () => {
+  it('Edit profile’s intents, in its words: Friendship and Networking tiles, and Just here; no Dating (D-002)', async () => {
     mockDraft = { dateOfBirth: '1990-01-01' }
     await render(<PreferencesScreen />)
-    for (const label of ['Friendship', 'Networking', 'Dating']) expect(screen.getByLabelText(label)).toBeTruthy()
+    for (const label of ['Friendship', 'Networking']) expect(screen.getByLabelText(label)).toBeTruthy()
+    expect(screen.queryByLabelText('Dating')).toBeNull()
+    expect(screen.queryByTestId('looking-for-dating')).toBeNull()
     expect(screen.getByRole('checkbox', { name: 'Just here, no matching' })).toBeTruthy()
     expect(screen.queryByText('Both, depends on the night')).toBeNull()
     noCreature()
   })
 
-  it('a minor sees no Dating tile, and no orientation', async () => {
-    mockDraft = { dateOfBirth: `${new Date().getFullYear() - 16}-01-01` }
-    await render(<PreferencesScreen />)
-    expect(screen.getByLabelText('Friendship')).toBeTruthy()
-    expect(screen.queryByLabelText('Dating')).toBeNull()
-    expect(screen.queryByLabelText(/^Bisexual/)).toBeNull()
-  })
-
-  it('more than one can be picked, and Dating saves as dating (the same field and values as Edit profile)', async () => {
+  it('more than one can be picked (the same field and values as Edit profile)', async () => {
     mockDraft = { dateOfBirth: '1990-01-01' }
     await render(<PreferencesScreen />)
     await fireEvent.press(tile('networking'))
-    await fireEvent.press(tile('dating'))
-    expect(picked('networking') && picked('dating')).toBe(true)
+    await fireEvent.press(tile('friendship'))
+    expect(picked('networking') && picked('friendship')).toBe(true)
     await fireEvent.press(screen.getByTestId('onboarding-primary'))
-    expect(sentOnContinue(mockDraft).intent_default).toEqual(['networking', 'dating'])
+    expect(sentOnContinue(mockDraft).intent_default).toEqual(['networking', 'friendship'])
   })
 
   it('a second tap takes a tile back off', async () => {
     mockDraft = { dateOfBirth: '1990-01-01' }
     await render(<PreferencesScreen />)
     await fireEvent.press(tile('friendship'))
-    await fireEvent.press(tile('dating'))
-    await fireEvent.press(tile('dating'))
+    await fireEvent.press(tile('networking'))
+    await fireEvent.press(tile('networking'))
     await fireEvent.press(screen.getByTestId('onboarding-primary'))
     expect(sentOnContinue(mockDraft).intent_default).toEqual(['friendship'])
   })
@@ -523,10 +520,10 @@ describe('preferences', () => {
     expect(sentOnContinue(mockDraft).intent_default).toEqual(['networking'])
   })
 
-  it('a resumed Dating taken back off, leaving nothing, is withdrawn: an empty list is sent, never the old answer kept', async () => {
-    mockDraft = { dateOfBirth: '1990-01-01', intent_default: ['dating'] }
+  it('a resumed answer taken back off, leaving nothing, is withdrawn: an empty list is sent, never the old answer kept', async () => {
+    mockDraft = { dateOfBirth: '1990-01-01', intent_default: ['networking'] }
     await render(<PreferencesScreen />)
-    await fireEvent.press(tile('dating'))
+    await fireEvent.press(tile('networking'))
     await fireEvent.press(screen.getByTestId('onboarding-primary'))
     expect(sentOnContinue(mockDraft).intent_default).toEqual([])
   })
@@ -538,12 +535,12 @@ describe('preferences', () => {
     expect(sentOnContinue(mockDraft)).not.toHaveProperty('intent_default')
   })
 
-  it('a resumed answer shows picked, dating included, and is sent as it was when nothing is touched', async () => {
+  it('a resumed answer shows picked and is sent as shown; a stored dating in it is dropped, never sent again (D-002)', async () => {
     mockDraft = { dateOfBirth: '1990-01-01', intent_default: ['friendship', 'dating'] }
     await render(<PreferencesScreen />)
-    expect(picked('friendship') && picked('dating')).toBe(true)
+    expect(picked('friendship')).toBe(true)
     expect(picked('networking')).toBe(false)
     await fireEvent.press(screen.getByTestId('onboarding-primary'))
-    expect(sentOnContinue(mockDraft).intent_default).toEqual(['friendship', 'dating'])
+    expect(sentOnContinue(mockDraft).intent_default).toEqual(['friendship'])
   })
 })

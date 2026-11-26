@@ -12,8 +12,8 @@ Design tokens are in [`DESIGN_SYSTEM.md`](./DESIGN_SYSTEM.md).
 
 | # | Route | Frame | Collects | Skippable |
 |---|---|---|---|---|
-| 1 | `/onboarding/basics` | `1141:3928` | first name, gender, **date of birth** | **no** |
-| 2 | `/onboarding/preferences` | `1141:4192` | orientations (up to 3), intent (why you go out) | yes |
+| 1 | `/onboarding/basics` | `1141:3928` | first name, **date of birth** | **no** |
+| 2 | `/onboarding/preferences` | `1141:4192` | intent (why you go out), how you enter a room | yes |
 | 3 | `/onboarding/details` | `1141:4408` | interests, bio | yes |
 | 4 | `/onboarding/media` | `1141:4502` | up to six photos | yes |
 | 5 | `/onboarding/location` | `1141:4119` | location permission → `share_location` | yes |
@@ -96,124 +96,27 @@ Every one of these is a place the design asks for something the product does not
 have. None of them are silently ignored — each is either mapped honestly or left
 out, and listed here.
 
-### 1. The orientation switch is built, and narrower than its label
+### 1. No gender, no orientation, no Dating (register D-002, client/09, SCRUM-1192)
 
-Frame `1141:4192` puts a switch beside Orientation offering to display it.
-**Built** — with the exposure narrower than "show on profile" implies, and the
-difference is the point.
+Dating is not an intent in 1.0. Gender (step 1's "I am" row), orientation (step 2's Orientation chips and their "Show on
+profile" switch) and interested-in were read only by the server's dating compatibility check, so they went with it: the
+app neither asks, loads nor sends them. A draft or profile from before 1.0 that still holds them is not shown or re-sent;
+the server keeps the columns until the serving and trust lanes strip them. Putting dating back is one PR that restores
+Edit profile's dating chain, not step 1's gender row (advisor pick, 2026-11-27).
 
-Turning it on shows orientation to people who **can already see who you are**:
-a mutual match, an open conversation, a room you revealed yourself in. Not to
-every caller. Two gates on the server, and both must pass:
+### 2. "Looking for" is the intent (fix round 2026-10-27, OUT-01)
 
-| Gate | Question | Default |
-|---|---|---|
-| `show_orientation` | may this be shown at all? | **false** |
-| `maySeeIdentity` | shown to *whom*? | matches, conversations, revealed |
-
-**Why not the switch as drawn.** A single public switch puts orientation in
-front of any caller holding a token. This API withholds someone's real name and
-photograph from anyone who has not matched, opened a conversation, or been
-revealed to — so a field more sensitive than a name cannot be less protected
-than one. The allow-list it sits in exists *because a deny-list once shipped
-`orientation` and `gender` to any authenticated caller*.
-
-**Why not leave it alone either.** Doing nothing looked like the safe option
-and was not. Orientation was already collected and already fed
-`deriveInterestedIn`, and was shown to nobody — so the algorithm knew and no
-human could, which leaves someone no way to signal a thing the dating feature
-exists to act on, and no visible control over a field the product was already
-using.
-
-**Two rules follow:**
-
-- The switch appears **only once an orientation is chosen**. One offering to
-  publish an unfilled field means nothing, and invites someone to turn it on
-  and assume it did something.
-- **Clearing the last one clears the consent** — `orientationConsent` in
-  `lib/onboarding.ts`, tested. A stored `true` would outlive the thing it was
-  consent for, so answering the question again months later would republish it
-  to everyone who had matched in the meantime, with no second decision.
-
-  The *last* label, not any of them. Going from three labels to two is an edit
-  to something already published, and re-asking there would make the switch look
-  like it resets itself at random.
-
-The label on screen says who can see it rather than repeating "Show on
-profile", and `EmberToggle` requires its helper text rather than accepting it as
-optional. A privacy switch whose blast radius is not on the screen is one people
-mis-set, and the cost of mis-setting this one is not symmetrical.
-
-### 2. Orientation: the frame's caption is finally true
-
-Frame `1141:4192` captions the Orientation chips *"Select all that apply to
-you"*. For a while that was impossible as drawn — `profiles.orientation` was a
-single `String?` and `deriveInterestedIn` read exactly one value — so the screen
-was single-select and the caption said *"Pick the one that fits best"* instead.
-A caption describing what the screen does beats one asking for something it
-refuses.
-
-**Now it is `orientations String[]`, capped at three**, and the frame's wording
-is back with the cap stated: *"Select all that apply to you — up to three."*
-
-People hold more than one label. "Queer" plus "bisexual" is a common pair, and
-"asexual" alongside a romantic orientation is another; a single choice made
-somebody pick which part of themselves to omit, on the screen that asks them to
-be authentic.
-
-**Three rules, all enforced in `lib/dating.ts` rather than in the screen:**
-
-| Rule | Why there and not here |
-|---|---|
-| At most three | The Settings editor writes this field too |
-| No duplicates | Same |
-| "Prefer not to say" is exclusive | Same, and the server rejects the pair |
-
-Two screens write orientation — onboarding's `preferences` step and Edit profile (through
-`MatchingFields`). A cap enforced in one of them is a 400 from the other, so
-`toggleOrientation` and `orientationDisabled` are shared and tested once.
-
-**Chips past the cap are dimmed, not removed.** The unreachable ones are what
-tell somebody a limit exists; hiding them makes three-of-eight look like
-eight-of-eight that stopped working, and a tap that does nothing with no
-explanation reads as a broken screen. "Prefer not to say" is never dimmed — it
-replaces the set rather than joining it.
-
-**`interested_in` derives from the union**, never the intersection: adding a
-label must not narrow who you are shown. And if any one label is one the server
-cannot read, the whole derivation returns "ask" rather than unioning the rest —
-otherwise a woman who picked "straight" and "queer" would be pinned to `["man"]`
-on the strength of the label she just qualified. `needsInterestedInPicker`
-mirrors that rule exactly, which is why it checks **every** label rather than
-any.
-
-**"Demisexual" is still not offered.** It is in the frame and not in the
-server's list, and a chip that 400s on save is worse than an absent one.
-
-### 3. "Looking for" is the intent (fix round 2026-10-27, OUT-01)
-
-The step is now "Why you go out": four single-choice tiles, **Dating, Friendship,
-Networking, Just here for the event**, written as `intent_default: [choice]`
-(`dating | friendship | networking | just_here`, the enum matching reads). It no
-longer writes `looking_for`; older profiles keep what they hold and it is
-read-only. A minor is not offered Dating.
+The step is now "Why you go out": two photo tiles, **Friendship** and **Networking** (either or both), and **Just here**
+(exclusive), written as `intent_default` (`friendship | networking | just_here`, the values matching reads). A stored
+`dating` is dropped on read (D-002). It no longer writes `looking_for`; older profiles keep what they hold and it is
+read-only.
 
 Before this, onboarding wrote only `looking_for`, so a new account had an empty
 `intent_default`: matching could not use the answer, `profileIsComplete` refused
 its first Lobby post, and the first check-in asked again. No backfill: the
 first-door ask covers older accounts.
 
-### 3. The fourth gender chip says what it stores
-
-The API's gender enum is `woman | man | non_binary | prefer_not_to_say`. The
-frame's fourth chip is **Other**, and it used to be labelled that while it
-saved `prefer_not_to_say`: someone saying *none of these three fit* was
-recorded as *declined to answer*.
-
-**Decided (2026-09-29):** the chip reads **Prefer not to say**, which is what
-it stores. Adding `other` to the enum is still open, for the API.
-
-### 4. Employment type and class year are not collected
+### 3. Employment type and class year are not collected
 
 The frame's Occupation block has chips reading **Freelance / Full-time /
 Founder**, and Education has a **class year** box. Neither has a column.
@@ -226,7 +129,7 @@ pseudonymous room, because *"works in design"* is an attribute while
 A field that saves nowhere is a lie told in a form, so those two are absent
 rather than decorative.
 
-### 5. Interests come from the server, not the frame
+### 4. Interests come from the server, not the frame
 
 The frame's chips are invented labels — Web3, AI Synthesis, Ceramics — under
 headings that do not exist. The screen renders the server's category tree, the
@@ -236,10 +139,7 @@ An interest typed into the client is an interest nothing can match on:
 `profiles.interests` was free text, so "Software" and "software engineering"
 never met, and unpicking that took two PRs.
 
-**"Demisexual"** is in the orientation frame and not in the server's list, so it
-is not offered — a chip that 400s on save is worse than an absent one.
-
-### 6. Photos only, no video
+### 5. Photos only, no video
 
 The media frame's caption offers *"JPG, PNG and MP4 up to 20MB"*. The upload
 path is images end to end — the picker requests images, and the server moderates
@@ -248,7 +148,7 @@ profile photos through an image check that has nothing to say about a video.
 Offering MP4 would mean either an unmoderated video on a profile or a rejection
 after the upload had finished.
 
-### 7. The progress numbers are computed, not copied
+### 6. The progress numbers are computed, not copied
 
 The frames disagree with each other and cannot all be right: one header reads
 **"STEP 02/05"**, another **"Step 2 of 4"**, another **"Step 4 of 5"**, and the
@@ -257,7 +157,7 @@ percentages run 30 / 70 / 80 / 100 across four of the frames.
 Those are mock values from separate design passes. `progressPercent` computes
 one honest number and stays right when a step is added.
 
-### 8. No blur, and no illustrations
+### 7. No blur, and no illustrations
 
 `backdrop-blur` and the atmospheric blur radii have no React Native equivalent
 on a plain view — `expo-blur` blurs what is *behind* a view, which is the wrong
@@ -268,7 +168,7 @@ same and cost nothing.
 longer true — see #9. Left here because the surrounding blur/atmosphere
 substitution is still accurate.
 
-### 9. What a 2026-09-19 pass against Figma found, and fixed
+### 8. What a 2026-09-19 pass against Figma found, and fixed
 
 A frame-by-frame comparison (not a re-read of this document — an actual
 `get_design_context` call per screen) turned up drift this file never recorded.

@@ -49,8 +49,7 @@ export type LookingForCardProps = {
  * "What brings you to Blend'n?" as photo tiles
  * (guidelines/components/LookingForCard.html): 112 pt, radius 24, the word
  * bottom-left on an ink scrim. Multi-select: on is the 2 pt hue ring
- * outside the tile in the screen's hue, and the check disc. Under 18 the caller does not draw the
- * Dating tile at all (not disabled: a minor never sees it).
+ * outside the tile in the screen's hue, and the check disc.
  *
  * `H.select` on every change. iOS presses scale 0.97; Android has no ripple
  * (a photo under a ripple reads as a loading error). Increase Contrast: the

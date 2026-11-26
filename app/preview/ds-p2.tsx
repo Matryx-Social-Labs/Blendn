@@ -240,7 +240,7 @@ function SectionHeaders() {
     ['count', { title: 'Everyone here', count: 14 }],
     ['action', { title: 'Tonight', action: { label: 'See all', onPress: noop } }],
     ['count-action', { title: 'Interests', count: 6, action: { label: 'Edit', onPress: noop } }],
-    ['caption', { title: 'Orientation', caption: 'Select all that apply to you — up to three.' }],
+    ['caption', { title: 'Interests', caption: 'Select all that apply to you — up to ten.' }],
     ['live', { title: 'Live now', live: true }],
     ['busy', { title: 'Tonight', action: { label: 'Saving…', onPress: noop, busy: true } }],
     ['long', { title: 'People you might have missed tonight', count: 14, action: { label: 'See all', onPress: noop } }],
@@ -356,7 +356,7 @@ function MeetNext() {
       <Cell label="the row at 360 · 96 each" testID="ds-meetnext-row-360">
         <View style={styles.pair}>
           <MeetNextCard {...NOVA} width={COLUMN_360} onPress={noop} />
-          <MeetNextCard face={creature('Cosmic Panda')} name="Cosmic Panda" reason="Both open to dating" width={COLUMN_360} wave="waved" onPress={noop} />
+          <MeetNextCard face={creature('Cosmic Panda')} name="Cosmic Panda" reason="Both here to make friends" width={COLUMN_360} wave="waved" onPress={noop} />
           <MeetNextCard face={photo(PHOTO)} name="Sam" reason="Both at 3 nights before" width={COLUMN_360} onPress={noop} />
         </View>
       </Cell>
