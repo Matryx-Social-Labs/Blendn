@@ -35,7 +35,8 @@ npm test                       # Jest
 ./scripts/typecheck.sh         # types, against the baseline
 ```
 
-**There is a test suite and it is not optional: 60 suites, 865 tests.** An
+**There is a test suite and it is not optional** (`npx jest --listTests | wc -l`
+counts its files). An
 earlier version of this file said "no test runner is configured — there are no
 unit tests", which was wrong, and an agent that believed it would skip the whole
 suite. `npm test` and `./scripts/typecheck.sh` are what EAS runs before any
@@ -83,7 +84,7 @@ app/
   index.tsx                         # Splash / intro animation, then the auth guard routes
   _layout.tsx                       # Root layout — auth guard, socket lifecycle, push notifications
   (tabs)/                           # Pulse · Going · [Blend'n] · Banter · Me — see docs/NAVIGATION.md
-  onboarding/                       # Multi-step onboarding flow (8 screens)
+  onboarding/                       # Onboarding flow, one file per step
   event/[id].tsx                    # The Scene. presentation: 'card', full screen — see docs/SCENE.md
   chat/[id].tsx                     # Group chat screen
   private-chat/[conversationId].tsx # 1-on-1 DM screen
@@ -109,7 +110,7 @@ Resume reads the unfinished flow's progress from `AsyncStorage` (`lib/onboarding
 
 **API response format**: every `apiClient` method returns `{ success: boolean, data?: T, error?: string }`. Never throws — always check `result.success`.
 
-**Token storage keys** (SecureStore, keychain service `blendn.api.auth`, `WHEN_UNLOCKED_THIS_DEVICE_ONLY`):
+**Token storage keys** (SecureStore, keychain service `blendn.api.auth.v2`, `AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY`; the old `blendn.api.auth` service is read as a fallback and deleted once the new one is written):
 - `blendn_access_token`, `blendn_refresh_token`, `blendn_user`
 
 **Request queue priorities** (lower = higher priority):
@@ -122,7 +123,7 @@ Resume reads the unfinished flow's progress from `AsyncStorage` (`lib/onboarding
 | 4 | Batch reads |
 | 5 | General queries |
 
-GET requests retry 2× with exponential backoff. Mutations do not retry. On 401, a single token refresh is attempted; if that fails, tokens are cleared.
+GET requests retry 2× with exponential backoff. Mutations do not retry. On 401, a single token refresh is attempted; tokens are cleared only if the server refuses the refresh, and kept if it never answered.
 
 ### Real-time Data Sync
 
@@ -219,7 +220,7 @@ place; screens move to it one at a time, and `EMBER` goes when the last has.
 - Satoshi is gitignored (its licence; this repo is public): copy it in before
   Metro runs — `docs/RELEASING.md`, "Satoshi"
 
-NativeWind (Tailwind) is configured but UI code predominantly uses `StyleSheet.create` with theme tokens.
+There is no NativeWind or Tailwind: UI is styled with `StyleSheet.create` and the tokens in `lib/theme.ts`.
 
 ### Key Components
 
