@@ -134,8 +134,9 @@ export async function submitCheckIn(
       .then((late) => {
         const isIn = late.success || late.errorCode === CHECK_IN_CODES.ALREADY_CHECKED_IN
         const sameSession = session === currentSession()
-        Logger.warn('events', 'checkin:late', { eventId, isIn, code: reasonOf(late), sameSession })
-        if ((isIn || !reasonOf(late)) && sameSession) checkInChanged(eventId, Array.isArray(late.data?.left) ? late.data.left : [])
+        const code = reasonOf(late)
+        Logger.warn('events', 'checkin:late', { eventId, isIn, code, error: code ? undefined : late.error, sameSession })
+        if ((isIn || !code) && sameSession) checkInChanged(eventId, Array.isArray(late.data?.left) ? late.data.left : [])
       })
       // A sign-out clears the queue under a waiting request ("Request queue cleared"): expected, so a warning, not a report.
       .catch((error: unknown) => (session === currentSession() ? Logger.error : Logger.warn)('events', 'checkin:late:failed', { eventId, error }))
@@ -145,7 +146,8 @@ export async function submitCheckIn(
   if (!result.success) {
     // Dispatch on the server's code, never on its sentence (lib/checkInRefusal.ts).
     const alreadyCheckedIn = result.errorCode === CHECK_IN_CODES.ALREADY_CHECKED_IN
-    if (alreadyCheckedIn) checkInChanged(eventId)
+    // No server code is no answer (a dropped connection, a failed refresh), not a no: the server may have it, so re-read.
+    if (alreadyCheckedIn || !reasonOf(result)) checkInChanged(eventId)
     return {
       kind: 'refused',
       refusal: checkInRefusal(reasonOf(result), result.error),
