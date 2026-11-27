@@ -16,21 +16,22 @@ jest.mock('expo-location', () => ({
 jest.mock('../lib/checkInTiming', () => ({ markCheckIn: jest.fn() }))
 jest.mock('../lib/logger', () => ({ Logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), journey: jest.fn() } }))
 jest.mock('../lib/apiClient', () => ({
-  apiClient: { checkIn: jest.fn(), forgetActiveCheckins: jest.fn(), forgetVenues: jest.fn(), forgetEvent: jest.fn() },
+  apiClient: { checkIn: jest.fn(), checkOut: jest.fn(), forgetActiveCheckins: jest.fn(), forgetVenues: jest.fn(), forgetEvent: jest.fn() },
   currentSession: () => 1,
 }))
 jest.mock('../lib/roomVisibilityStorage', () => ({}))
+jest.mock('../lib/rosterMemory', () => ({ forgetRoster: jest.fn() }))
 
 /* eslint-disable import/first */
 import * as Location from 'expo-location'
 import { Platform } from 'react-native'
-import { submitCheckIn } from '../lib/checkIn'
+import { cameByDoorCode, checkOutOf, markArrival, submitCheckIn } from '../lib/checkIn'
 import { CHECK_IN_CODES, checkInRefusal, isDoorCodeRefusal, isExpectedRefusal } from '../lib/checkInRefusal'
 import { getCurrentLocation, LOCATION_FIX_TIMEOUT_MS, type TrayButton } from '../lib/locationFix'
 /* eslint-enable import/first */
 
 const loc = Location as jest.Mocked<typeof Location>
-const api = jest.requireMock('../lib/apiClient').apiClient as { checkIn: jest.Mock }
+const api = jest.requireMock('../lib/apiClient').apiClient as { checkIn: jest.Mock; checkOut: jest.Mock }
 const fixWith = (accuracy: number, mocked?: boolean) =>
   ({ coords: { latitude: 12.97, longitude: 77.59, accuracy }, timestamp: Date.now(), ...(mocked === undefined ? {} : { mocked }) }) as any
 
@@ -82,10 +83,25 @@ describe('submitCheckIn with a door code', () => {
     expect(body).toMatchObject({ latitude: 12.97, longitude: 77.59, doorCode: '7kq m4p', deviceInfo: { gpsAccuracy: 86, mocked: true } })
   })
 
-  it('a fix the OS never called mocked goes as false', async () => {
+  it('a fix the OS said nothing about (iOS: expo-location reports it on Android only) sends no mocked at all, never a "no"', async () => {
     api.checkIn.mockResolvedValue({ success: true, data: {} })
     await submitCheckIn('e1', { latitude: 1, longitude: 2, accuracy: 20 }, undefined, 'ABCDEF')
-    expect(api.checkIn.mock.calls[0][1].deviceInfo.mocked).toBe(false)
+    expect(api.checkIn.mock.calls[0][1].deviceInfo).not.toHaveProperty('mocked')
+    await submitCheckIn('e1', { latitude: 1, longitude: 2, accuracy: 20, mocked: false }, undefined, 'ABCDEF')
+    expect(api.checkIn.mock.calls[1][1].deviceInfo.mocked).toBe(false)
+  })
+
+  it('the server’s offer, as it sends it (reasonCode beside OUT_OF_RANGE), comes back as the offer tray', async () => {
+    api.checkIn.mockResolvedValue({ success: false, error: 'You’re about 300m outside the check-in area', errorCode: 'OUT_OF_RANGE', reasonCode: 'DOOR_CODE_OFFERED' })
+    const out = await submitCheckIn('e1', { latitude: 1, longitude: 2, accuracy: 20 })
+    expect(out).toMatchObject({ kind: 'refused', errorCode: 'DOOR_CODE_OFFERED', refusal: { title: OFFER_TITLE, offerDoorCode: true } })
+  })
+
+  it('a code that just turned comes back as its own sentence under DOOR_CODE_CHANGED', async () => {
+    const sentence = 'That code just changed. Read the new one on the host’s screen.'
+    api.checkIn.mockResolvedValue({ success: false, error: sentence, errorCode: 'DOOR_CODE_CHANGED' })
+    const out = await submitCheckIn('e1', at, undefined, '7KQM4P')
+    expect(out).toMatchObject({ kind: 'refused', errorCode: 'DOOR_CODE_CHANGED', refusal: { message: sentence } })
   })
 
   it('a GPS check-in sends no doorCode', async () => {
@@ -132,6 +148,27 @@ describe('the client’s own weak-fix tray (accuracy over 50 m)', () => {
     const t = trays()
     await getCurrentLocation({ ...t, doorCode: { available: async () => false, enter: jest.fn() } })
     expect(t.showTray).toHaveBeenCalledWith('GPS signal is weak', 'Accuracy is 86 m. Step away from walls and try again.', expect.any(Array), { icon: 'radar' })
+  })
+
+  it('is today’s tray, at most 3 s late, when the availability read never answers', async () => {
+    jest.useFakeTimers()
+    loc.getCurrentPositionAsync.mockResolvedValue(fixWith(86))
+    const t = trays()
+    const done = getCurrentLocation({ ...t, doorCode: { available: () => new Promise(() => {}), enter: jest.fn() } })
+    await jest.advanceTimersByTimeAsync(3_000)
+    expect(await done).toBeNull()
+    expect(t.showTray.mock.calls[0][0]).toBe('GPS signal is weak')
+  })
+
+  it('never offers the code with a fix the server cannot judge (no accuracy, or over its 1000 m ceiling)', async () => {
+    const available = jest.fn(async () => true)
+    for (const accuracy of [-1, 1500]) {
+      loc.getCurrentPositionAsync.mockResolvedValue(fixWith(accuracy))
+      const t = trays()
+      await getCurrentLocation({ ...t, doorCode: { available, enter: jest.fn() } })
+      expect(t.showTray.mock.calls[0][0]).toBe('GPS signal is weak')
+    }
+    expect(available).not.toHaveBeenCalled()
   })
 
   it('is today’s tray when the availability read fails', async () => {
@@ -185,5 +222,14 @@ describe('"Location timed out" (SPEC §4: when a Balanced fallback fix exists)',
     await jest.advanceTimersByTimeAsync(LOCATION_FIX_TIMEOUT_MS + 5_000)
     expect(await done).toBeNull()
     expect(t.showTray.mock.calls[0][0]).toBe('Location timed out')
+  })
+})
+
+describe('the door-code arrival line', () => {
+  it('ends with a check-out: the next arrival says how it came in', async () => {
+    markArrival('e9', true)
+    api.checkOut.mockResolvedValue({ success: true })
+    await checkOutOf('e9')
+    expect(cameByDoorCode('e9')).toBe(false)
   })
 })

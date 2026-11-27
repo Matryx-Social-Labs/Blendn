@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { apiClient } from './apiClient'
 import { afterSheetDismissed } from './sheetDismissed'
 import { myMainPhoto } from './myPhoto'
-import { askIntentRoute, markDoorCodeArrival, revealOffer, submitCheckIn, untilIntentAnswered, type CheckInOutcome } from './checkIn'
+import { askIntentRoute, markArrival, revealOffer, submitCheckIn, untilIntentAnswered, type CheckInOutcome } from './checkIn'
 import { CHECK_IN_CODES, isDoorCodeRefusal, isExpectedRefusal, type CheckInRefusal } from './checkInRefusal'
 import { markCheckIn } from './checkInTiming'
 import { H } from './haptics'
@@ -40,6 +40,10 @@ const SHORT_CODE = 'Enter all six characters'
 export type DoorCodeSheetModel = {
   error?: string
   locked: boolean
+  /** Counts the answers, so the same sentence twice is said twice. */
+  tries: number
+  /** The code to show on (re)opening: what was sent, when the sheet comes back with its answer after the timeout tray. */
+  code?: string
   busy: boolean
   submit: (code: string) => void
   clearError: () => void
@@ -198,15 +202,15 @@ export function useCheckInFlow({
    * The door code's sheet (gate 13): open with the fix the code goes with, from the tray that offered it. The last fix
    * sent is kept for the server's offer (`DOOR_CODE_OFFERED`), which comes after the request.
    */
-  const [door, setDoor] = useState<{ fix: CheckInLocation; error?: string; locked: boolean } | null>(null)
+  const [door, setDoor] = useState<{ fix: CheckInLocation; error?: string; locked: boolean; tries: number; code?: string } | null>(null)
   const lastFix = useRef<CheckInLocation | null>(null)
-  const openDoorCode = (fix: CheckInLocation) => setDoor({ fix, locked: false })
+  const openDoorCode = (fix: CheckInLocation) => setDoor({ fix, locked: false, tries: 0 })
   /** `doorCode.available` from the event (the detail route; cached for the page): never computed here. */
   const doorCodeAvailable = () => apiClient.getEvent(eventId).then((r) => r.success && r.data?.doorCode?.available === true)
   const submitDoorCode = (typed: string) => {
     if (!door || door.locked) return
     const code = typed.replace(/[^0-9a-z]/gi, '').toUpperCase()
-    if (code.length < DOOR_CODE_LENGTH) return setDoor({ ...door, error: SHORT_CODE })
+    if (code.length < DOOR_CODE_LENGTH) return setDoor({ ...door, error: SHORT_CODE, tries: door.tries + 1 })
     void start({ fix: door.fix, code })
   }
 
@@ -261,12 +265,18 @@ export function useCheckInFlow({
         Logger.info('events', 'checkin:doorCode:refused', { code: outcome.errorCode })
         H.error()
         // Reopened when a Retry from the timeout tray sent it: the sheet had gone for that tray.
-        setDoor({ fix: withCode.fix, error: outcome.refusal.message, locked: outcome.errorCode === CHECK_IN_CODES.DOOR_CODE_LOCKED })
+        setDoor((d) => ({
+          fix: withCode.fix,
+          code: withCode.code,
+          error: outcome.refusal.message,
+          locked: outcome.errorCode === CHECK_IN_CODES.DOOR_CODE_LOCKED,
+          tries: (d?.tries ?? 0) + 1,
+        }))
         return 'refused'
       }
       // Anything else (in, a timeout, the event's own no) is the usual door's: the sheet goes first.
       if (withCode) setDoor(null)
-      if (withCode && outcome.kind === 'checkedIn') markDoorCodeArrival(eventId)
+      if (outcome.kind === 'checkedIn') markArrival(eventId, !!withCode)
 
       if (outcome.kind === 'timeout') {
         Logger.warn('events', 'checkin:timeout')
@@ -397,14 +407,20 @@ export function useCheckInFlow({
   const doorSheet: DoorCodeSheetModel | null = door && {
     error: door.error,
     locked: door.locked,
+    tries: door.tries,
+    code: door.code,
     busy: checkingIn,
     submit: submitDoorCode,
     clearError: () => setDoor((d) => d && (d.locked ? d : { ...d, error: undefined })),
+    // Not while the code is on its way: its answer is still to come back to this sheet.
     tryGps: () => {
+      if (inFlight.current) return
       setDoor(null)
       void start()
     },
-    close: () => setDoor(null),
+    close: () => {
+      if (!inFlight.current) setDoor(null)
+    },
   }
 
   return {

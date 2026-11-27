@@ -6,12 +6,12 @@
  */
 import { act, fireEvent, render, screen } from '@testing-library/react-native'
 import React from 'react'
-import { AccessibilityInfo, Platform } from 'react-native'
+import { AccessibilityInfo } from 'react-native'
 
 import { DoorCodeSheet } from '../components/blendn/DoorCodeSheet'
 import { RoomYouCard } from '../components/blendn/RoomSections'
 import { MomentPour } from '../components/ds/MomentPour'
-import { cameByDoorCode, submitCheckIn, type CheckInOutcome } from '../lib/checkIn'
+import { cameByDoorCode, markArrival, submitCheckIn, type CheckInOutcome } from '../lib/checkIn'
 import { checkInRefusal } from '../lib/checkInRefusal'
 import { H } from '../lib/haptics'
 import { useCheckInFlow, type UseCheckInFlowOptions } from '../lib/useCheckInFlow'
@@ -57,6 +57,7 @@ let props: jest.Mocked<Required<Pick<UseCheckInFlowOptions, 'showTray' | 'closeT
 beforeEach(() => {
   jest.useFakeTimers()
   jest.clearAllMocks()
+  markArrival('e1', false)
   props = { showTray: jest.fn(), closeTray: jest.fn(), onCheckedIn: jest.fn(), onEnterRoom: jest.fn(async () => {}) }
   jest.spyOn(H, 'success').mockImplementation(() => {})
   jest.spyOn(H, 'error').mockImplementation(() => {})
@@ -192,17 +193,44 @@ describe('entering the code', () => {
     expect(props.onEnterRoom).not.toHaveBeenCalled()
     // The error replaces the hint for a screen reader, and is spoken once, starting "Error." (§8).
     expect(field().props.accessibilityHint).toBe(CHANGED)
-    if (Platform.OS === 'ios') expect(AccessibilityInfo.announceForAccessibility).toHaveBeenCalledWith(`Error. ${CHANGED}`)
+    expect(AccessibilityInfo.announceForAccessibility).toHaveBeenCalledWith(`Error. ${CHANGED}`)
     // Typing again clears it.
     await type('7KQM4')
     expect(screen.queryByText(CHANGED, HIDDEN)).toBeNull()
   })
 
-  it('a wrong code is the same, with its own sentence', async () => {
+  it('a wrong code is the same, with its own sentence; the same answer twice is said twice; the right code then gets in', async () => {
     await openFromServerOffer()
-    submit.mockResolvedValueOnce(refused('DOOR_CODE_WRONG', WRONG))
+    submit.mockResolvedValueOnce(refused('DOOR_CODE_WRONG', WRONG)).mockResolvedValueOnce(refused('DOOR_CODE_WRONG', WRONG))
     await type('ZZZZZZ')
     await pressCheckIn()
+    expect(screen.getByText(WRONG, HIDDEN)).toBeTruthy()
+    await pressCheckIn()
+    expect((AccessibilityInfo.announceForAccessibility as jest.Mock).mock.calls.filter(([s]) => s === `Error. ${WRONG}`)).toHaveLength(2)
+    expect(cameByDoorCode('e1')).toBe(false)
+    submit.mockResolvedValueOnce(fresh)
+    await type('7KQM4P')
+    await pressCheckIn()
+    expect(submit).toHaveBeenCalledTimes(4)
+    expect(submit).toHaveBeenLastCalledWith('e1', FIX, undefined, '7KQM4P')
+    await act(async () => jest.advanceTimersByTime(700))
+    expect(props.onEnterRoom).toHaveBeenCalledTimes(1)
+  })
+
+  it('while the code is on its way, Try GPS again and a close do nothing: its answer comes back to this sheet', async () => {
+    await openFromServerOffer()
+    let answer!: (o: CheckInOutcome) => void
+    submit.mockImplementationOnce(() => new Promise((resolve) => (answer = resolve)))
+    await type('ZZZZZZ')
+    await pressCheckIn()
+    expect(screen.getByTestId('door-gps', HIDDEN).props.accessibilityState).toMatchObject({ disabled: true })
+    await act(async () => {
+      flow.door!.tryGps()
+      flow.door!.close()
+    })
+    expect(flow.door).not.toBeNull()
+    expect(locate).toHaveBeenCalledTimes(1)
+    await act(async () => answer(refused('DOOR_CODE_WRONG', WRONG)))
     expect(screen.getByText(WRONG, HIDDEN)).toBeTruthy()
   })
 
@@ -238,17 +266,21 @@ describe('entering the code', () => {
     submit.mockResolvedValueOnce(refused('DOOR_CODE_WRONG', WRONG))
     await act(async () => buttons.find((b: { label: string }) => b.label === 'Retry').onPress())
     expect(submit).toHaveBeenLastCalledWith('e1', FIX, undefined, '7KQM4P')
-    // The answer is not lost: the sheet comes back with it.
+    // The answer is not lost: the sheet comes back with it, and with the code it is about.
     expect(flow.door).toMatchObject({ error: WRONG, locked: false })
+    expect(field().props.value).toBe('7KQ M4P')
   })
 
-  it('"Try GPS again" closes the sheet and runs the GPS check-in again', async () => {
+  it('"Try GPS again" closes the sheet and runs the GPS check-in again; a GPS arrival is not the code’s', async () => {
     await openFromServerOffer()
+    markArrival('e1', true)
     submit.mockResolvedValueOnce(fresh)
     await act(async () => fireEvent.press(screen.getByText('Try GPS again', HIDDEN)))
     expect(flow.door).toBeNull()
     expect(locate).toHaveBeenCalledTimes(2)
     expect(submit).toHaveBeenLastCalledWith('e1', FIX, undefined)
+    await act(async () => jest.advanceTimersByTime(700))
+    expect(cameByDoorCode('e1')).toBe(false)
   })
 })
 

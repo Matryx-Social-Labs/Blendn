@@ -21,9 +21,11 @@ export function doorCodeEventLine(title?: string | null, venue?: string | null, 
   return [title, where].filter(Boolean).join(' · ')
 }
 
-/** What was typed, as the host's screen shows it: capitals, no spaces or dashes, "7KQ M4P". The space is the mask's, not the value's. */
-export function displayCode(typed: string): string {
-  const code = typed.replace(/[^0-9a-z]/gi, '').toUpperCase().slice(0, DOOR_CODE_LENGTH)
+/** What was typed, as it is sent: capitals, no spaces or dashes, six at most (the server folds 8/B, 5/S, 2/Z itself). */
+export const cleanCode = (typed: string): string => typed.replace(/[^0-9a-z]/gi, '').toUpperCase().slice(0, DOOR_CODE_LENGTH)
+
+/** The code as the host's screen shows it, "7KQ M4P": the space is the mask's, not the value's. */
+export function displayCode(code: string): string {
   return code.length > GROUP ? `${code.slice(0, GROUP)} ${code.slice(GROUP)}` : code
 }
 
@@ -37,19 +39,23 @@ export function DoorCodeSheet({ door, eventLine, testID }: { door: DoorCodeSheet
   const contrast = useIncreaseContrast()
   const [typed, setTyped] = useState('')
   const [focused, setFocused] = useState(false)
-  // Each opening starts empty; an answer keeps what was typed (§8).
+  // Each opening starts empty, or with the code its answer is about; an answer keeps what was typed (§8).
   const open = door !== null
   const [wasOpen, setWasOpen] = useState(open)
   if (open !== wasOpen) {
     setWasOpen(open)
-    if (open) setTyped('')
+    if (open) setTyped(door?.code ?? '')
   }
-  const error = door?.error
-  const locked = door?.locked === true
-  // §8: said once, starting "Error."; Android says it through the error line's polite live region.
+  // The last answer stays drawn while the sheet slides away, so a closing sheet never flips back to its hint.
+  const [shown, setShown] = useState({ error: undefined as string | undefined, locked: false, tries: 0 })
+  if (door && (door.error !== shown.error || door.locked !== shown.locked || door.tries !== shown.tries)) {
+    setShown({ error: door.error, locked: door.locked, tries: door.tries })
+  }
+  const { error, locked, tries } = shown
+  // §8: each answer said once, starting "Error.", on both platforms. Not a live region: one mounted already filled is not read.
   useEffect(() => {
-    if (error && Platform.OS === 'ios') AccessibilityInfo.announceForAccessibility(`Error. ${error}`)
-  }, [error])
+    if (error) AccessibilityInfo.announceForAccessibility(`Error. ${error}`)
+  }, [error, tries])
   const submit = () => door?.submit(typed)
 
   return (
@@ -60,7 +66,7 @@ export function DoorCodeSheet({ door, eventLine, testID }: { door: DoorCodeSheet
       body={eventLine}
       actions={[
         { label: 'Check in', kind: 'lit', onPress: submit, loading: door?.busy, disabled: locked, testID: `${testID}-check-in` },
-        { label: 'Try GPS again', kind: 'tertiary', onPress: () => door?.tryGps(), testID: `${testID}-gps` },
+        { label: 'Try GPS again', kind: 'tertiary', onPress: () => door?.tryGps(), disabled: door?.busy, testID: `${testID}-gps` },
       ]}
       testID={testID}
     >
@@ -72,9 +78,10 @@ export function DoorCodeSheet({ door, eventLine, testID }: { door: DoorCodeSheet
         <View style={[styles.box, locked && styles.locked]}>
           <TextInput
             testID={`${testID}-input`}
+            // ponytail: the mask's space puts the caret at the end after an edit mid-code; at the end, where typing happens, it is exact.
             value={displayCode(typed)}
             onChangeText={(text) => {
-              setTyped(text)
+              setTyped(cleanCode(text))
               if (error) door?.clearError()
             }}
             onFocus={() => setFocused(true)}
@@ -106,7 +113,6 @@ export function DoorCodeSheet({ door, eventLine, testID }: { door: DoorCodeSheet
             <Icon name="triangle-alert" size={ICON.inline} color={COLOR.destructive} />
             <Text
               accessibilityLabel={`Error. ${error}`}
-              accessibilityLiveRegion="polite"
               maxFontSizeMultiplier={MAX_FONT_SCALE.meta}
               style={[font('meta', bold), styles.noteText, styles.error]}
             >

@@ -227,10 +227,17 @@ export type CheckInTrays = {
 
 /** How long the door-code checks may add to a failed fix: the availability read, and the fallback fix after a timeout. */
 const DOOR_CODE_ASK_MS = 3_000
+/** The vaguest fix the server takes beside a code (admin `lib/entry-code-gate.ts`); without an accuracy it answers "too far". */
+const DOOR_CODE_MAX_ACCURACY_M = 1_000
 
-/** Whether to offer the code: the event says it is live, answered in time. A failed read is a no: today's tray. */
-const codeOffered = (doorCode: CheckInTrays['doorCode']): Promise<boolean> =>
-  doorCode ? withDeadline(doorCode.available(), DOOR_CODE_ASK_MS).catch(() => false) : Promise.resolve(false)
+/**
+ * Whether to offer the code with `fix`: one the server can judge (a known accuracy within its ceiling), and the event
+ * says the code is live, answered in time. A failed read is a no: today's tray.
+ */
+const codeOffered = (doorCode: CheckInTrays['doorCode'], fix: CheckInLocation): Promise<boolean> =>
+  doorCode && fix.accuracy !== null && fix.accuracy <= DOOR_CODE_MAX_ACCURACY_M
+    ? withDeadline(doorCode.available(), DOOR_CODE_ASK_MS).catch(() => false)
+    : Promise.resolve(false)
 
 /** The fix as the request sends it: accuracy as measured (null when unknown) and the OS's mocked flag (gate 13). */
 const asCheckInLocation = (fix: Location.LocationObject): CheckInLocation => ({
@@ -263,7 +270,7 @@ export type CheckInLocation = {
   latitude: number
   longitude: number
   accuracy: number | null
-  /** The OS says the fix is simulated (Android `isFromMockProvider`, iOS `isSimulatedBySoftware`); sent beside a door code. */
+  /** The OS says the fix is simulated (expo-location: Android `isFromMockProvider` only; undefined on iOS); sent beside a door code. */
   mocked?: boolean
 }
 
@@ -388,8 +395,9 @@ export async function getCurrentLocation({
     const accuracy = validAccuracy(location.coords.accuracy) ?? 999
     if (accuracy > maxAccuracyM) {
       Logger.warn('events', 'location:lowAccuracy', { accuracy })
-      if (await codeOffered(doorCode)) {
-        offerDoorCode(asCheckInLocation(location))
+      const fix = asCheckInLocation(location)
+      if (await codeOffered(doorCode, fix)) {
+        offerDoorCode(fix)
         return null
       }
       showTray('GPS signal is weak', `Accuracy is ${Math.round(accuracy)} m. Step away from walls and try again.`, retryButtons, { icon: 'radar' })
@@ -426,8 +434,9 @@ export async function getCurrentLocation({
     if (errorCode === 'E_LOCATION_TIMEOUT') {
       // SPEC §4: a timed-out fix offers the code when a fallback one exists (the phone's last, else a Balanced ask).
       // ponytail: not aborted if the screen goes; DOOR_CODE_ASK_MS bounds it.
-      const fallback = (await codeOffered(doorCode)) ? await roughFix(DOOR_CODE_ASK_MS).catch(() => null) : null
-      if (fallback) offerDoorCode(asCheckInLocation(fallback))
+      const rough = doorCode ? await roughFix(DOOR_CODE_ASK_MS).catch(() => null) : null
+      const fallback = rough ? asCheckInLocation(rough) : null
+      if (fallback && (await codeOffered(doorCode, fallback))) offerDoorCode(fallback)
       else showTray('Location timed out', `We couldn’t get a fix in ${LOCATION_FIX_TIMEOUT_MS / 1000} seconds.`, retryButtons, { icon: 'hourglass' })
     } else if (errorCode === 'E_LOCATION_UNAVAILABLE') {
       showTray('Location unavailable', 'Location services are temporarily unavailable. Try again in a moment.', retryButtons, { icon: 'map-pin-off' })

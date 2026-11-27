@@ -103,7 +103,11 @@ export type CheckInOutcome =
 const byDoorCode = new Set<string>()
 /** ponytail: in memory, so a restart forgets it; the line is for the arrival, and the Room is the same without it. */
 export const cameByDoorCode = (eventId: string): boolean => byDoorCode.has(eventId)
-export const markDoorCodeArrival = (eventId: string): void => void byDoorCode.add(eventId)
+/** Every arrival says how it came in: a later GPS one (or a check-out) is no longer the code's. */
+export function markArrival(eventId: string, byCode: boolean): void {
+  if (byCode) byDoorCode.add(eventId)
+  else byDoorCode.delete(eventId)
+}
 
 export async function submitCheckIn(
   eventId: string,
@@ -130,8 +134,8 @@ export async function submitCheckIn(
     deviceInfo: {
       platform: Platform.OS,
       gpsAccuracy: validAccuracy(at.accuracy) ?? undefined,
-      // Only beside a code for now: GPS check-ins start sending it with client/26 (SCRUM-1332).
-      ...(doorCode !== undefined ? { mocked: at.mocked === true } : {}),
+      // Only beside a code for now (client/26, SCRUM-1332, adds it to GPS), and only when the OS said: unknown is not "no".
+      ...(doorCode !== undefined && typeof at.mocked === 'boolean' ? { mocked: at.mocked } : {}),
     },
     ...(withCrewId ? { withCrewId } : {}),
     ...(doorCode !== undefined ? { doorCode } : {}),
@@ -283,6 +287,7 @@ export async function checkOutOf(eventId: string) {
   const result = await apiClient.checkOut(eventId)
   if (result.success) {
     forgetRoster(eventId)
+    markArrival(eventId, false)
     // The live hint is the tab bar's poll, and a page opened from a link has no tab bar under it to re-poll: left as it was,
     // the next event page offered "Hold to switch · Leaves {this room}" until a restart (SCRUM-1035 drive).
     if (getLiveEventId() === eventId) setLiveHint(null)
