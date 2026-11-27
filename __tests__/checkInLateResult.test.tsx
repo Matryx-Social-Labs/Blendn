@@ -11,6 +11,7 @@ import React from 'react'
 import { AccessibilityInfo } from 'react-native'
 
 import { CHECK_IN_TIMEOUT_MS, submitCheckIn, subscribeCheckInChanged } from '../lib/checkIn'
+import { TIMEOUT_MESSAGE } from '../lib/fetchTimeout'
 import { H } from '../lib/haptics'
 import { useCheckInFlow, type UseCheckInFlowOptions } from '../lib/useCheckInFlow'
 
@@ -91,6 +92,20 @@ describe('submitCheckIn, after it stopped waiting', () => {
     await settle()
     expect(heard).toHaveBeenCalledTimes(1)
     expect(api.forgetEvent).toHaveBeenCalledWith('e1')
+  })
+
+  // SCRUM-1480: apiClient aborts every request at 15 s and answers `{ success: false, error }` with no code, so a yes slower
+  // than that never lands. The server may have committed it: with no server answer, every door re-reads the server.
+  it.each([
+    ['aborted at 15 s', TIMEOUT_MESSAGE],
+    ['the network dropped it', 'No internet connection. Check your network and try again.'],
+  ])('a late request that ends with no server answer (%s) makes every door re-read', async (_, error) => {
+    const request = await timedOut()
+    request.resolve({ success: false, error })
+    await settle()
+    expect(heard).toHaveBeenCalledTimes(1)
+    expect(api.forgetActiveCheckins).toHaveBeenCalled()
+    expect(api.forgetEvent.mock.calls.map((c) => c[0])).toEqual(['e1'])
   })
 
   it('a refusal that lands late changes nothing (control)', async () => {
