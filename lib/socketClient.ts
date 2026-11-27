@@ -644,12 +644,14 @@ function scheduleJoinRetry(): void {
     Logger.warn("socket", "Join retries used up; rooms rejoin on the next reconnect")
     return
   }
-  const window = Math.min(JOIN_RETRY_MAX_MS, JOIN_RETRY_BASE_MS * 2 ** joinRetryAttempts)
+  const windowMs = Math.min(JOIN_RETRY_MAX_MS, JOIN_RETRY_BASE_MS * 2 ** joinRetryAttempts)
+  // ponytail: the budget is per connection (reset on connect only, joins have no ack); forgive it
+  // after a quiet period if a long-lived socket is seen to run out across separate bursts.
   joinRetryAttempts++
   joinRetryTimer = setTimeout(() => {
     joinRetryTimer = null
     rejoinAllRooms()
-  }, Math.random() * window)
+  }, Math.random() * windowMs)
 }
 
 function cancelJoinRetry(): void {

@@ -90,6 +90,15 @@ it('coalesces several SERVER_ERRORs into one round of joins after the jittered d
   expect(joins()).toHaveLength(2)
 })
 
+it('waits a random share of the window, not the whole of it (full jitter)', () => {
+  jest.spyOn(Math, 'random').mockReturnValue(0.5)
+  s.fire('error', SERVER_ERROR)
+  jest.advanceTimersByTime(999)
+  expect(joins()).toHaveLength(0)
+  jest.advanceTimersByTime(1)
+  expect(joins()).toHaveLength(2)
+})
+
 it('doubles the window on each further failure, caps it at 30 s and stops after five attempts', () => {
   const windows: number[] = []
   for (let i = 0; i < 6; i++) {
