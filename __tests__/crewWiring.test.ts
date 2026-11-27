@@ -72,12 +72,16 @@ describe('the surfaces are wired', () => {
   })
 })
 
-describe('a blocked crew’s wave never reaches the crew chat (task 17 b1)', () => {
+describe('a blocked crew’s wave never reaches the crew chat (task 17 b1, task 36)', () => {
   const chat = require('fs').readFileSync(require('path').join(__dirname, '../components/chat/RoomChat.tsx'), 'utf8') as string
-  it('the feed is filtered whatever the link says the room is, and a live wave line reads the history for who it was', () => {
-    expect(chat).toContain('withoutBlockedCrews(messages.filter((m) => !blocked.has(m.sender_id)), hiddenCrews)')
-    expect(chat).toContain('useHiddenCrewIds(messages.some(isCrewsWave))')
-    expect(chat).toContain('if (fresh && isCrewWavedLine(incoming)) void loadMessagesRef.current(true)')
+  it('the feed is filtered by blocks made since the read, whatever the link says the room is; a live line is whole, so the history is not re-read', () => {
+    expect(chat).toContain('withoutBlockedCrews(messages.filter((m) => !blocked.has(m.sender_id)), blockedCrews)')
+    expect(chat).toContain('const blockedCrews = useCrewsBlockedNow()')
+    expect(chat).not.toContain('isCrewWavedLine')
+  })
+  it('every block and unblock of a crew is told to an open chat', () => {
+    expect(src('lib/crewSafety.ts')).toMatch(/noteCrewBlocked\(crew\.crewId\)\s*\n\s*onBlocked\(\)/)
+    expect(src('components/settings/BlockedCrews.tsx')).toContain('noteCrewUnblocked(crew.crewId)')
   })
 })
 

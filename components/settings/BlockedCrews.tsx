@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 
 import { COLOR, MAX_FONT_SCALE, SPACE, TYPE } from '../../lib/design/tokens'
+import { noteCrewUnblocked } from '../../lib/crewWaveBack'
 import type { HiddenCrew } from '../../lib/crews'
 import { crewsApi } from '../../lib/crewsApi'
 import { showSheet } from '../../lib/sheet'
@@ -81,6 +82,7 @@ export function BlockedCrews({ onCount }: { onCount?: (count: number) => void })
           run: async () => {
             const result = await crewsApi.unhideCrew(crew.crewId)
             if (!result.success) return { ok: false, error: 'Couldn’t unblock it. Try again.' }
+            noteCrewUnblocked(crew.crewId)
             setRead((prev) =>
               prev.status === 'ready' ? { ...prev, crews: prev.crews.filter((c) => c.crewId !== crew.crewId), total: Math.max(0, prev.total - 1) } : prev
             )

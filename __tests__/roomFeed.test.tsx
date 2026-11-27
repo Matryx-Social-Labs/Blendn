@@ -147,3 +147,24 @@ describe('sender_image has one writer (L3)', () => {
     expect(src.match(/roomPhotosAllowed\(roomKind\) && [^\n]*sender_image/g)).toHaveLength(1)
   })
 })
+
+describe('a crew chat’s crew_waved line (task 36, admin #1029)', () => {
+  const waved = (over: Partial<RoomMessage> = {}) =>
+    like({ message_id: 'w1', sender_id: 'u-sys', message_text: 'Nebula waved at your crew', crewWave: { eventId: 'e1', fromCrewId: 'c9' }, ...over })
+  const crewHandlers = { ...handlers, crewWaveBack: jest.fn() }
+  const waveRow = (item: RoomMessage) =>
+    render(<RoomMessageRow item={item} roomId="g1" mine={false} first last senderTappable={false} handlers={crewHandlers} />)
+
+  it('answered before: Waved back, no action; not answered: Wave back', async () => {
+    await waveRow(waved({ crewWaveAnswered: true }))
+    expect(screen.getByText('Waved back')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Wave back' })).toBeNull()
+    await waveRow(waved({ message_id: 'w2' }))
+    expect(screen.getByRole('button', { name: 'Wave back' })).toBeTruthy()
+  })
+
+  it('is told by its metadata, never its words: the same words with no wave draw no notice', async () => {
+    await waveRow(waved({ message_id: 'w3', crewWave: undefined }))
+    expect(screen.queryByTestId('crew-waved-w3')).toBeNull()
+  })
+})
