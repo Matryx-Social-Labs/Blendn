@@ -627,14 +627,10 @@ function rejoinAllRooms(): void {
 }
 
 /*
- * A join the server could not check is asked again (SCRUM-1425).
- *
- * Under a saturated pool the server answers a join whose access read failed
- * with `error { code: "SERVER_ERROR" }` and does not retry (admin SCRUM-1402,
- * docs/SOCKET_EVENTS.md). Without this the socket stayed out of the room
- * until its next reconnect. One timer for every room: a burst of failures
- * (one per room) is one more round of joins. Full jitter, so a room of guests
- * does not ask again in step. The payload names no room; rejoinAllRooms needs none.
+ * A join the server could not check (`error { code: "SERVER_ERROR" }`, admin
+ * SCRUM-1402) is asked again; the server does not retry, and the socket stayed out
+ * of the room until its next reconnect (SCRUM-1425). One timer for all rooms, so a
+ * burst of failures is one round of joins; full jitter, so a room of guests is not in step.
  */
 const JOIN_RETRY_BASE_MS = 2000
 const JOIN_RETRY_MAX_MS = 30000
