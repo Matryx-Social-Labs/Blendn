@@ -237,7 +237,7 @@ const asCheckInLocation = (fix: Location.LocationObject): CheckInLocation => ({
   latitude: fix.coords.latitude,
   longitude: fix.coords.longitude,
   accuracy: validAccuracy(fix.coords.accuracy),
-  ...(fix.mocked !== undefined ? { mocked: fix.mocked } : {}),
+  mocked: fix.mocked,
 })
 
 /**

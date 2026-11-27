@@ -32,15 +32,14 @@ import { useLatest } from './useLatest'
 
 export type CheckInFlowResult = 'checkedIn' | 'refused' | 'failed'
 
-/** The door-code sheet while it is open (gate 13, design/02a guest A): its last answer, and whether entry is locked. */
-export type DoorCodeState = { error?: string; locked: boolean }
-
 /** A code is six characters (`ABCDEFGHJKLMNPQRSTUVWXYZ23456789`): fewer is answered here, never sent. */
 export const DOOR_CODE_LENGTH = 6
 const SHORT_CODE = 'Enter all six characters'
 
-/** What the sheet is handed: its state, and what its field and buttons do. */
-export type DoorCodeSheetModel = DoorCodeState & {
+/** The door-code sheet while it is open (gate 13, design/02a guest A): its last answer, whether entry is locked, and what its field and buttons do. */
+export type DoorCodeSheetModel = {
+  error?: string
+  locked: boolean
   busy: boolean
   submit: (code: string) => void
   clearError: () => void
@@ -199,7 +198,7 @@ export function useCheckInFlow({
    * The door code's sheet (gate 13): open with the fix the code goes with, from the tray that offered it. The last fix
    * sent is kept for the server's offer (`DOOR_CODE_OFFERED`), which comes after the request.
    */
-  const [door, setDoor] = useState<(DoorCodeState & { fix: CheckInLocation }) | null>(null)
+  const [door, setDoor] = useState<{ fix: CheckInLocation; error?: string; locked: boolean } | null>(null)
   const lastFix = useRef<CheckInLocation | null>(null)
   const openDoorCode = (fix: CheckInLocation) => setDoor({ fix, locked: false })
   /** `doorCode.available` from the event (the detail route; cached for the page): never computed here. */
