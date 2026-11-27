@@ -1,5 +1,5 @@
 /**
- * The "What brings you" tiles' art (rc7 D1). Dating, Friendship and Networking were 512² renders of an app window: a
+ * The "What brings you" tiles' art (rc7 D1). Friendship and Networking were 512² renders of an app window: a
  * garbled title bar, window buttons and a letterbox, with the photo in a band in the middle. `contentFit="cover"` on a
  * 112 pt tile shows that frame. They are now the photo alone, cropped at 3:2 (the tile is about 1.35–1.65 wide).
  *
@@ -8,7 +8,7 @@
 import { readFileSync } from 'fs'
 import { join } from 'path'
 
-const CROPPED = ['looking-dating.jpg', 'looking-friendship.jpg', 'looking-networking.jpg']
+const CROPPED = ['looking-friendship.jpg', 'looking-networking.jpg']
 const TILE_RATIO = { min: 1.35, max: 1.65 }
 
 /** Width and height from the first start-of-frame marker (SOF0–SOF15, not DHT/JPG/DAC). */

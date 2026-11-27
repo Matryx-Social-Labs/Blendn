@@ -5,6 +5,7 @@
 
 import { roundCoordinate } from './coordinates'
 import type { CrewPlan } from './crews'
+import type { Intent } from './intents'
 import { locationSharingOn, setLocationSharing } from './shareLocation'
 import { patchEventDetailStatus } from './eventDetailCache'
 import { emitEventStatusChanged } from './eventStatusSignal'
@@ -612,9 +613,8 @@ export interface MatchCard {
   /**
    * The shared subset only, so "Both here to network" is literally true.
    *
-   * `dating` appears here only when the server has already checked mutual
-   * compatibility, which is what lets the card say it without ever stating
-   * anyone's gender. `just_here` never appears — "we are both merely present"
+   * A stored `dating` can still appear (the server matches on rows from before 1.0); the app never says it (register
+   * D-002, `lib/overlapLine.ts`). `just_here` never appears — "we are both merely present"
    * is not something to say to anybody.
    */
   sharedIntents: string[]
@@ -1304,8 +1304,10 @@ export interface GoLiveResult {
 /** The fields of the nested `profile` object (`GET /profiles/:id`). */
 export interface ProfileFields {
     /*
-     * The five matching fields, declared because the editor needs to *show*
-     * them, not just write them.
+     * The matching fields, declared because the editor needs to *show*
+     * them, not just write them. `intent_default` is as stored: a profile from before 1.0 can still hold `dating`, which the
+     * app drops on read (`normaliseIntents`, register D-002). Gender, orientation and interested-in went with dating and are
+     * not read.
      *
      * They were always in the payload for your own profile -- the route spreads
      * `selfProfileFields`, the whole row minus `date_of_birth` -- and were
@@ -1322,9 +1324,6 @@ export interface ProfileFields {
     friends_see_me_in_rooms?: boolean
     /** Your own profile only: the slugs you picked within the field (the route sends labels to everyone else). */
     expertise?: string[]
-    gender?: 'woman' | 'man' | 'non_binary' | 'prefer_not_to_say' | null
-    orientations?: string[]
-    interested_in?: ('woman' | 'man' | 'non_binary' | 'prefer_not_to_say')[]
     id?: string
     phone?: string
     name?: string
@@ -2958,38 +2957,15 @@ class ApiClientClass {
        * What ranking reads. Snake_case, because that is what the route
        * validates — the four preference booleans below were sent in twelve
        * camelCase spellings and matched none, and these are the same shape of
-       * mistake waiting to happen.
-       *
-       * `interested_in` is sent only when the app asked directly (an ambiguous
-       * gender/orientation pair). When it is omitted the server derives it, and
-       * a client-supplied value always wins — so sending it can only make the
-       * stored value more accurate, never less.
+       * mistake waiting to happen. Never `dating`, and no gender, orientation or interested-in: they went with dating
+       * (register D-002), and the server still accepts them, so the type is what stops the app sending them.
        */
-      intent_default?: ('dating' | 'networking' | 'friendship' | 'just_here')[]
-      gender?: 'woman' | 'man' | 'non_binary' | 'prefer_not_to_say' | null
-      /*
-       * Up to three, distinct, and `prefer_not_to_say` cannot be combined with
-       * anything. `interested_in` derives from the **union**, so a second label
-       * never narrows who the person is shown.
-       *
-       * The singular `orientation` the server still accepts is deliberately not
-       * typed here — it is a compatibility shim for builds already in the
-       * field, not a shape new code should reach for.
-       */
-      orientations?: string[]
-      /*
-       * Show `orientations` to people who already passed the identity gate —
-       * matches, open conversations, rooms you revealed yourself in. Never to
-       * every caller: the server gates it twice, and this flag is only the
-       * first of the two.
-       */
-      show_orientation?: boolean
+      intent_default?: Intent[]
       /*
        * How you enter rooms. A suggestion the room re-asks by way of a tap —
        * the server creates every check-in `revealed: false` regardless.
        */
       reveal_by_default?: boolean
-      interested_in?: ('woman' | 'man' | 'non_binary' | 'prefer_not_to_say')[]
       /** A slug from `getWorkFields()`, never free text. */
       work_field?: string | null
       /** Up to `maxExpertise` slugs from `getWorkFields().expertiseByField[work_field]`; the server prunes any that leave their field. */
@@ -3432,7 +3408,7 @@ class ApiClientClass {
   async setMatchPreferences(
     eventId: string,
     prefs: {
-      intent?: Array<'dating' | 'networking' | 'friendship' | 'just_here'>
+      intent?: Intent[]
       revealed?: boolean
       /*
        * Two flags, because one of them wrote something it never said.
@@ -3816,9 +3792,8 @@ class ApiClientClass {
   async sendPrivateMessage(
     conversationId: string,
     data: {
+      /** Text only: photos in a DM are off at 1.0 (D-024). */
       text?: string
-      mediaUrl?: string
-      mediaType?: 'image' | 'video'
       /** The message this one replies to (SCRUM-409). */
       replyToId?: string
       /** This send's own id: a retry with it returns the first write (SCRUM-410). */

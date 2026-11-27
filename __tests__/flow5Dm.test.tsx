@@ -1,7 +1,7 @@
 /**
  * A direct message (Flow 5 DM frames, R3-0, R3-D5), rendered: the header's
  * face only ever from the server's answer, an account's unsent message never
- * the next one's, the reveal bar's states, the photo gate, and the thread's
+ * the next one's, the reveal bar's states, no photo to send (D-024), and the thread's
  * empty, failed and ended states.
  */
 import { act, fireEvent, render, screen, within } from '@testing-library/react-native'
@@ -347,16 +347,49 @@ describe('the reveal panel folds away (drive: it stayed over the thread on Andro
   })
 })
 
-describe('photos (R9): only once you can both see each other, or nobody was hidden', () => {
+/*
+ * D-024: photos in DMs are off at 1.0. No state of the conversation offers one, not even once you can both see each
+ * other; a photo already in the thread still draws and still opens. Negative control: today's composer offered
+ * "Send a photo" once both had revealed, or when nobody was hidden (R9), which fails the first two rows below.
+ */
+describe('photos in a DM (D-024): none can be sent, old ones still show', () => {
   it.each([
-    ['both anonymous', anonymous, false],
-    ['only you revealed', { ...anonymous, youRevealed: true }, false],
-    ['both revealed', named, true],
-    ['never pseudonymous', { ...anonymous, pseudonymous: false }, true],
-  ])('%s', async (_name, data, offered) => {
+    ['both revealed', named],
+    ['never pseudonymous', { ...anonymous, pseudonymous: false }],
+    ['both anonymous', anonymous],
+    ['only you revealed', { ...anonymous, youRevealed: true }],
+  ])('%s: no Send a photo', async (_name, data) => {
     api.getConversation.mockResolvedValue({ success: true, data } as never)
     await open()
-    expect(!!screen.queryByLabelText('Send a photo')).toBe(offered)
+    expect(screen.getByTestId('dm-composer')).toBeTruthy()
+    expect(screen.queryByLabelText('Send a photo')).toBeNull()
+  })
+
+  // Negative control: drawing the photo bubble from anything but the message's mediaUrl leaves no image and no bubble.
+  it('a photo already in the thread still draws', async () => {
+    const OLD_PHOTO = 'https://cdn.blendn.app/dm/old.jpg'
+    const oldPhoto = { ...theirs, id: 'm5', text: null, mediaUrl: OLD_PHOTO, mediaType: 'image' }
+    api.getConversation.mockResolvedValue({ success: true, data: named } as never)
+    api.getConversationMessages.mockResolvedValue(page([oldPhoto, theirs]) as never)
+    await open()
+    expect(screen.getByTestId('dm-photo-m5-bubble')).toBeTruthy()
+    expect(imageUris()).toContain(OLD_PHOTO)
+    expect(screen.getByTestId('dm-photo-m5-bubble').props.accessibilityLabel).toMatch(/^Mika, Photo, /)
+  })
+
+  // Negative control: dropping the viewer's mediaUrl, or its More for their photo, fails this.
+  it('their old photo opens in the viewer, with More to report it', async () => {
+    const OLD_PHOTO = 'https://cdn.blendn.app/dm/old.jpg'
+    api.getConversation.mockResolvedValue({ success: true, data: named } as never)
+    api.getConversationMessages.mockResolvedValue(page([{ ...theirs, id: 'm5', text: null, mediaUrl: OLD_PHOTO, mediaType: 'image' }]) as never)
+    await open()
+    expect(screen.queryByLabelText('More')).toBeNull()
+    await fireEvent(screen.getByTestId('dm-photo-m5-hold-area'), 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 228, height: 168 } } })
+    await act(async () => fireEvent.press(screen.getByTestId('dm-photo-m5-bubble'), { nativeEvent: { pageX: 100, pageY: 300, locationX: 40, locationY: 20 } }))
+    await flush()
+    expect(screen.getByTestId('dm-viewer-modal').props.visible).toBe(true)
+    expect(imageUris().filter((u) => u === OLD_PHOTO).length).toBeGreaterThan(1)
+    expect(screen.getByLabelText('More')).toBeTruthy()
   })
 })
 

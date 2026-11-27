@@ -41,7 +41,7 @@ const dob = async (day: string, month: string, y: string) => {
   await fireEvent.changeText(screen.getByLabelText('Date of birth, year'), y)
 }
 const primary = () => screen.getByTestId('onboarding-primary')
-/** Step 1 is two screens (direction A): the name, then the birthday and gender. */
+/** Step 1 is two screens (direction A): the name, then the birthday. */
 const toBirthday = async () => {
   await fireEvent.press(primary())
   expect(screen.getByLabelText('Date of birth, day')).toBeTruthy()
@@ -97,14 +97,24 @@ it('back on the birthday screen returns to the name, as typed (control: the name
   expect(screen.queryByLabelText('Date of birth, day')).toBeNull()
 })
 
-it('a full adult date with a gender makes Continue live, and commits what was typed', async () => {
+it('a full adult date makes Continue live, and commits what was typed', async () => {
   await render(<BasicsScreen />)
   await toBirthday()
-  await fireEvent.press(screen.getByLabelText('Man'))
   await dob('14', '03', '1998')
   expect(primary().props.accessibilityState).toMatchObject({ disabled: false })
   await fireEvent.press(primary())
-  expect(mockCommit).toHaveBeenCalledWith({ name: 'Sam Mehta', gender: 'man', dateOfBirth: '1998-03-14' })
+  expect(mockCommit).toHaveBeenCalledWith({ name: 'Sam Mehta', dateOfBirth: '1998-03-14' })
+})
+
+it('asks no gender, and a resumed draft that holds one does not send it (D-002: gender was for dating)', async () => {
+  mockDraft = { gender: 'woman' }
+  await render(<BasicsScreen />)
+  await toBirthday()
+  expect(screen.queryByTestId('onboarding-gender')).toBeNull()
+  for (const label of ['Woman', 'Man', 'Non-binary']) expect(screen.queryByLabelText(label)).toBeNull()
+  await dob('14', '03', '1998')
+  await fireEvent.press(primary())
+  expect(mockCommit).toHaveBeenCalledWith({ name: 'Sam Mehta', dateOfBirth: '1998-03-14' })
 })
 
 it('under 18 says so under the date and offers Sign out beside it, and Continue stays off', async () => {
@@ -222,11 +232,10 @@ it('signing out keeps what was typed in the draft, as the sheet promises (SCRUM-
   await render(<BasicsScreen />)
   await fireEvent.changeText(screen.getByTestId('onboarding-name-input'), 'Sam M')
   await toBirthday()
-  await fireEvent.press(screen.getByLabelText('Woman'))
   await dob('14', '03', '1998')
   await fireEvent.press(screen.getByTestId('onboarding-header-action'))
   await fireEvent.press(screen.getByLabelText('Sign out'))
-  expect(mockUpdate).toHaveBeenLastCalledWith({ name: 'Sam M', gender: 'woman', dateOfBirth: '1998-03-14' })
+  expect(mockUpdate).toHaveBeenLastCalledWith({ name: 'Sam M', dateOfBirth: '1998-03-14' })
   expect(mockSignOut).toHaveBeenCalled()
   expect(mockUpdate.mock.invocationCallOrder.at(-1)).toBeLessThan(mockSignOut.mock.invocationCallOrder[0])
 })

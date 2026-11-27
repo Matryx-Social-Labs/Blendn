@@ -2,7 +2,7 @@
  * The onboarding step model.
  *
  * Two things here are worth testing and the rest is a list. The first is
- * **resume**: nine screens is long enough that quitting partway through is
+ * **resume**: the flow is long enough that quitting partway through is
  * normal, and the rule for where someone lands on relaunch has three inputs
  * that can each be wrong independently. The second is **partial saves**: each
  * step sends only its own fields, and getting that wrong does not fail loudly —
@@ -21,7 +21,6 @@ import {
   isCompleteDateOfBirth,
   joinDateOfBirth,
   nextStep,
-  orientationConsent,
   parseStoredOnboarding,
   previousStep,
   progressPercent,
@@ -165,7 +164,6 @@ describe('advance', () => {
 describe('stepPayload', () => {
   const full: OnboardingDraft = {
     name: 'Julian',
-    gender: 'woman',
     dateOfBirth: '1998-04-17',
     bio: 'written on step six',
     photos: ['https://example.test/a.jpg'],
@@ -176,11 +174,10 @@ describe('stepPayload', () => {
      * The bug this prevents is silent and destructive. Sending the whole draft
      * on every step means going back to fix a typo in your name re-sends an
      * empty `bio`, and the API reads a present key as "set this" — so a
-     * correction on step one wipes an answer from step six.
+     * correction on `basics` wipes an answer from `details`.
      */
     expect(stepPayload('basics', full)).toEqual({
       name: 'Julian',
-      gender: 'woman',
       dateOfBirth: '1998-04-17',
     })
     expect(stepPayload('details', full)).toEqual({ bio: 'written on step six' })
@@ -191,7 +188,24 @@ describe('stepPayload', () => {
     // on one client and to `null` — which means *clear this* — on another.
     const body = stepPayload('basics', { name: 'Julian' })
     expect(body).toEqual({ name: 'Julian' })
-    expect('gender' in body).toBe(false)
+    expect('dateOfBirth' in body).toBe(false)
+  })
+
+  it('a stored draft from before 1.0 is read without its dating fields, and with dating out of its intents (D-002)', () => {
+    // `finish` sends the whole draft, so a resumed draft is cleaned where it is read, not per step.
+    const stored = (draft: object) =>
+      parseStoredOnboarding(JSON.stringify({ progress: { step: 'details', completed: ['basics', 'preferences'] }, draft }))?.draft
+    expect(stored({ name: 'Julian', gender: 'woman', orientations: ['queer'], show_orientation: true, interested_in: ['man'], intent_default: ['friendship', 'dating'] }))
+      .toEqual({ name: 'Julian', intent_default: ['friendship'] })
+    expect(stored({ name: 'Julian', intent_default: ['dating'] })).toEqual({ name: 'Julian', intent_default: [] })
+    expect(stored({ name: 'Julian' })).toEqual({ name: 'Julian' })
+  })
+
+  it('never forwards the dating fields a draft from before 1.0 still holds (D-002)', () => {
+    // Gender, orientation and its consent were asked only for dating; a resumed draft can still carry them.
+    const resumed = { ...full, gender: 'woman', orientations: ['queer'], show_orientation: true, intent_default: ['friendship'] } as OnboardingDraft
+    expect(stepPayload('basics', resumed)).toEqual({ name: 'Julian', dateOfBirth: '1998-04-17' })
+    expect(stepPayload('preferences', resumed)).toEqual({ intent_default: ['friendship'] })
   })
 
   it('sends nothing for the review step', () => {
@@ -305,35 +319,6 @@ describe('parsing what is on disk', () => {
       draft: {},
     })
     expect(parseStoredOnboarding(mixed)?.progress.completed).toEqual(['basics', 'preferences'])
-  })
-})
-
-describe('orientationConsent', () => {
-  it('records consent when there is an orientation and the switch is on', () => {
-    expect(orientationConsent(['bisexual'], true)).toBe(true)
-  })
-
-  it('records none when the switch is off', () => {
-    expect(orientationConsent(['bisexual'], false)).toBe(false)
-  })
-
-  it('drops consent when the orientation is cleared', () => {
-    /*
-     * Pick an orientation, turn the switch on, then go back and clear the
-     * orientation. A stored `true` would outlive the thing it was consent for —
-     * so answering the question again months later would republish it to
-     * everyone who had matched in the meantime, without a second decision from
-     * the person.
-     */
-    expect(orientationConsent(undefined, true)).toBe(false)
-    expect(orientationConsent([], true)).toBe(false)
-  })
-
-  it('keeps consent when one of several labels is removed', () => {
-    // Clearing the *last* label drops the consent; going from three to two
-    // is an edit to something already published. Re-asking there would make
-    // the switch look like it resets itself at random.
-    expect(orientationConsent(['queer', 'bisexual'], true)).toBe(true)
   })
 })
 

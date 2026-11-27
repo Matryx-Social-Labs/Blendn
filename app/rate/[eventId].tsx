@@ -38,9 +38,8 @@ import { calendarDate } from '../../lib/time'
  * person you matched with**, one at a time, their face and the name you know
  * them by. Either can be skipped, and the screen never asks twice.
  *
- * `DESIGN_HANDOFF.md` asks for something that "feels like a private note to us,
- * not a public review", so the scale is five plain steps with words at the
- * ends, not stars, and nothing is celebrated.
+ * It should feel like a private note to us, not a public review, so the scale
+ * is five plain steps with words at the ends, not stars, and nothing is celebrated.
  *
  * ## Rules the design must not break
  *

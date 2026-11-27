@@ -38,7 +38,7 @@ const CELLS = [
   'ds-toggle-row',
   'ds-segmented-pressed',
   'ds-radiocard-disabled',
-  'ds-lookingfor-minor',
+  'ds-lookingfor-live',
   'ds-stepper-ceiling',
   'ds-progress-live',
   'ds-tabbar-banter',

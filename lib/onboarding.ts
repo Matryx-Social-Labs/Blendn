@@ -8,7 +8,7 @@
  * imported under `testEnvironment: node`, and the logic worth testing is the
  * part that has no I/O in it.
  *
- * ## Why a step list and not eight screens that each know the next one
+ * ## Why a step list and not screens that each know the next one
  *
  * Because resume-on-quit needs to answer "where was I?" from a stored value,
  * and skipping needs to answer "what comes after this?" without the skipped
@@ -18,7 +18,7 @@
  */
 
 import { PROFILE_LIMITS } from './profileLimits'
-import { dateIn } from './time'
+import { normaliseIntents, type Intent } from './intents'
 
 /** One step, in order. The key is what gets stored, so it outlives a reorder. */
 export const ONBOARDING_STEPS = [
@@ -71,7 +71,7 @@ export function previousStep(step: OnboardingStep): OnboardingStep | null {
  * The Figma frames disagree with each other about this and cannot all be
  * right: one header reads "STEP 02/05", another "Step 2 of 4", another
  * "Step 4 of 5", and the percentages run 30 / 70 / 80 / 100 across four
- * screens of eight. Those are mock values from separate design passes. One
+ * of the frames. Those are mock values from separate design passes. One
  * honest computation is better than reproducing four contradictory ones, and
  * it stays right when a step is added.
  */
@@ -180,35 +180,9 @@ export function advance(
  * because every step writes to the same profile: `basics` sets `name`,
  * `details` sets `interests`, and both end up in the same `PUT /profiles/:userId`.
  */
-export type OnboardingGender = 'woman' | 'man' | 'non_binary' | 'prefer_not_to_say'
-
 export interface OnboardingDraft {
   name?: string
-  /*
-   * The enum the API validates, not a loose string.
-   *
-   * `apiClient.updateProfile` types this field for a reason its own comment
-   * spells out: the four preference booleans were once sent in twelve
-   * camelCase spellings and matched none of them, because nothing was checking.
-   * A draft typed `string` would have to be cast on the way out, which throws
-   * that check away at exactly the point it is doing its job.
-   */
-  gender?: OnboardingGender
   dateOfBirth?: string
-  /*
-   * Plural, capped at three, "prefer not to say" exclusive — the rules live in
-   * `lib/dating.ts` because the Settings editor writes this field too.
-   */
-  orientations?: string[]
-  /*
-   * Show `orientations` to people who can already see who you are.
-   *
-   * Not "make it public" — the server gates it a second time on
-   * `maySeeIdentity`, so it reaches matches, open conversations, and rooms you
-   * revealed yourself in, and nobody else. Sending `true` is consent to show
-   * it, not a decision about who to.
-   */
-  show_orientation?: boolean
   /*
    * How you would like to enter rooms: named, or as a pseudonym.
    *
@@ -217,8 +191,11 @@ export interface OnboardingDraft {
    * a tap in the room. What this changes is whether that tap is offered.
    */
   reveal_by_default?: boolean
-  /** Why you go out: one of the server's intents. What matching and the Board's posting gate read. */
-  intent_default?: ('dating' | 'networking' | 'friendship' | 'just_here')[]
+  /**
+   * Why you go out: the intents the app offers. What matching and the Board's posting gate read. A draft from before 1.0 can
+   * still hold `dating` at run time; the step reads it through `normaliseIntents`, which drops it (register D-002).
+   */
+  intent_default?: Intent[]
   /** Read-only: older drafts and profiles hold it; onboarding no longer writes it. */
   looking_for?: string[]
   location?: string
@@ -260,8 +237,8 @@ export interface OnboardingDraft {
  * someone goes back and edits.
  */
 const STEP_FIELDS: Record<OnboardingStep, readonly (keyof OnboardingDraft)[]> = {
-  basics: ['name', 'gender', 'dateOfBirth'],
-  preferences: ['orientations', 'show_orientation', 'intent_default', 'reveal_by_default'],
+  basics: ['name', 'dateOfBirth'],
+  preferences: ['intent_default', 'reveal_by_default'],
   details: ['interests', 'bio'],
   media: ['photos'],
   location: ['share_location'],
@@ -310,34 +287,6 @@ export function stepPayload(
  */
 export function anonymousByDefault(draft: Pick<OnboardingDraft, 'reveal_by_default'>): boolean {
   return !(draft.reveal_by_default ?? false)
-}
-
-/**
- * Whether to record consent to show an orientation.
- *
- * `false` whenever there are no orientations, regardless of what the switch
- * says.
- *
- * The case this exists for: someone picks an orientation, turns the switch on,
- * then goes back and clears it. Leaving the stored `true` behind means the
- * consent outlives the thing it was consent *for* — so picking an orientation
- * again months later would silently republish it to everyone who had matched in
- * the meantime, with no second decision from the person.
- *
- * Clearing the *last* label is what drops the consent, not clearing any of
- * them. Going from three labels to two is an edit to something already
- * published, and re-asking there would make the switch feel like it resets
- * itself at random.
- *
- * A function rather than a ternary in the screen because it is a privacy
- * invariant and not a rendering detail: any future screen that writes these two
- * fields has to obey it, and one that inlines the rule is one that can forget.
- */
-export function orientationConsent(
-  orientations: readonly string[] | undefined,
-  requested: boolean
-): boolean {
-  return orientations?.length ? requested : false
 }
 
 /**
@@ -594,10 +543,7 @@ export function parseStoredOnboarding(raw: string | null): StoredOnboarding | nu
 
     return {
       progress: { step, completed },
-      draft:
-        record.draft && typeof record.draft === 'object'
-          ? (record.draft as OnboardingDraft)
-          : {},
+      draft: record.draft && typeof record.draft === 'object' ? cleanDraft(record.draft as Record<string, unknown>) : {},
     }
   } catch {
     return null
@@ -605,25 +551,13 @@ export function parseStoredOnboarding(raw: string | null): StoredOnboarding | nu
 }
 
 /**
- * Whether the birth date on the draft makes this person under 18 today.
- *
- * Orientation exists for dating, and dating is 18+, so the preferences step
- * does not ask a minor for it (SCRUM-200). Unknown or unparseable is treated
- * as under 18: `basics` is not skippable, so a missing date here is a bug
- * rather than a choice, and the question that must not be asked of a child
- * is the one to withhold when in doubt. `now` is a parameter so the boundary
- * can be tested on a fixed day.
+ * A draft written before 1.0, made what this build would have written (register D-002). Cleaned where it is read because
+ * `finish` sends the whole draft: gender, orientation, its consent and interested-in went with dating and are dropped, and
+ * `dating` leaves the intents. A draft holding only dating keeps an empty list, so finishing leaves what the step showed.
  */
-export function isUnder18(dateOfBirth: string | undefined, now: Date = new Date()): boolean {
-  if (!dateOfBirth) return true
-  const dob = new Date(dateOfBirth)
-  if (Number.isNaN(dob.getTime())) return true
-  const [nowY, nowM, nowD] = dateIn(now)
-  const [dobY, dobM, dobD] = dateIn(dob)
-  let years = nowY - dobY
-  const beforeBirthday = nowM < dobM || (nowM === dobM && nowD < dobD)
-  if (beforeBirthday) years -= 1
-  return years < 18
+function cleanDraft(raw: Record<string, unknown>): OnboardingDraft {
+  const { gender: _gender, orientations: _orientations, show_orientation: _consent, interested_in: _interestedIn, ...draft } = raw
+  return (Array.isArray(draft.intent_default) ? { ...draft, intent_default: normaliseIntents(draft.intent_default) } : draft) as OnboardingDraft
 }
 
 /**

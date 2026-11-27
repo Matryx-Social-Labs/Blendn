@@ -18,13 +18,6 @@ it('puts no margin above the first set and SPACE.xl above the next', async () =>
       workField={null}
       onChangeWorkField={noop}
       workFields={[{ slug: 'design', label: 'Design' }]}
-      gender={null}
-      onChangeGender={noop}
-      orientations={[]}
-      onChangeOrientations={noop}
-      interestedIn={[]}
-      onChangeInterestedIn={noop}
-      offerDating={false}
     />,
   )
   expect(StyleSheet.flatten(screen.getByTestId('matching-first-set').props.style)?.marginTop ?? 0).toBe(0)
@@ -39,33 +32,22 @@ describe('who sees each field (YOU-07, 14.0)', () => {
     expect(['interests', 'iplTeam', 'thisOrThat', 'artists', 'intent', 'sign'].every((f) => FIELD_TIER[f] === 'A')).toBe(true)
     expect(['languages', 'homeState', 'workField'].every((f) => FIELD_TIER[f] === 'B')).toBe(true)
     expect(['college', 'neighbourhood', 'occupation', 'prompts', 'photos'].every((f) => FIELD_TIER[f] === 'C')).toBe(true)
-    expect(['gender', 'interestedIn', 'orientation'].every((f) => FIELD_TIER[f] === 'O')).toBe(true)
-    expect(whoSees('gender')).toMatchObject({ icon: 'lock', text: 'Nobody but you sees this.' })
     expect(whoSees('college').icon).toBe('eye-off')
+    // The dating fields left with dating (D-002): no tier line is kept for a question nobody is asked.
+    for (const f of ['gender', 'interestedIn', 'orientation']) expect(FIELD_TIER).not.toHaveProperty(f)
   })
 
-  it('says it under intent, and under the owner-only fields while dating is on', async () => {
+  it('says it under intent, and the work field says Tier B through its own hint', async () => {
     await render(
       <MatchingFields
-        intents={['dating']}
+        intents={['friendship']}
         onToggleIntent={noop}
         workField={null}
         onChangeWorkField={noop}
         workFields={[{ slug: 'design', label: 'Design' }]}
-        gender={null}
-        onChangeGender={noop}
-        orientations={[]}
-        onChangeOrientations={noop}
-        interestedIn={[]}
-        onChangeInterestedIn={noop}
-        offerDating
       />,
     )
     expect(screen.getByTestId('who-sees-intent')).toBeTruthy()
-    expect(screen.getByTestId('who-sees-gender')).toBeTruthy()
-    expect(screen.getByTestId('who-sees-orientation')).toBeTruthy()
-    expect(screen.getAllByLabelText(TIER_SEES.O).length).toBeGreaterThanOrEqual(2)
-    // The work field says Tier B through its own hint.
     expect(screen.getByText(TIER_SEES.B)).toBeTruthy()
   })
 
@@ -78,35 +60,5 @@ describe('who sees each field (YOU-07, 14.0)', () => {
     } finally {
       Dimensions.set({ window, screen: window })
     }
-  })
-
-  const dating = (showOrientation?: boolean) => (
-    <MatchingFields
-      intents={['dating']}
-      onToggleIntent={noop}
-      workField={null}
-      onChangeWorkField={noop}
-      workFields={[{ slug: 'design', label: 'Design' }]}
-      gender={null}
-      onChangeGender={noop}
-      orientations={[]}
-      onChangeOrientations={noop}
-      interestedIn={[]}
-      onChangeInterestedIn={noop}
-      offerDating
-      showOrientation={showOrientation}
-    />
-  )
-
-  it('orientation says nobody but you while show_orientation is off (the default)', async () => {
-    await render(dating())
-    expect(screen.getByTestId('who-sees-orientation').props.accessibilityLabel).toBe('Nobody but you sees this.')
-  })
-
-  it('orientation is Tier C once show_orientation is on: shown to whoever may see who you are, never "nobody"', async () => {
-    await render(dating(true))
-    expect(screen.getByTestId('who-sees-orientation').props.accessibilityLabel).toBe('Shown only after you reveal yourself.')
-    // Gender stays owner-only either way.
-    expect(screen.getByTestId('who-sees-gender').props.accessibilityLabel).toBe('Nobody but you sees this.')
   })
 })

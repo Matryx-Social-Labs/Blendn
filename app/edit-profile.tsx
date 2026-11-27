@@ -14,7 +14,6 @@ import { Sheet } from '../components/ds/Sheet'
 import { RepositionHost } from '../components/profile/Reposition'
 import { OfflineStrip, useOffline } from '../components/profile/OfflineStrip'
 import { TagsField } from '../components/profile/TagsField'
-import { mayDate, type Gender, type Orientation } from '../lib/dating'
 import { SkeletonBlock, SkeletonLine } from '../components/Skeleton'
 import { useSkeletonCrossfade } from '../components/motion/useSkeletonCrossfade'
 import { InterestPicker, MAX_INTERESTS } from '../components/InterestPicker'
@@ -77,9 +76,6 @@ function formSnapshot(f: {
   intents: string[]
   workField: string | null
   expertise: string[]
-  gender: string | null
-  orientations: string[]
-  interestedIn: string[]
 }): string {
   return JSON.stringify({ ...f, interestIds: [...f.interestIds].sort() })
 }
@@ -126,7 +122,7 @@ function EditProfileContent() {
   const [lookingFor, setLookingFor] = useState<string[]>([])
 
   /*
-   * The five fields matching runs on. They used to live on their own screen,
+   * The fields matching runs on. They used to live on their own screen,
    * reachable only from Settings -> Discovery -> "You and matching", so the app
    * had two profile editors and one of them was three taps deep under a heading
    * that did not name it.
@@ -152,29 +148,13 @@ function EditProfileContent() {
       setWorkFieldsFailed(true)
     }
   }, [])
-  const [gender, setGender] = useState<Gender | null>(null)
-  const [orientations, setOrientations] = useState<Orientation[]>([])
-  const [interestedIn, setInterestedIn] = useState<Gender[]>([])
-  // `show_orientation` as the server has it (read-only here): on, orientation reaches everyone who may see who you are, and the line says so.
-  const [showOrientation, setShowOrientation] = useState(false)
   /* What the server had, so the save can send only what actually moved. */
   const [matchingAtLoad, setMatchingAtLoad] = useState<{
-    intents: Intent[]
+    /** As stored, so a stored `dating` the form does not show still counts as a change to save. */
+    intents: readonly string[]
     workField: string | null
     expertise: string[]
-    gender: Gender | null
-    orientations: Orientation[]
-    interestedIn: Gender[]
-  }>({ intents: [], workField: null, expertise: [], gender: null, orientations: [], interestedIn: [] })
-
-  /*
-   * The age dating is offered on: the one being typed in this form when it is a
-   * whole number, else the one the server holds. Reading only the loaded age
-   * kept Dating on screen after someone corrected their age to 17, and hid it
-   * from someone adding an adult age for the first time (SCRUM-294 review).
-   */
-  const typedAge = Number(age)
-  const liveAge = age.trim() && Number.isInteger(typedAge) ? typedAge : profile?.age
+  }>({ intents: [], workField: null, expertise: [] })
 
   const onToggleIntent = (value: Intent) => setIntents((prev) => toggleIntent(prev, value))
   const [nameError, setNameError] = useState<string | null>(null)
@@ -199,7 +179,7 @@ function EditProfileContent() {
   const pendingLeave = useRef<NavigationAction | null>(null)
   const currentSnapshot = formSnapshot({
     name, age, location, phone, occupation, education, bio, interestIds, goals, lookingFor,
-    intents, workField, expertise, gender, orientations, interestedIn,
+    intents, workField, expertise,
   })
   const dirty = savedSnapshot !== null && currentSnapshot !== savedSnapshot
 
@@ -319,29 +299,21 @@ function EditProfileContent() {
         /*
          * Pre-filled, which the old screen never did: it read only name and age,
          * so every chip opened blank and you could not tell "networking" from
-         * "nothing chosen".
+         * "nothing chosen". A stored `dating` is dropped from what is shown (D-002); the save compares with what is stored, so any
+         * save leaves the server holding what the screen shows, dating gone.
          */
         const p2 = profileData.profile
-        const loadedIntents = normaliseIntents((p2?.intent_default || []) as Intent[])
+        const storedIntents = p2?.intent_default ?? []
+        const loadedIntents = normaliseIntents(storedIntents)
         const loadedWorkField = p2?.work_field ?? null
         const loadedExpertise = Array.isArray(p2?.expertise) ? (p2.expertise as string[]) : []
-        const loadedGender = (p2?.gender ?? null) as Gender | null
-        const loadedOrientations = (p2?.orientations || []) as Orientation[]
-        const loadedInterestedIn = (p2?.interested_in || []) as Gender[]
         setIntents(loadedIntents)
-        setShowOrientation((p2 as { show_orientation?: boolean } | undefined)?.show_orientation === true)
         setWorkField(loadedWorkField)
         setExpertise(loadedExpertise)
-        setGender(loadedGender)
-        setOrientations(loadedOrientations)
-        setInterestedIn(loadedInterestedIn)
         setMatchingAtLoad({
-          intents: loadedIntents,
+          intents: storedIntents,
           workField: loadedWorkField,
           expertise: loadedExpertise,
-          gender: loadedGender,
-          orientations: loadedOrientations,
-          interestedIn: loadedInterestedIn,
         })
         // The form as loaded: what "unsaved changes" is measured against.
         setSavedSnapshot(formSnapshot({
@@ -358,9 +330,6 @@ function EditProfileContent() {
           intents: loadedIntents,
           workField: loadedWorkField,
           expertise: loadedExpertise,
-          gender: loadedGender,
-          orientations: loadedOrientations,
-          interestedIn: loadedInterestedIn,
         }))
 
         await loadWorkFields()
@@ -393,10 +362,8 @@ function EditProfileContent() {
   /** What each matching row says it holds (A 03): the picks by name, "Not set" for none; interests under two say why it matters. */
   const fieldLabel = workFields.find((f) => f.slug === workField)?.label
   const expertiseLabels = (workField ? expertiseByField[workField] ?? [] : []).filter((e) => expertise.includes(e.slug)).map((e) => e.label)
-  // In the order they were picked ("Friendship, Networking" on the board); dating only where it is offered.
-  const offeredIntents = intents
-    .filter((v) => v !== 'dating' || mayDate(liveAge))
-    .flatMap((v) => INTENTS.filter((i) => i.value === v))
+  // In the order they were picked ("Friendship, Networking" on the board).
+  const offeredIntents = intents.flatMap((v) => INTENTS.filter((i) => i.value === v))
   const matchingHints: Record<MatchingRow, string> = {
     into: interestIds.length < MIN_INTERESTS
       ? INTERESTS_FLOOR
@@ -454,21 +421,9 @@ function EditProfileContent() {
        * which is how you silently turn off somebody's matching.
        */
       const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
-      // A Dating intent this age may not hold is not sent (the chip is hidden).
-      const savedIntents = mayDate(liveAge) ? intents : intents.filter((i) => i !== 'dating')
-      if (!same(savedIntents, matchingAtLoad.intents)) updateData.intent_default = savedIntents
+      if (!same(intents, matchingAtLoad.intents)) updateData.intent_default = intents
       if (workField !== matchingAtLoad.workField) updateData.work_field = workField
       if (!same(expertise, matchingAtLoad.expertise)) updateData.expertise = expertise
-      /*
-       * The dating three are sent only while dating is ticked -- untick it and
-       * they stop being asked, so continuing to write them would keep
-       * special-category data current for somebody who just opted out of it.
-       */
-      if (savedIntents.includes('dating')) {
-        if (gender && gender !== matchingAtLoad.gender) updateData.gender = gender
-        if (!same(orientations, matchingAtLoad.orientations)) updateData.orientations = orientations
-        if (!same(interestedIn, matchingAtLoad.interestedIn)) updateData.interested_in = interestedIn
-      }
 
       /*
        * The field of work is limited to three changes a day, and one refused PUT writes nothing: at the limit a new bio was
@@ -738,14 +693,6 @@ function EditProfileContent() {
                   void loadWorkFields().finally(() => setWorkFieldsRetrying(false))
                 }}
                 workFieldsRetrying={workFieldsRetrying}
-                gender={gender}
-                onChangeGender={setGender}
-                orientations={orientations}
-                onChangeOrientations={setOrientations}
-                interestedIn={interestedIn}
-                onChangeInterestedIn={setInterestedIn}
-                offerDating={mayDate(liveAge)}
-                showOrientation={showOrientation}
               />
             )}
             </Sheet>

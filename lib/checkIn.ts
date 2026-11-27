@@ -123,17 +123,20 @@ export async function submitCheckIn(
 
   if (result === 'timeout') {
     /*
-     * Nothing aborts the request, and a queued one is sent after this: a yes that lands later must still bring both doors
-     * to "in", even after Cancel (a re-read on Cancel runs before it lands; audit client-feedback Verification 3). Only in
-     * the session that sent it. "Already checked in" is a yes here as on time. Any other late no changes nothing: the
-     * person is left at the door they see, which is the true state.
+     * The request outlives this wait (a queued one is even sent after it), but only until apiClient's own deadline
+     * (REQUEST_TIMEOUT_MS, 15 s) or a network failure ends it with no server code (SCRUM-1480). Only in the session that
+     * sent it: a late yes brings both doors to "in", even after Cancel (a re-read on Cancel runs before it lands; audit
+     * client-feedback Verification 3), and "already checked in" is a yes here as on time. A late end with no code makes
+     * every door re-read the server, which may have committed it. A coded late no changes nothing: the person is left at
+     * the door they see, which is the true state.
      */
     request
       .then((late) => {
         const isIn = late.success || late.errorCode === CHECK_IN_CODES.ALREADY_CHECKED_IN
         const sameSession = session === currentSession()
-        Logger.warn('events', 'checkin:late', { eventId, isIn, code: reasonOf(late), sameSession })
-        if (isIn && sameSession) checkInChanged(eventId, Array.isArray(late.data?.left) ? late.data.left : [])
+        const code = reasonOf(late)
+        Logger.warn('events', 'checkin:late', { eventId, isIn, code, error: code ? undefined : late.error, sameSession })
+        if ((isIn || !code) && sameSession) checkInChanged(eventId, Array.isArray(late.data?.left) ? late.data.left : [])
       })
       // A sign-out clears the queue under a waiting request ("Request queue cleared"): expected, so a warning, not a report.
       .catch((error: unknown) => (session === currentSession() ? Logger.error : Logger.warn)('events', 'checkin:late:failed', { eventId, error }))
@@ -143,7 +146,8 @@ export async function submitCheckIn(
   if (!result.success) {
     // Dispatch on the server's code, never on its sentence (lib/checkInRefusal.ts).
     const alreadyCheckedIn = result.errorCode === CHECK_IN_CODES.ALREADY_CHECKED_IN
-    if (alreadyCheckedIn) checkInChanged(eventId)
+    // No server code is no answer (a dropped connection, a failed refresh), not a no: the server may have it, so re-read.
+    if (alreadyCheckedIn || !reasonOf(result)) checkInChanged(eventId)
     return {
       kind: 'refused',
       refusal: checkInRefusal(reasonOf(result), result.error),

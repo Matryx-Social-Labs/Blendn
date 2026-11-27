@@ -169,7 +169,7 @@ describe('the create body', () => {
   })
 
   it('sends "Here for" when one is chosen, and nothing when none is', () => {
-    expect(createCrewBody({ ...form, intent: ['friendship', 'dating'] }, agreed)).toHaveProperty('intent', ['friendship', 'dating'])
+    expect(createCrewBody({ ...form, intent: ['friendship', 'networking'] }, agreed)).toHaveProperty('intent', ['friendship', 'networking'])
     expect(createCrewBody({ ...form, intent: [] }, agreed)).not.toHaveProperty('intent')
     expect(createCrewBody(form, agreed)).not.toHaveProperty('intent')
   })

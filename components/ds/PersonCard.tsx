@@ -29,13 +29,13 @@ export type PersonCardPerson = {
   face: Face
   /** The name the room shows you: the pseudonym unless they're named to you. */
   name: string
-  age?: number
-  /** Flow 5 P-A, from `lensView`: "Anonymous · 31" under the name. Absent: the age alone. */
+  /**
+   * The line under the name, from `metaLine` (or `lensView`): "Anonymous" before a reveal, "Shown to you · 31" after. The
+   * only way an age reaches the card: there is no raw age or city to draw beside it (D-030).
+   */
   meta?: string
   /** "In the room at …" or, on a venue night, "At {place}, {city}": the sheet's first line. */
   context?: string | null
-  /** The thin card's city. */
-  city?: string
   /** What this room's lens leads with (`leadFor`); the reason to meet is lit. */
   lead?: LeadPill[]
   /** Tonight's question and their answer (`tonightCardFor`); null when the room asks nothing or they have not answered. */
@@ -98,8 +98,9 @@ const PRE_EVENT = 'You can only message people from an event you have both atten
 /**
  * The person sheet (Flow 5 P-A, `pA-*` in element-boxes.json): one sheet from every entry point (a grid face, Meet
  * next, a chat name, a long-press, a room member, the wave row and banner), the same person through the room's lens.
- * In reading order: the context line, the 72 pt face with the name and "Anonymous · 31" (the head, which opens their
- * profile) and ⋯ (Block / Report), the lead pills, Tonight's question with their answer, In common, then the actions.
+ * In reading order: the context line, the 72 pt face with the name and its meta line ("Anonymous", "Shown to you · 31")
+ * (the head, which opens their profile) and ⋯ (Block / Report), the lead pills, Tonight's question with their answer,
+ * In common, then the actions.
  * What the row offers depends on who they are to you, never on why the roster didn't list them (the thin card).
  *
  * - Wave dock A (SCRUM-1042): Wave + Message, level at 52 (the board's `.db`). Wave is lit, `H.select` on the press;
@@ -151,7 +152,7 @@ export function PersonCardContent({
   const sel = useSelection()
   const lit = { backgroundColor: sel.fill, borderColor: sel.edge }
   const quiet = contrast ? COLOR.textPrimary : COLOR.textSecondary
-  const { name, age } = person
+  const { name } = person
   // Waved is said as it lands, once (a card opened already waved says nothing): iOS announces it, Android's row is a live region.
   const wasWaved = useRef(isWaved)
   useEffect(() => {
@@ -175,8 +176,7 @@ export function PersonCardContent({
   const thin = variant === 'thin'
   const preview = variant === 'preview'
   const presence = variant === 'was' ? 'Was here' : variant === 'pre' ? 'Going' : null
-  // P-A's meta line ("Anonymous · 31") when the caller put the person through the lens; else the plain age.
-  const meta = thin ? [person.meta ?? age, person.city].filter((x) => x != null && x !== '').join(' · ') : (person.meta ?? (age ? String(age) : ''))
+  const meta = person.meta ?? ''
   const heading = [name, meta.replace(/ · /g, ', '), variant === 'friend' ? 'friend' : null, presence?.toLowerCase()]
     .filter((p) => p != null && p !== '')
     .join(', ')

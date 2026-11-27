@@ -21,7 +21,7 @@ import { useToast } from '../../components/Toast'
 import { apiClient } from '../../lib/apiClient'
 import { checkInChanged, intentAnswered } from '../../lib/checkIn'
 import { COLOR, MAX_FONT_SCALE, SPACE, SPRING } from '../../lib/design/tokens'
-import { toggleIntent } from '../../lib/intents'
+import { normaliseIntents, toggleIntent, type Intent } from '../../lib/intents'
 import { Logger } from '../../lib/logger'
 import { firstNameOf } from '../../lib/profileIdentity'
 import { personFace } from '../../lib/personFace'
@@ -36,8 +36,8 @@ import { useReducedMotion } from '../../lib/motion'
 /**
  * Why you are here tonight, and whether people can see who you are (Flow 3 `prefs`).
  *
- * `DESIGN_HANDOFF.md` calls the reveal control "the single most important new
- * screen", because it is the counterpart to the whole pseudonymity model.
+ * The reveal control is the single most important new screen, because it is
+ * the counterpart to the whole pseudonymity model.
  *
  * ## Two questions, one primary
  *
@@ -71,19 +71,16 @@ import { useReducedMotion } from '../../lib/motion'
  * and makes the last holdout visible.
  */
 
-type Intent = 'dating' | 'networking' | 'friendship' | 'just_here'
-
+/** Two tiles and "Just here" (no Dating: it is not an intent in 1.0, register D-002). */
 const INTENTS: { value: Intent; label: string; hint: string }[] = [
   { value: 'networking', label: 'Networking', hint: 'People to work with or learn from' },
   { value: 'friendship', label: 'Making friends', hint: 'People to spend time with' },
-  { value: 'dating', label: 'Dating', hint: 'Something romantic' },
   { value: 'just_here', label: 'Just here for the event', hint: 'Not looking to meet anyone' },
 ]
 
 const ART: Record<Exclude<Intent, 'just_here'>, number> = {
   networking: require('../../assets/onboarding/looking-networking.jpg'),
   friendship: require('../../assets/onboarding/looking-friendship.jpg'),
-  dating: require('../../assets/onboarding/looking-dating.jpg'),
 }
 
 const AVATAR = 56
@@ -157,6 +154,8 @@ function EventPreferencesContent() {
    * is only sent once somebody has expressed one here.
    */
   const [intentTouched, setIntentTouched] = useState(false)
+  /** The event's intent as stored. Only read for a `dating` from before 1.0 (D-002), which the next save takes off. */
+  const [storedIntent, setStoredIntent] = useState<readonly string[]>([])
   const [revealed, setRevealed] = useState(initialRevealed === '1')
   const [rememberReveal, setRememberReveal] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -170,10 +169,6 @@ function EventPreferencesContent() {
   const [canReveal, setCanReveal] = useState<RevealReadiness | null>(null)
   const [photo, setPhoto] = useState<string | null>(null)
   const [firstName, setFirstName] = useState<string | null>(null)
-  // Dating is 18+. The server refuses it (403) on this write as everywhere
-  // else; hiding the card for a minor turns that refusal into a card they
-  // never see rather than an error on the way into their first room.
-  const [under18, setUnder18] = useState(false)
   /*
    * Tonight's question (Flow 5 P-A): asked only when the room has one (`GET /matches/preferences` says the lens). The
    * answer is sent only when it changed, so opening this to change the reveal never rewrites it.
@@ -193,6 +188,7 @@ function EventPreferencesContent() {
       .then((res) => {
         if (cancelled || !res.success || !res.data) return
         const said = res.data.tonightAnswer ?? ''
+        setStoredIntent(Array.isArray(res.data.intent) ? res.data.intent : [])
         setLens(parseLens(res.data.lens))
         setSavedAnswer(said)
         setAnswer(said)
@@ -221,9 +217,7 @@ function EventPreferencesContent() {
         .getProfile(user.id)
         .then((res) => {
           if (cancelled || !res.success || !res.data) return
-          const age = res.data.profile?.age
           const photos: string[] = Array.isArray(res.data.profile?.photos) ? res.data.profile.photos : []
-          setUnder18(typeof age === 'number' && age < 18)
           const name: unknown = res.data.profile?.name || res.data.name
           setPhoto(typeof photos[0] === 'string' ? photos[0] : null)
           setFirstName(typeof name === 'string' && name.trim() ? firstNameOf(name) : null)
@@ -257,8 +251,8 @@ function EventPreferencesContent() {
     setSaving(true)
     try {
       const res = await apiClient.setMatchPreferences(String(eventId), {
-        // Only when they actually chose something here. See `intentTouched`.
-        intent: intentTouched ? intent : undefined,
+        // Only when they actually chose something here (see `intentTouched`), or to take a stored dating off, the rest kept.
+        intent: intentTouched ? intent : storedIntent.includes('dating') ? normaliseIntents(storedIntent) : undefined,
         // The first-door answer is the default from now on; that is the point.
         ...(askIntent && intentTouched ? { rememberIntent: true } : {}),
         revealed,
@@ -280,8 +274,7 @@ function EventPreferencesContent() {
         return
       }
       if (!res.success) {
-        // The server's sentence when it has one — "Dating is for 18+" is
-        // actionable; "could not save" is not.
+        // The server's sentence when it has one: it says what to do; "could not save" does not.
         showToast(res.error || 'Couldn’t save that. Try again.', 'error', { haptic: 'error' })
         return
       }
@@ -294,11 +287,10 @@ function EventPreferencesContent() {
     } finally {
       setSaving(false)
     }
-  }, [answer, answerChanged, workIntent, workIntentChanged, askIntent, eventId, intent, intentTouched, leave, rememberReveal, revealed, saving, setAnswerRefused, showToast])
+  }, [answer, answerChanged, workIntent, workIntentChanged, askIntent, eventId, intent, intentTouched, leave, rememberReveal, revealed, saving, setAnswerRefused, showToast, storedIntent])
 
-  const intents = under18 ? INTENTS.filter((i) => i.value !== 'dating') : INTENTS
-  const lookingIntents = intents.filter((i) => i.value !== 'just_here')
-  const justHere = intents.find((i) => i.value === 'just_here')
+  const lookingIntents = INTENTS.filter((i) => i.value !== 'just_here')
+  const justHere = INTENTS.find((i) => i.value === 'just_here')
 
   const tile = (opt: (typeof INTENTS)[number]) => (
     <LookingForCard

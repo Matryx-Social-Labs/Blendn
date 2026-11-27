@@ -103,7 +103,8 @@ export const OPEN_TO_CREWS_LABEL = 'Open to joining a crew tonight'
 export const OPEN_TO_CREWS_HELPER =
   'Nobody is told you turned this on. It shows you crews here with room for one more, lets you like them, and lets their likes of you count. It switches itself off when tonight ends.'
 
-export type CrewIntent = 'dating' | 'networking' | 'friendship' | 'just_here'
+/** What a crew can be made or edited as. Dating is not one in 1.0 (register D-002). */
+export type CrewIntent = 'networking' | 'friendship' | 'just_here'
 
 export interface CrewTag {
   slug: string
@@ -126,7 +127,8 @@ export interface Crew {
   crewId: string
   name: string
   bio: string | null
-  intent: CrewIntent[]
+  /** As stored: a crew made before 1.0 can still hold `dating`, which the app never shows (`intentLine`). */
+  intent: string[]
   tags: CrewTag[]
   emblemSeed: string
   openToSolo: boolean
@@ -204,7 +206,8 @@ export interface CrewCard {
   size: number
   presentCount: number
   tags: CrewTag[]
-  intent: CrewIntent[]
+  /** As stored: a crew made before 1.0 can still hold `dating`, which the app never shows (`intentLine`). */
+  intent: string[]
   /** Your side liked or waved at them tonight. */
   youLiked: boolean
   /** Your side waved at them tonight ("✓ Waved"; admin #1003). Optional: a client outlives a deploy. */

@@ -1,16 +1,18 @@
 /**
  * The check-in that answers after the app stopped waiting (SCRUM-1189; launch audit client-feedback Verification 3).
  *
- * `submitCheckIn` gives up at 12 s and shows "Still checking you in", but nothing aborts the request: a queued one is
- * even sent after the tray is up. When the server then says yes, both doors must come to "in" (`checkInChanged`), even
- * if the person pressed Cancel first: a re-read on Cancel happens before the late answer lands, so it is the late answer
- * itself that has to say so.
+ * `submitCheckIn` gives up at 12 s and shows "Still checking you in"; the request goes on (a queued one is even sent
+ * after the tray is up) until apiClient's own 15 s deadline. When the server then says yes, both doors must come to "in"
+ * (`checkInChanged`), even if the person pressed Cancel first: a re-read on Cancel happens before the late answer lands,
+ * so it is the late answer itself that has to say so. When it ends with no server answer at all, the server may still
+ * have said yes, so the doors re-read it (SCRUM-1480).
  */
 import { act, render } from '@testing-library/react-native'
 import React from 'react'
 import { AccessibilityInfo } from 'react-native'
 
 import { CHECK_IN_TIMEOUT_MS, submitCheckIn, subscribeCheckInChanged } from '../lib/checkIn'
+import { TIMEOUT_MESSAGE } from '../lib/fetchTimeout'
 import { H } from '../lib/haptics'
 import { useCheckInFlow, type UseCheckInFlowOptions } from '../lib/useCheckInFlow'
 
@@ -91,6 +93,31 @@ describe('submitCheckIn, after it stopped waiting', () => {
     await settle()
     expect(heard).toHaveBeenCalledTimes(1)
     expect(api.forgetEvent).toHaveBeenCalledWith('e1')
+  })
+
+  // SCRUM-1480: apiClient aborts every request at 15 s and answers `{ success: false, error }` with no code, so a yes slower
+  // than that never lands. The server may have committed it: with no server answer, every door re-reads the server.
+  it.each([
+    ['aborted at 15 s', TIMEOUT_MESSAGE],
+    ['the network dropped it', 'No internet connection. Check your network and try again.'],
+  ])('a late request that ends with no server answer (%s) makes every door re-read', async (_, error) => {
+    const request = await timedOut()
+    request.resolve({ success: false, error })
+    await settle()
+    expect(heard).toHaveBeenCalledTimes(1)
+    expect(api.forgetActiveCheckins).toHaveBeenCalled()
+    expect(api.forgetEvent.mock.calls.map((c) => c[0])).toEqual(['e1'])
+  })
+
+  // Control for the rule above: a no-answer end after a sign-out (or another sign-in) re-reads nothing of the next session.
+  it('a late request with no server answer after a sign-out touches nothing of the next session', async () => {
+    const request = await timedOut()
+    mockSession = 2
+    request.resolve({ success: false, error: TIMEOUT_MESSAGE })
+    await settle()
+    expect(heard).not.toHaveBeenCalled()
+    expect(api.forgetActiveCheckins).not.toHaveBeenCalled()
+    expect(lateLines()).toEqual([{ eventId: 'e1', isIn: false, code: undefined, error: TIMEOUT_MESSAGE, sameSession: false }])
   })
 
   it('a refusal that lands late changes nothing (control)', async () => {

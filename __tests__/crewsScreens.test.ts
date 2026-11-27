@@ -111,13 +111,12 @@ describe('making a crew', () => {
 
   it('maps the Here for choice to the intents the server takes, and back', () => {
     expect(intentOf('friendship')).toEqual(['friendship'])
-    expect(intentOf('dating')).toEqual(['dating'])
-    expect(intentOf('both')).toEqual(['friendship', 'dating'])
-    expect(intentChoice(['dating', 'friendship'])).toBe('both')
-    expect(intentChoice(['dating'])).toBe('dating')
+    expect(intentOf('networking')).toEqual(['networking'])
     expect(intentChoice(['friendship'])).toBe('friendship')
+    expect(intentChoice(['networking'])).toBe('networking')
     // A crew set up elsewhere with an intent the picker has no chip for is not forced onto one.
-    expect(intentChoice(['networking'])).toBeNull()
+    expect(intentChoice(['friendship', 'networking'])).toBeNull()
+    expect(intentChoice(['just_here'])).toBeNull()
     expect(intentChoice([])).toBeNull()
   })
 
@@ -158,7 +157,9 @@ describe('making a crew', () => {
   })
 
   it('writes the intent as a line, or nothing', () => {
-    expect(intentLine(['friendship', 'dating'])).toBe('Friendship · Dating')
+    expect(intentLine(['friendship', 'networking'])).toBe('Friendship · Networking')
+    // A value the app does not offer is never printed raw.
+    expect(intentLine(['friendship', 'speed_dating'])).toBe('Friendship')
     expect(intentLine([])).toBeUndefined()
   })
 
@@ -442,5 +443,18 @@ describe('Edit crew’s tags (free hashtags)', () => {
   it('a reorder alone is not a change', () => {
     const edit = editOf(crew)
     expect(crewPatch(crew, { ...edit, tags: [...edit.tags].reverse() })).toBeNull()
+  })
+
+  it('a crew stored with dating (D-002): any save leaves it as the sheet shows it, dating gone', () => {
+    const datingOnly = { ...(crew as object), intent: ['dating'] } as never
+    expect(editOf(datingOnly).choice).toBeNull()
+    expect(crewPatch(datingOnly, { ...editOf(datingOnly), name: 'Nebula Two' })).toEqual({ name: 'Nebula Two', intent: [] })
+    const both = { ...(crew as object), intent: ['friendship', 'dating'] } as never
+    expect(editOf(both).choice).toBe('friendship')
+    expect(crewPatch(both, editOf(both))).toEqual({ intent: ['friendship'] })
+    expect(crewPatch(both, { ...editOf(both), name: 'Nebula Two' })).toEqual({ name: 'Nebula Two', intent: ['friendship'] })
+    expect(crewPatch(both, { ...editOf(both), choice: 'networking' })).toEqual({ intent: ['networking'] })
+    // Control: a crew with no dating and nothing changed sends nothing.
+    expect(crewPatch(crew, editOf(crew))).toBeNull()
   })
 })

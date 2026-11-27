@@ -1,29 +1,18 @@
 import type { ReactNode } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 
-import {
-  GENDERS,
-  GENDER_LABELS,
-  ORIENTATIONS,
-  ORIENTATION_LABELS,
-  needsInterestedInPicker,
-  orientationDisabled,
-  toggleOrientation,
-  type Gender,
-  type Orientation,
-} from '../../lib/dating'
+import type { Intent } from '../../lib/intents'
 import { ChipSet } from '../ds/ChipSet'
 import { font, minTarget, useAnnounced, useBoldText, useIncreaseContrast } from '../ds/shared'
 import { FieldLabel } from '../ds/TextField'
-import { orientationTier, TIER_SEES } from '../../lib/matchingTiers'
+import { TIER_SEES } from '../../lib/matchingTiers'
 import { WhoSees } from './WhoSees'
 import { Swap } from '../motion/Swap'
 import { COLOR, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { OPACITY } from '../../lib/theme'
 
 /**
- * The five fields matching runs on: intent, work field, and — only when dating
- * is ticked — gender, orientation and who you are interested in.
+ * The fields matching runs on that a person picks: intent, and the field of work with what they do in it.
  *
  * ## Why this is a component and not two copies
  *
@@ -36,17 +25,10 @@ import { OPACITY } from '../../lib/theme'
  * They are one editor now. This block is what both screens render, so the
  * onboarding question and the edit form cannot drift into asking differently.
  *
- * ## The conditional chain is the whole difficulty
+ * ## No dating, and nothing it asked (register D-002, SCRUM-1192)
  *
- * `dating` gates gender, which gates orientation, which gates
- * `interested_in` — and only sometimes. `needsInterestedInPicker` decides that
- * last one: "straight" plus "non-binary", or "queer", are identities rather
- * than lookup tables, so the target set has to be asked rather than derived.
- * Without it the server stores nothing, the dating tag never appears, and
- * nothing explains why.
- *
- * **A networking user is never asked their gender.** Less friction, and less
- * data held on somebody who had no reason to give it.
+ * Dating is not an intent in 1.0. Gender, orientation and interested-in were asked only while it was ticked, for the
+ * server's dating compatibility check, so they went with it: nobody is asked them, and the app neither loads nor sends them.
  *
  * ## Presentational only
  *
@@ -60,12 +42,11 @@ import { OPACITY } from '../../lib/theme'
 /** The server's own cap (`maxExpertise`), used until it has answered. */
 const DEFAULT_MAX_EXPERTISE = 3
 
-export type Intent = 'dating' | 'networking' | 'friendship' | 'just_here'
+export type { Intent }
 
 export const INTENTS: { value: Intent; label: string; hint?: string }[] = [
   { value: 'networking', label: 'Networking' },
   { value: 'friendship', label: 'Friendship' },
-  { value: 'dating', label: 'Dating' },
   { value: 'just_here', label: 'Just here', hint: 'no matching' },
 ]
 
@@ -75,14 +56,8 @@ export interface MatchingFieldsProps {
   workField: string | null
   onChangeWorkField: (slug: string | null) => void
   workFields: { slug: string; label: string }[]
-  gender: Gender | null
-  onChangeGender: (gender: Gender) => void
-  orientations: Orientation[]
-  onChangeOrientations: (next: Orientation[]) => void
-  interestedIn: Gender[]
-  onChangeInterestedIn: (next: Gender[]) => void
   /**
-   * Rendered between "What are you open to?" and the dating block.
+   * Rendered under "What are you open to?".
    *
    * Onboarding asks for an age there, and only there -- the editor already has
    * an age field of its own further up. A slot rather than a boolean, so this
@@ -99,14 +74,6 @@ export interface MatchingFieldsProps {
   maxExpertise?: number
   onChangeExpertise?: (next: string[]) => void
   /**
-   * Whether this person may be offered dating (`mayDate`). Required, so every
-   * host decides: when false, neither the Dating chip nor the gender and
-   * orientation questions it opens are shown (SCRUM-294).
-   */
-  offerDating: boolean
-  /** `show_orientation` as the profile has it: on, orientation is shown to whoever may see who you are (Tier C), not owner-only. */
-  showOrientation?: boolean
-  /**
    * The list of fields of work could not be read (6-3, Edit profile · 04): the heading stands with the failure line under it, and
    * the line is the retry. A heading alone says nothing. Only a host that can retry passes both; onboarding is unchanged.
    */
@@ -115,7 +82,7 @@ export interface MatchingFieldsProps {
   /** The retry is on its way: the line says so and holds still. */
   workFieldsRetrying?: boolean
   /**
-   * One half on its own, for Edit profile's rows (Me + settings A 03): `open` is intent and the dating chain under it, `work`
+   * One half on its own, for Edit profile's rows (Me + settings A 03): `open` is intent, `work`
    * the field of work and its expertise. Omitted, both (onboarding asks them on one page).
    */
   part?: 'open' | 'work'
@@ -164,15 +131,7 @@ export function MatchingFields({
   workField,
   onChangeWorkField,
   workFields,
-  gender,
-  onChangeGender,
-  orientations,
-  onChangeOrientations,
-  interestedIn,
-  onChangeInterestedIn,
   afterIntents,
-  offerDating,
-  showOrientation = false,
   expertiseOptions,
   expertise = [],
   maxExpertise = DEFAULT_MAX_EXPERTISE,
@@ -184,9 +143,6 @@ export function MatchingFields({
 }: MatchingFieldsProps) {
   const showOpen = part !== 'work'
   const showWork = part !== 'open'
-  const wantsDating = offerDating && intents.includes('dating')
-  const offered = offerDating ? INTENTS : INTENTS.filter((intent) => intent.value !== 'dating')
-  const askInterestedIn = needsInterestedInPicker(gender, orientations, intents)
 
   return (
     <>
@@ -197,7 +153,7 @@ export function MatchingFields({
         <ChipSet
           // In a sheet, its title heads the set (ChipSet: omit the label where a control above heads it).
           label={part ? undefined : 'WHAT ARE YOU OPEN TO?'}
-          items={offered.map((intent) => ({ key: intent.value, label: `${intent.label}${intent.hint ? ` · ${intent.hint}` : ''}` }))}
+          items={INTENTS.map((intent) => ({ key: intent.value, label: `${intent.label}${intent.hint ? ` · ${intent.hint}` : ''}` }))}
           selection="multi"
           selected={intents}
           onToggle={(value) => onToggleIntent(value as Intent)}
@@ -207,65 +163,6 @@ export function MatchingFields({
       </View>
 
       {afterIntents}
-
-      <Swap>
-        {wantsDating ? (
-          <>
-            {/*
-              Only here, and only while dating is ticked. `blendn-admin/docs/DESIGN_HANDOFF.md`
-              is explicit: a networking user is never asked their gender.
-            */}
-            <View style={styles.set}>
-              <ChipSet
-                label="YOU ARE"
-                items={GENDERS.map((g) => ({ key: g, label: GENDER_LABELS[g] }))}
-                selection="single"
-                selected={gender ? [gender] : []}
-                onToggle={(value) => onChangeGender(value as Gender)}
-                testID="matching-gender"
-              />
-              <WhoSees field="gender" />
-            </View>
-
-            <View style={styles.set}>
-              {/* Dimmed rather than removed at the cap: the chips you cannot reach are what tell you the limit exists. */}
-              <ChipSet
-                label="YOU IDENTIFY AS"
-                hint="Select all that apply — up to three."
-                items={ORIENTATIONS.map((o) => ({ key: o, label: ORIENTATION_LABELS[o], dimmed: orientationDisabled(orientations, o) }))}
-                selection="multi"
-                selected={orientations}
-                capHint="Up to three"
-                onToggle={(value) => onChangeOrientations(toggleOrientation(orientations, value as Orientation))}
-                testID="matching-orientations"
-              />
-              <WhoSees field="orientation" tier={orientationTier(showOrientation)} />
-            </View>
-
-            <Swap>
-              {askInterestedIn ? (
-                // Shown when the pair does not imply a target set — "straight" plus "non-binary", or "queer", which are identities
-                // rather than tables. Without this the server stores nothing and the dating tag never appears, with no explanation.
-                <View style={styles.set}>
-                  <ChipSet
-                    label="INTERESTED IN"
-                    items={GENDERS.map((g) => ({ key: g, label: GENDER_LABELS[g] }))}
-                    selection="multi"
-                    selected={interestedIn}
-                    onToggle={(value) => {
-                      const g = value as Gender
-                      onChangeInterestedIn(interestedIn.includes(g) ? interestedIn.filter((x) => x !== g) : [...interestedIn, g])
-                    }}
-                    testID="matching-interested-in"
-                  />
-                  <WhoSees field="interestedIn" />
-                </View>
-              ) : null}
-            </Swap>
-          </>
-        ) : null}
-      </Swap>
-
         </>
       ) : null}
 

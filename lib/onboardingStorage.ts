@@ -16,7 +16,7 @@ import { Logger } from './logger'
  * Because the server cannot answer "which screen were you on?". It holds the
  * *answers* — each step `PUT`s its own fields as it goes — but a half-filled
  * profile does not say whether the person stopped at step five or chose to
- * leave those fields empty. Nine screens is long enough that quitting partway
+ * leave those fields empty. The flow is long enough that quitting partway
  * through is normal, and coming back to the first screen after answering five
  * is the kind of thing people do not do twice.
  *

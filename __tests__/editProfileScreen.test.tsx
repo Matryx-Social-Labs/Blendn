@@ -460,9 +460,6 @@ describe('a profile that fails to load (YOU-05, Edit profile 6-1)', () => {
 })
 
 describe('who sees each field on Edit profile (YOU-07, 14.0)', () => {
-  const dating = (profile: Record<string, unknown>) =>
-    api.getProfile.mockResolvedValue({ success: true, data: { name: 'Sam', interests: [], profile: { age: 28, location: 'Bengaluru', bio: 'Records.', goals: [], looking_for: [], intent_default: ['dating'], ...profile } } } as never)
-
   it('names the tier under intent, interests and the college', async () => {
     await render(<EditProfile />)
     await screen.findByDisplayValue('Sam')
@@ -474,21 +471,99 @@ describe('who sees each field on Edit profile (YOU-07, 14.0)', () => {
     await fireEvent.press(screen.getByText('Done'))
     expect(screen.getByTestId('who-sees-college').props.accessibilityLabel).toBe('Shown only after you reveal yourself.')
   })
+})
 
-  it('orientation reads Nobody but you while show_orientation is off', async () => {
-    dating({ show_orientation: false })
+describe('dating is not an intent (D-002, SCRUM-1192)', () => {
+  /** A profile written before 1.0: dating ticked, with the gender, orientation and interested-in it opened. */
+  const storedDating = () =>
+    api.getProfile.mockResolvedValue({
+      success: true,
+      data: {
+        name: 'Sam',
+        interests: [],
+        profile: {
+          age: 28, location: 'Bengaluru', bio: 'Records.', goals: [], looking_for: [],
+          intent_default: ['friendship', 'dating'], gender: 'woman', orientations: ['queer'], interested_in: ['woman'], show_orientation: true,
+        },
+      },
+    } as never)
+
+  it('offers no Dating chip, and opens no gender or orientation questions, even for a stored dating', async () => {
+    storedDating()
     await render(<EditProfile />)
     await screen.findByDisplayValue('Sam')
     await openRow('open')
-    expect((await screen.findByTestId('who-sees-orientation')).props.accessibilityLabel).toBe('Nobody but you sees this.')
+    await screen.findByTestId('matching-intents')
+    expect(screen.queryByText('Dating')).toBeNull()
+    expect(screen.getByLabelText('Friendship').props.accessibilityState).toMatchObject({ selected: true })
+    for (const id of ['matching-gender', 'matching-orientations', 'matching-interested-in', 'who-sees-orientation']) expect(screen.queryByTestId(id)).toBeNull()
+    expect(within(screen.getByTestId('edit-profile-matching-open')).queryByText(/dating/i)).toBeNull()
   })
 
-  it('orientation reads the reveal tier when the profile says show_orientation is on', async () => {
-    dating({ show_orientation: true })
+  it('a changed intent sends exactly what is picked: a stored dating is never sent again', async () => {
+    storedDating()
     await render(<EditProfile />)
     await screen.findByDisplayValue('Sam')
     await openRow('open')
-    expect((await screen.findByTestId('who-sees-orientation')).props.accessibilityLabel).toBe('Shown only after you reveal yourself.')
+    await fireEvent.press(await screen.findByText('Networking'))
+    await fireEvent.press(screen.getByText('Done'))
+    await fireEvent.press(screen.getByText('Save'))
+    await waitFor(() => expect(api.updateProfile).toHaveBeenCalled())
+    expect(api.updateProfile.mock.calls[0][1]).toMatchObject({ intent_default: ['friendship', 'networking'] })
+  })
+
+  it('taking off the last offered intent of a mixed stored row sends an empty list, never the stored dating', async () => {
+    storedDating()
+    await render(<EditProfile />)
+    await screen.findByDisplayValue('Sam')
+    await openRow('open')
+    await fireEvent.press(within(await screen.findByTestId('matching-intents')).getByText('Friendship'))
+    await fireEvent.press(screen.getByText('Done'))
+    await fireEvent.press(screen.getByText('Save'))
+    await waitFor(() => expect(api.updateProfile).toHaveBeenCalled())
+    expect(api.updateProfile.mock.calls[0][1]).toMatchObject({ intent_default: [] })
+  })
+
+  it('a dating-only profile that picks Friendship sends exactly that', async () => {
+    api.getProfile.mockResolvedValue({ success: true, data: { name: 'Sam', interests: [], profile: { age: 28, location: 'Bengaluru', bio: 'Records.', goals: [], looking_for: [], intent_default: ['dating'] } } } as never)
+    await render(<EditProfile />)
+    await screen.findByDisplayValue('Sam')
+    await openRow('open')
+    await fireEvent.press(await screen.findByText('Friendship'))
+    await fireEvent.press(screen.getByText('Done'))
+    await fireEvent.press(screen.getByText('Save'))
+    await waitFor(() => expect(api.updateProfile).toHaveBeenCalled())
+    expect(api.updateProfile.mock.calls[0][1]).toMatchObject({ intent_default: ['friendship'] })
+  })
+
+  // Any save leaves the server holding what the screen shows (advisor, after the security review): a stored dating is
+  // cleared by the person's next save, whatever they edited. The special-category fields are never sent.
+  const bioOnlySave = async (intent_default: string[] | undefined) => {
+    api.getProfile.mockResolvedValue({
+      success: true,
+      data: { name: 'Sam', interests: [], profile: { age: 28, location: 'Bengaluru', bio: 'Records.', goals: [], looking_for: [], intent_default, gender: 'woman', orientations: ['queer'], interested_in: ['woman'], show_orientation: true } },
+    } as never)
+    await render(<EditProfile />)
+    await screen.findByDisplayValue('Sam')
+    await fireEvent.changeText(screen.getByDisplayValue('Records.'), 'Records and riso.')
+    await fireEvent.press(screen.getByText('Save'))
+    await waitFor(() => expect(api.updateProfile).toHaveBeenCalled())
+    const sent = api.updateProfile.mock.calls[0][1] as Record<string, unknown>
+    expect(sent).toMatchObject({ bio: 'Records and riso.' })
+    for (const key of ['gender', 'orientations', 'interested_in', 'show_orientation']) expect(sent).not.toHaveProperty(key)
+    return sent
+  }
+
+  it('a bio-only save of a stored Friendship and Dating sends Friendship, what the screen shows', async () => {
+    expect((await bioOnlySave(['friendship', 'dating'])).intent_default).toEqual(['friendship'])
+  })
+
+  it('a bio-only save of a stored dating alone sends an empty list', async () => {
+    expect((await bioOnlySave(['dating'])).intent_default).toEqual([])
+  })
+
+  it('a bio-only save of a stored answer with no dating sends no intent (control)', async () => {
+    expect(await bioOnlySave(['friendship'])).not.toHaveProperty('intent_default')
   })
 })
 

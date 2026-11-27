@@ -356,7 +356,6 @@ function RadioCards() {
 }
 
 const LOOKING = [
-  ['Dating', require('../../assets/onboarding/looking-dating.jpg')],
   ['Friendship', require('../../assets/onboarding/looking-friendship.jpg')],
   ['Networking', require('../../assets/onboarding/looking-networking.jpg')],
   ['Just here', require('../../assets/onboarding/looking-open.jpg')],
@@ -364,8 +363,8 @@ const LOOKING = [
 
 function LookingFor() {
   const [picked, setPicked] = useState<string[]>(['Friendship', 'Networking'])
-  const grid = (minor: boolean) =>
-    LOOKING.filter(([word]) => !(minor && word === 'Dating')).map(([word, art]) => {
+  const grid = () =>
+    LOOKING.map(([word, art]) => {
       const on = picked.includes(word)
       return (
         <View key={word} style={styles.half}>
@@ -373,14 +372,11 @@ function LookingFor() {
         </View>
       )
     })
-  const one = (props: object) => <LookingForCard label="Friendship" image={LOOKING[1][1]} onPress={noop} {...props} />
+  const one = (props: object) => <LookingForCard label="Friendship" image={LOOKING[0][1]} onPress={noop} {...props} />
   return (
-    <Section title="LookingForCard" note="112 pt photo tiles, multi-select · H.select · under 18 the Dating tile is not drawn">
-      <Cell label="live · the five" testID="ds-lookingfor-live" style={styles.grid}>
-        {grid(false)}
-      </Cell>
-      <Cell label="under 18 · four" testID="ds-lookingfor-minor" style={styles.grid}>
-        {grid(true)}
+    <Section title="LookingForCard" note="112 pt photo tiles, multi-select · H.select">
+      <Cell label="live · the three" testID="ds-lookingfor-live" style={styles.grid}>
+        {grid()}
       </Cell>
       {(
         [

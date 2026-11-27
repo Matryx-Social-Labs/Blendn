@@ -71,7 +71,7 @@ const LEAD_ORDER: Record<string, readonly Lead[]> = {
 const THINGS_IN_COMMON = new Set(['social', 'venue_night'])
 
 /** The shared intents, as the pill says them. `just_here` is never said (see `MatchCard.sharedIntents`). */
-const INTENT_WORD: Record<string, string> = { friendship: 'friends', friends: 'friends', networking: 'work', dating: 'dating' }
+const INTENT_WORD: Record<string, string> = { friendship: 'friends', friends: 'friends', networking: 'work' }
 
 function joinAnd(words: string[]): string {
   return words.length <= 1 ? (words[0] ?? '') : `${words.slice(0, -1).join(', ')} and ${words[words.length - 1]}`
@@ -143,9 +143,13 @@ export function contextLine(
   return event.title ? `In the room at ${event.title}` : null
 }
 
-/** Under the name: "Anonymous · 31" until they have shown you who they are; the sheet adds how long they have been here. */
+/**
+ * Under the name: "Anonymous" until they have shown you who they are, then "Shown to you · 31"; the sheet adds how long
+ * they have been here. No exact age before a reveal, whatever the deck sent (D-030: age plus city picks one person out
+ * across rooms). Every person sheet, the lens page and See as others draw this line, so this is the one gate.
+ */
 export function metaLine(shown: boolean, age: number | null | undefined, here?: string | null): string {
-  return [shown ? 'Shown to you' : 'Anonymous', age, here].filter((x) => x != null && x !== '').join(' · ')
+  return [shown ? 'Shown to you' : 'Anonymous', shown ? age : null, here].filter((x) => x != null && x !== '').join(' · ')
 }
 
 /** Past three hours the minute is not information, and a climbing counter reads as a meter (`timeHereLabel`'s cap). */

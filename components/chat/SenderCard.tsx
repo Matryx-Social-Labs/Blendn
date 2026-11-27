@@ -9,7 +9,6 @@ import { likeRefusal } from '../../lib/likeRefusal'
 import { shouldSendWave, waveRefusal, waveStateAfter, waveStatusFor, WAVE_SETTLE_MS, type WaveStatus } from '../../lib/waves'
 import { lensView, parseLens, type RoomLens } from '../../lib/roomLens'
 import { markSeed } from '../../lib/creatureSeed'
-import { attendeeFromMatch } from '../../lib/roomLive'
 import { showUserSafetyActions } from '../../lib/safetyUtils'
 import { PersonCard, type PersonState } from '../ds/PersonCard'
 import { ConnectSheet } from '../grid/ConnectSheet'
@@ -21,8 +20,8 @@ export type Sender = { id: string; name: string }
 /**
  * A message's sender, tapped (R1, ROUND3 D 5.1): the same PersonCard the Room
  * opens from a face, on `M.travel`, silently. What it knows comes from the
- * event's roster (the Room's own read, cached 30 s): their reason, age and
- * whether you liked them; somebody the roster doesn't list (they hid
+ * event's roster (the Room's own read, cached 30 s): their reason, their age
+ * once they are shown to you, and whether you liked them; somebody the roster doesn't list (they hid
  * themselves) gets the thin card, which never says why.
  *
  * Like and Wave are the Room's calls; a like that turns mutual opens the
@@ -92,7 +91,6 @@ export function SenderCard({
 
   const who = sender ?? shown
   if (!who) return null
-  const attendee = card ? attendeeFromMatch(card) : null
 
   // This card's own mutual first, then the deck's (one from before a restart).
   const mutualConversation = opened ?? card?.conversationId ?? null
@@ -146,14 +144,13 @@ export function SenderCard({
           // The creature their bubble draws: the one seed rule (`markSeed`).
           face: { kind: 'creature', pseudonym: markSeed(who.name, `${chatGroupId}:${who.id}`) },
           name: who.name,
-          age: attendee?.age,
           // P-A: their deck card through the room's lens (the sheet draws only what the deck sent for them).
           ...(card && lensPerson
             ? lensView(
                 lensPerson,
                 lens,
                 eventTitle ? { title: eventTitle } : null,
-                !!card.photo
+                card.revealed === true
               )
             : {}),
         }}

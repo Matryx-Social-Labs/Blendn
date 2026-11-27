@@ -170,8 +170,8 @@ $ node -e 'const s=require("fs").readFileSync("docs/STORE-LISTING.md","utf8").ma
 | organizers.blendn.app | 200 on 2026-11-25, `<title>` "Blend'n for organizers – …"; the organizer site, which links no price (seo tasks 03, 04) |
 
 **Left out on purpose:**
-- **Dating as a reason to be there.** Pending the owner (FACTS.md fact 20).
-- **Photo checks.** DM photos are not checked (trust lane).
+- **Dating as a reason to be there.** Removed for 1.0 (register D-002); the app no longer offers it (client/09).
+- **Photos in DMs.** Off at 1.0 (register D-024): the app sends none (client/10).
 - **Canada.** No Canadian city is live.
 - **Everything in "Do not do"** in the seo lane README.
 

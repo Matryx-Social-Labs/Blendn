@@ -201,9 +201,17 @@ describe('step 2 · the vibe, optional, and the consent on the button (board 02 
     await toVibe()
     expect(screen.queryByTestId('make-intent-0')).toBeNull()
     expect(screen.getByTestId('make-intent-friendship').props.accessibilityState).toMatchObject({ selected: true })
-    await fireEvent.press(screen.getByTestId('make-intent-dating'))
-    expect(screen.getByTestId('make-intent-dating').props.accessibilityState).toMatchObject({ selected: true })
+    await fireEvent.press(screen.getByTestId('make-intent-networking'))
+    expect(screen.getByTestId('make-intent-networking').props.accessibilityState).toMatchObject({ selected: true })
     expect(screen.getByTestId('make-intent-friendship').props.accessibilityState).toMatchObject({ selected: false })
+  })
+
+  it('"Here for" is Friendship or Networking: no Dating, no Both (D-002)', async () => {
+    await toVibe()
+    const chips = screen.getAllByTestId(/^make-intent-[a-z]+$/).map((c) => c.props.testID).filter((id) => id !== 'make-intent-wrap')
+    expect(chips).toEqual(['make-intent-friendship', 'make-intent-networking'])
+    expect(screen.queryByLabelText('Dating')).toBeNull()
+    expect(screen.queryByLabelText('Both')).toBeNull()
   })
 
   it('offers the server’s ideas as hashtags to tap: a tapped idea becomes a tag you can take off (board tags/01 A)', async () => {
@@ -318,7 +326,7 @@ describe('step 2 · the vibe, optional, and the consent on the button (board 02 
     await pick('Priya')
     await press('Next')
     await waitFor(() => screen.getByLabelText(S2))
-    await fireEvent.press(screen.getByLabelText('Dating'))
+    await fireEvent.press(screen.getByLabelText('Networking'))
     await waitFor(() => screen.getByLabelText('#runclub'))
     await fireEvent.press(screen.getByLabelText('#runclub'))
     await fireEvent.changeText(screen.getByTestId('make-tag-input'), 'late night')
@@ -330,7 +338,7 @@ describe('step 2 · the vibe, optional, and the consent on the button (board 02 
     await waitFor(() => expect(crews.create).toHaveBeenCalledTimes(1))
     expect(crews.create.mock.calls[0][0]).toEqual({
       name: 'Nebula',
-      intent: ['dating'],
+      intent: ['networking'],
       // As typed and tapped; the server normalises again and its spelling wins.
       tags: ['runclub', 'latenight'],
       openToSolo: true,
@@ -544,6 +552,24 @@ describe('a link that closes the sheet keeps what was typed (review LOW)', () =>
 
     await render(<NewCrewScreen />)
     expect(nameField().props.value).toBe('')
+  })
+
+  it('a draft kept from before 1.0 with Dating or Both picked opens on Friendship, and sends friendship (D-002)', async () => {
+    crews.create.mockResolvedValue({ success: true, data: { crewId: 'c1', chatGroupId: 'g1', invited: 1 } })
+    crews.crew.mockResolvedValue({ success: true, data: { crewId: 'c1', emblemSeed: 'real-seed' } as never })
+    for (const choice of ['dating', 'both']) {
+      crews.create.mockClear()
+      setDraft(crewDraftThread('u-me'), JSON.stringify({ name: 'Nebula', choice, tags: [], openToSolo: false, keepAnonymous: false, picked: ['u-priya'] }))
+      await render(<NewCrewScreen />)
+      await waitFor(() => expect(screen.getByRole('checkbox', { name: 'Ask Priya' }).props.accessibilityState?.checked).toBe(true))
+      await press('Next')
+      await waitFor(() => screen.getByLabelText(S2))
+      expect(screen.getByTestId('make-intent-friendship').props.accessibilityState).toMatchObject({ selected: true })
+      await press('Make Nebula · ask 1 friend')
+      await waitFor(() => expect(crews.create).toHaveBeenCalledTimes(1))
+      expect(crews.create.mock.calls[0][0]).toMatchObject({ intent: ['friendship'] })
+      await screen.unmount()
+    }
   })
 
   it('closed by the person, nothing is kept; and an empty sheet closed for a link keeps nothing either', async () => {

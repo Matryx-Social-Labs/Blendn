@@ -14,7 +14,7 @@ export interface OverlapLabelOut {
 
 export interface OverlapSource {
   overlaps?: readonly { kind?: string; text: string }[]
-  /** The shared subset only; `dating` only when the server checked both ways. */
+  /** The shared subset only. A stored `dating` is never said (register D-002). */
   sharedIntents?: readonly string[]
   /** Shared interest names, strongest first. */
   interests?: readonly string[]
@@ -24,12 +24,11 @@ export interface OverlapSource {
 
 /** The sentence an intent says on its own, and the label it wears. */
 export const INTENT_LINE: Record<string, string> = {
-  dating: 'Both open to dating',
   networking: 'Both here to network',
   friends: 'Both here to make friends',
 }
-const INTENT_LABEL: Record<string, string> = { dating: 'Dating', networking: 'Networking', friends: 'Friendship' }
-const INTENT_ORDER = ['dating', 'friends', 'networking'] as const
+const INTENT_LABEL: Record<string, string> = { networking: 'Networking', friends: 'Friendship' }
+const INTENT_ORDER = ['friends', 'networking'] as const
 
 /**
  * `line` is the server's strongest overlap (`overlaps[0]`); with none, the

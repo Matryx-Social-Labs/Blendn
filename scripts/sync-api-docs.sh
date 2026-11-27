@@ -37,7 +37,6 @@ DOCS=(
   SOCKET_EVENTS.md
   CHECKIN.md
   USER_JOURNEY.md
-  DESIGN_HANDOFF.md
   DESIGN_SYSTEM.md
   client-chat-moderation-guide.md
 )
