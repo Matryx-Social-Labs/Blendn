@@ -239,6 +239,16 @@ it('closed by the person it says "closed"; closed for a link it says "abandoned"
   expect(outcomes).toEqual(['closed', 'abandoned'])
 })
 
+it('saved as Named, it tells the waiting check-in "revealed", so a failed reveal before it is not reported (SCRUM-1199)', async () => {
+  const outcomes: string[] = []
+  void untilIntentAnswered().then((o) => outcomes.push(o))
+  await render(<EventPreferences />)
+  await fireEvent.press(await screen.findByRole('checkbox', { name: /^Networking/ }))
+  await fireEvent.press(await screen.findByRole('radio', { name: /^Named/ }))
+  await fireEvent.press(screen.getByRole('button', { name: 'Save' }))
+  await waitFor(() => expect(outcomes).toEqual(['revealed']))
+})
+
 it('a newer wait supersedes an older one as abandoned: the older check-in never pushes its room', async () => {
   const first = untilIntentAnswered()
   void untilIntentAnswered()

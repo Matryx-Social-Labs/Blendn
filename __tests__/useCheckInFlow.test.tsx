@@ -32,6 +32,8 @@ jest.mock('../lib/useAuth', () => ({ useAuth: () => ({ user: { id: 'u1', name: '
 jest.mock('../lib/apiClient', () => ({ apiClient: { setMatchPreferences: jest.fn(async () => ({ success: true })) } }))
 jest.mock('../lib/locationFix', () => ({ warmLocationFix: jest.fn(async () => {}), getCurrentLocation: jest.fn(async () => ({ latitude: 12.97, longitude: 77.59, accuracy: 8 })) }))
 jest.mock('../lib/roomVisibilityStorage', () => ({}))
+const mockShowToast = jest.fn()
+jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: mockShowToast }) }))
 jest.mock('../lib/checkIn', () => ({
   ...jest.requireActual('../lib/checkIn'),
   submitCheckIn: jest.fn(),
@@ -217,7 +219,8 @@ describe('a check-in', () => {
     expect(apiClient.setMatchPreferences).toHaveBeenCalledWith('e1', { revealed: true })
     // The question waits for the tray to leave (iOS drops a push made while it is).
     await advance(1000)
-    expect(router.push).toHaveBeenCalledWith(askIntentRoute('e1'))
+    // Shown: the question's own reveal block says Named, so saving it never takes the reveal back.
+    expect(router.push).toHaveBeenCalledWith(askIntentRoute('e1', true))
     expect(props.onEnterRoom).not.toHaveBeenCalled()
     await act(async () => intentAnswered())
     await done
@@ -419,5 +422,96 @@ describe('every door is this flow', () => {
     expect(src).not.toContain('submitCheckIn(')
     // The peek's Check in item (the frame's label) is the pass's hold: it only ever opens the overlay.
     expect(src).toMatch(/action === 'checkIn'\) return openBlendn\(\)/)
+  })
+})
+
+/**
+ * "Yes, show my name" that does not land (SCRUM-1199). `apiClient` answers a 429 or a refusal with
+ * `{ success: false }`, never a throw: the person is told, and nothing on screen says they are shown.
+ */
+describe('a reveal the server did not take', () => {
+  const REVEAL_FAILED = 'Couldn’t show your name. Try again from the room.'
+  const put = apiClient.setMatchPreferences as jest.Mock
+  beforeEach(() => {
+    mockShowToast.mockClear()
+    put.mockReset().mockResolvedValue({ success: true })
+    router.push.mockClear()
+    offer.mockResolvedValue({ title: 'Show who you are?', message: 'm', confirm: 'Show me', cancel: 'Not now' })
+  })
+
+  /** Check in, let the pour clear, and say yes to the reveal offer. */
+  async function sayYes(o: Partial<Extract<CheckInOutcome, { kind: 'checkedIn' }>>) {
+    const { done } = await checkIn(fresh({ revealSuggestion: true, ...o }))
+    await advance(ASK_AT)
+    await advance(DURATION.base)
+    const [, , buttons] = props.showTray.mock.calls[0]
+    await act(async () => buttons!.find((b) => b.label === 'Show me')!.onPress())
+    return done
+  }
+
+  it('says so, with the error haptic, before the room opens', async () => {
+    put.mockResolvedValue({ success: false, error: 'Too many requests' })
+    const done = await sayYes({})
+    await done
+    expect(mockShowToast).toHaveBeenCalledTimes(1)
+    expect(mockShowToast).toHaveBeenCalledWith(REVEAL_FAILED, 'error', { haptic: 'error' })
+    expect(mockShowToast.mock.invocationCallOrder[0]).toBeLessThan(props.onEnterRoom.mock.invocationCallOrder[0])
+  })
+
+  it('a request that throws (offline) is the same failure', async () => {
+    put.mockRejectedValue(new Error('Network request failed'))
+    await (await sayYes({}))
+    expect(mockShowToast).toHaveBeenCalledWith(REVEAL_FAILED, 'error', { haptic: 'error' })
+    expect(props.onEnterRoom).toHaveBeenCalledTimes(1)
+  })
+
+  it('a reveal that landed says nothing', async () => {
+    await (await sayYes({}))
+    expect(mockShowToast).not.toHaveBeenCalled()
+  })
+
+  it('the room waits for the answer, so its first read never races the write', async () => {
+    let answer!: (r: { success: boolean }) => void
+    put.mockReturnValue(new Promise((resolve) => (answer = resolve)))
+    const done = await sayYes({})
+    await advance(1000)
+    expect(props.onEnterRoom).not.toHaveBeenCalled()
+    await act(async () => answer({ success: true }))
+    await done
+    expect(props.onEnterRoom).toHaveBeenCalledTimes(1)
+  })
+
+  it('with the intent question to come: not under its full-screen modal; the question says Anonymous, and the toast waits for the room', async () => {
+    put.mockResolvedValue({ success: false })
+    const done = await sayYes({ askIntent: true })
+    await advance(1000)
+    // The question opens on the truth: not shown.
+    expect(router.push).toHaveBeenCalledWith(askIntentRoute('e1', false))
+    // Raised now it would draw under the modal on iOS (Toast is a root view).
+    expect(mockShowToast).not.toHaveBeenCalled()
+    await act(async () => intentAnswered('closed'))
+    await done
+    expect(mockShowToast).toHaveBeenCalledWith(REVEAL_FAILED, 'error', { haptic: 'error' })
+    expect(mockShowToast.mock.invocationCallOrder[0]).toBeLessThan(props.onEnterRoom.mock.invocationCallOrder[0])
+  })
+
+  it('…unless they chose Named on the question and it saved: then it would be false', async () => {
+    put.mockResolvedValue({ success: false })
+    const done = await sayYes({ askIntent: true })
+    await advance(1000)
+    await act(async () => intentAnswered('revealed'))
+    await done
+    expect(mockShowToast).not.toHaveBeenCalled()
+    expect(props.onEnterRoom).toHaveBeenCalledTimes(1)
+  })
+
+  it('closed for a link, the room never opens: still told, once', async () => {
+    put.mockResolvedValue({ success: false })
+    const done = await sayYes({ askIntent: true })
+    await advance(1000)
+    await act(async () => intentAnswered('abandoned'))
+    expect(await done).toBe('checkedIn')
+    expect(mockShowToast).toHaveBeenCalledTimes(1)
+    expect(props.onEnterRoom).not.toHaveBeenCalled()
   })
 })

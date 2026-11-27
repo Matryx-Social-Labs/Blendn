@@ -95,6 +95,8 @@ describe('submitCheckIn', () => {
       pathname: '/event-preferences/[eventId]',
       params: { eventId: 'e1', revealed: '0', askIntent: '1' },
     })
+    // After a "yes" that landed, it opens on Named: its save sends `revealed`, so '0' there would take the reveal back (SCRUM-1199).
+    expect(askIntentRoute('e1', true)).toMatchObject({ params: { revealed: '1' } })
   })
 
   it('names a refusal by its code and offers a map only when out of range', async () => {
