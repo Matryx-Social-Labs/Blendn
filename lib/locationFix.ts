@@ -2,6 +2,7 @@ import * as Location from 'expo-location'
 import { Linking, Platform } from 'react-native'
 import type { ButtonKind } from '../components/ds/Button'
 import type { IconName } from '../components/ui/Icon'
+import { DOOR_CODE_OFFER } from './checkInRefusal'
 import { markCheckIn, type FixSource } from './checkInTiming'
 import { validAccuracy } from './geo'
 import { H } from './haptics'
@@ -216,7 +217,35 @@ export type CheckInTrays = {
   onRetry?: () => void
   /** Whose words the trays use: a check-in's (the default) or a Go Live's. */
   purpose?: 'checkIn' | 'goLive'
+  /**
+   * The event door's way in when GPS cannot place you (gate 13, design/02a SPEC §4): on a weak fix, or a timed-out one
+   * with a fallback fix, the tray offers "Enter door code" while the event says the code is live, and `enter` takes the
+   * fix the code is sent with (the server judges it: within 1 km, accuracy up to 1000 m).
+   */
+  doorCode?: { available: () => Promise<boolean>; enter: (fix: CheckInLocation) => void }
 }
+
+/** How long the door-code checks may add to a failed fix: the availability read, and the fallback fix after a timeout. */
+const DOOR_CODE_ASK_MS = 3_000
+/** The vaguest fix the server takes beside a code (admin `lib/entry-code-gate.ts`); without an accuracy it answers "too far". */
+const DOOR_CODE_MAX_ACCURACY_M = 1_000
+
+/**
+ * Whether to offer the code with `fix`: one the server can judge (a known accuracy within its ceiling), and the event
+ * says the code is live, answered in time. A failed read is a no: today's tray.
+ */
+const codeOffered = (doorCode: CheckInTrays['doorCode'], fix: CheckInLocation): Promise<boolean> =>
+  doorCode && fix.accuracy !== null && fix.accuracy <= DOOR_CODE_MAX_ACCURACY_M
+    ? withDeadline(doorCode.available(), DOOR_CODE_ASK_MS).catch(() => false)
+    : Promise.resolve(false)
+
+/** The fix as the request sends it: accuracy as measured (null when unknown) and the OS's mocked flag (gate 13). */
+const asCheckInLocation = (fix: Location.LocationObject): CheckInLocation => ({
+  latitude: fix.coords.latitude,
+  longitude: fix.coords.longitude,
+  accuracy: validAccuracy(fix.coords.accuracy),
+  mocked: fix.mocked,
+})
 
 /**
  * Precise location switched off: every fix is kilometres wide, so "move
@@ -241,6 +270,8 @@ export type CheckInLocation = {
   latitude: number
   longitude: number
   accuracy: number | null
+  /** The OS says the fix is simulated (expo-location: Android `isFromMockProvider` only; undefined on iOS); sent beside a door code. */
+  mocked?: boolean
 }
 
 /**
@@ -252,6 +283,7 @@ export async function getCurrentLocation({
   maxAccuracyM = CHECK_IN_MAX_ACCURACY_M,
   onRetry,
   purpose = 'checkIn',
+  doorCode,
 }: CheckInTrays): Promise<CheckInLocation | null> {
   const settingsButtons: TrayButton[] = [
     { label: 'Not now', kind: 'tertiary', onPress: closeTray },
@@ -266,19 +298,34 @@ export async function getCurrentLocation({
     },
   ]
   // "Try again" resumes what wanted the fix (Flow 4 Tonight #25–#26); without one, it asks for a fix again.
+  const retry = () => {
+    closeTray()
+    if (onRetry) onRetry()
+    else getCurrentLocation({ showTray, closeTray, maxAccuracyM, purpose, doorCode }).catch(() => {})
+  }
   const retryButtons: TrayButton[] = [
     { label: 'Cancel', kind: 'tertiary', onPress: closeTray },
-    {
-      label: 'Try again',
-      variant: 'primary',
-      kind: 'primary',
-      onPress: () => {
-        closeTray()
-        if (onRetry) onRetry()
-        else getCurrentLocation({ showTray, closeTray, maxAccuracyM, purpose }).catch(() => {})
-      },
-    },
+    { label: 'Try again', variant: 'primary', kind: 'primary', onPress: retry },
   ]
+  /** gA-tray: "Enter door code" (lit) above "Try GPS again" (text); the code goes with `fix`. */
+  const offerDoorCode = (fix: CheckInLocation) =>
+    showTray(
+      DOOR_CODE_OFFER.title,
+      DOOR_CODE_OFFER.message,
+      [
+        { label: 'Try GPS again', kind: 'tertiary', onPress: retry },
+        {
+          label: 'Enter door code',
+          variant: 'primary',
+          kind: 'lit',
+          onPress: () => {
+            closeTray()
+            doorCode?.enter(fix)
+          },
+        },
+      ],
+      { icon: 'radar' }
+    )
   /*
    * One deadline for the whole ask, started before the first native read (SCRUM-906). The reads shared Expo's single
    * native queue with every other module, and a blocked queue (a notification-permission read wedged on an iOS 27 sim)
@@ -348,43 +395,49 @@ export async function getCurrentLocation({
     const accuracy = validAccuracy(location.coords.accuracy) ?? 999
     if (accuracy > maxAccuracyM) {
       Logger.warn('events', 'location:lowAccuracy', { accuracy })
+      const fix = asCheckInLocation(location)
+      if (await codeOffered(doorCode, fix)) {
+        offerDoorCode(fix)
+        return null
+      }
       showTray('GPS signal is weak', `Accuracy is ${Math.round(accuracy)} m. Step away from walls and try again.`, retryButtons, { icon: 'radar' })
       return null
     }
 
-    return {
-      latitude: location.coords.latitude,
-      longitude: location.coords.longitude,
-      /*
-       * The number the server has been asking for and never receiving.
-       *
-       * It is read six lines above to refuse a weak fix, and was then dropped
-       * at this return — so `deviceInfo.gpsAccuracy` was `undefined` on every
-       * check-in the app has ever sent, and four separate server mechanisms
-       * that read it saw nothing:
-       *
-       *   - `MAX_GPS_ACCURACY_METERS` (150m) — unreachable, so the ceiling is
-       *     whatever this file happens to enforce
-       *   - `evaluateCheckIn`'s allowance — every fix judged as the assumed
-       *     35m rather than as itself
-       *   - `check_in_refusals.accuracy_metres` — the column that exists to
-       *     tell a wrong pin from bad phones. Measured on staging: **zero**
-       *     rows written by the API carry one
-       *   - `presence_sessions.last_accuracy` — 37 sessions, none with a value
-       *
-       * `accuracy` is nullable on iOS and Android both, so it is passed
-       * through as-is rather than coerced; `accuracyAllowance` already treats
-       * null as "no information" and applies the assumed value.
-       */
-      accuracy: validAccuracy(location.coords.accuracy),
-    }
+    /*
+     * The accuracy goes with the fix (`asCheckInLocation`): the number the server has been asking for and never receiving.
+     *
+     * It is read six lines above to refuse a weak fix, and was then dropped
+     * at this return — so `deviceInfo.gpsAccuracy` was `undefined` on every
+     * check-in the app has ever sent, and four separate server mechanisms
+     * that read it saw nothing:
+     *
+     *   - `MAX_GPS_ACCURACY_METERS` (150m) — unreachable, so the ceiling is
+     *     whatever this file happens to enforce
+     *   - `evaluateCheckIn`'s allowance — every fix judged as the assumed
+     *     35m rather than as itself
+     *   - `check_in_refusals.accuracy_metres` — the column that exists to
+     *     tell a wrong pin from bad phones. Measured on staging: **zero**
+     *     rows written by the API carry one
+     *   - `presence_sessions.last_accuracy` — 37 sessions, none with a value
+     *
+     * `accuracy` is nullable on iOS and Android both, so it is passed
+     * through as-is rather than coerced; `accuracyAllowance` already treats
+     * null as "no information" and applies the assumed value.
+     */
+    return asCheckInLocation(location)
   } catch (error) {
     Logger.error('events', 'location:getCurrentLocation:error', { error: error as any })
 
     // Handle specific location errors for production
     const errorCode = (error as any)?.code
     if (errorCode === 'E_LOCATION_TIMEOUT') {
-      showTray('Location timed out', `We couldn’t get a fix in ${LOCATION_FIX_TIMEOUT_MS / 1000} seconds.`, retryButtons, { icon: 'hourglass' })
+      // SPEC §4: a timed-out fix offers the code when a fallback one exists (the phone's last, else a Balanced ask).
+      // ponytail: not aborted if the screen goes; DOOR_CODE_ASK_MS bounds it.
+      const rough = doorCode ? await roughFix(DOOR_CODE_ASK_MS).catch(() => null) : null
+      const fallback = rough ? asCheckInLocation(rough) : null
+      if (fallback && (await codeOffered(doorCode, fallback))) offerDoorCode(fallback)
+      else showTray('Location timed out', `We couldn’t get a fix in ${LOCATION_FIX_TIMEOUT_MS / 1000} seconds.`, retryButtons, { icon: 'hourglass' })
     } else if (errorCode === 'E_LOCATION_UNAVAILABLE') {
       showTray('Location unavailable', 'Location services are temporarily unavailable. Try again in a moment.', retryButtons, { icon: 'map-pin-off' })
     } else {

@@ -3,8 +3,8 @@ import { useEffect, useRef, useState } from 'react'
 import { apiClient } from './apiClient'
 import { afterSheetDismissed } from './sheetDismissed'
 import { myMainPhoto } from './myPhoto'
-import { askIntentRoute, revealOffer, submitCheckIn, untilIntentAnswered, type CheckInOutcome } from './checkIn'
-import { isExpectedRefusal, type CheckInRefusal } from './checkInRefusal'
+import { askIntentRoute, markArrival, revealOffer, submitCheckIn, untilIntentAnswered, type CheckInOutcome } from './checkIn'
+import { CHECK_IN_CODES, isDoorCodeRefusal, isExpectedRefusal, type CheckInRefusal } from './checkInRefusal'
 import { markCheckIn } from './checkInTiming'
 import { H } from './haptics'
 import { getCurrentLocation as getLocationFix, warmLocationFix, type CheckInLocation, type ShowTray, type TrayButton } from './locationFix'
@@ -31,6 +31,25 @@ import { useLatest } from './useLatest'
  */
 
 export type CheckInFlowResult = 'checkedIn' | 'refused' | 'failed'
+
+/** A code is six characters (`ABCDEFGHJKLMNPQRSTUVWXYZ23456789`): fewer is answered here, never sent. */
+export const DOOR_CODE_LENGTH = 6
+const SHORT_CODE = 'Enter all six characters'
+
+/** The door-code sheet while it is open (gate 13, design/02a guest A): its last answer, whether entry is locked, and what its field and buttons do. */
+export type DoorCodeSheetModel = {
+  error?: string
+  locked: boolean
+  /** Counts the answers, so the same sentence twice is said twice. */
+  tries: number
+  /** The code to show on (re)opening: what was sent, when the sheet comes back with its answer after the timeout tray. */
+  code?: string
+  busy: boolean
+  submit: (code: string) => void
+  clearError: () => void
+  tryGps: () => void
+  close: () => void
+}
 
 /** A check-in that left the user inside: a fresh one, or one they already had. */
 export type CheckedInOutcome =
@@ -123,7 +142,8 @@ export function useCheckInFlow({
   }
 
   // "Try again" on a weak or timed-out fix runs the check-in again; a fix alone went nowhere (step 5 review, H4).
-  const getCurrentLocation = () => getLocationFix({ showTray, closeTray: closeTrayAndRelease, onRetry: () => void start() })
+  const getCurrentLocation = () =>
+    getLocationFix({ showTray, closeTray: closeTrayAndRelease, onRetry: () => void start(), doorCode: { available: doorCodeAvailable, enter: openDoorCode } })
 
   /**
    * A refusal sheet's actions (Flow 4 Tonight #16–#22): Open Maps (lit) and
@@ -132,6 +152,14 @@ export function useCheckInFlow({
    */
   const refusalButtons = (refusal: CheckInRefusal, errorCode: string | undefined): TrayButton[] => {
     const close = { label: 'Close', onPress: closeTray }
+    if (refusal.offerDoorCode) {
+      // gA-tray: the code (lit) above "Try GPS again" (text). The code goes with the fix the server just judged.
+      const fix = lastFix.current
+      return [
+        { label: 'Try GPS again', kind: 'tertiary', onPress: () => (closeTray(), void start()) },
+        { label: 'Enter door code', variant: 'primary', kind: 'lit', onPress: () => (closeTray(), fix && openDoorCode(fix)) },
+      ]
+    }
     if (refusal.fix) {
       // Finish profile, Add your age (Flow 15 15.22): the fix is the primary, "Not now" the text beside it. Both are Edit profile.
       return [
@@ -170,21 +198,38 @@ export function useCheckInFlow({
     return [{ ...close, kind: 'secondary' }]
   }
 
+  /**
+   * The door code's sheet (gate 13): open with the fix the code goes with, from the tray that offered it. The last fix
+   * sent is kept for the server's offer (`DOOR_CODE_OFFERED`), which comes after the request.
+   */
+  const [door, setDoor] = useState<{ fix: CheckInLocation; error?: string; locked: boolean; tries: number; code?: string } | null>(null)
+  const lastFix = useRef<CheckInLocation | null>(null)
+  const openDoorCode = (fix: CheckInLocation) => setDoor({ fix, locked: false, tries: 0 })
+  /** `doorCode.available` from the event (the detail route; cached for the page): never computed here. */
+  const doorCodeAvailable = () => apiClient.getEvent(eventId).then((r) => r.success && r.data?.doorCode?.available === true)
+  const submitDoorCode = (typed: string) => {
+    if (!door || door.locked) return
+    const code = typed.replace(/[^0-9a-z]/gi, '').toUpperCase()
+    if (code.length < DOOR_CODE_LENGTH) return setDoor({ ...door, error: SHORT_CODE, tries: door.tries + 1 })
+    void start({ fix: door.fix, code })
+  }
+
   /** One check-in at a time: a second hold (or activation) while one runs is ignored, not sent. */
   const inFlight = useRef(false)
 
   /** Run the check-in: straight to the position and the request, no tray first. */
-  const start = async (): Promise<CheckInFlowResult> => {
+  const start = async (withCode?: { fix: CheckInLocation; code: string }): Promise<CheckInFlowResult> => {
     if (inFlight.current) return 'failed'
     inFlight.current = true
     try {
-      return await run()
+      return await run(withCode)
     } finally {
       inFlight.current = false
     }
   }
 
-  const run = async (): Promise<CheckInFlowResult> => {
+  /** `withCode`: the door-code sheet's Check in, with the fix it was opened with; otherwise a GPS check-in from a new fix. */
+  const run = async (withCode?: { fix: CheckInLocation; code: string }): Promise<CheckInFlowResult> => {
     trayHolds.current = false
     let enteringRoom = false
     setCheckingIn(true)
@@ -199,8 +244,7 @@ export function useCheckInFlow({
         return 'failed'
       }
 
-      // Get current location
-      const location = await getCurrentLocation()
+      const location = withCode?.fix ?? (await getCurrentLocation())
       if (!location) {
         Logger.warn('events', 'checkin:location:unavailable')
         // Its tray is up: the hold stays full until it closes.
@@ -210,9 +254,29 @@ export function useCheckInFlow({
 
       onLocated?.(location)
 
+      lastFix.current = location
       markCheckIn('request')
-      const outcome = await submitCheckIn(eventId, location, withCrew.current ?? undefined)
+      const outcome = withCode
+        ? await submitCheckIn(eventId, location, withCrew.current ?? undefined, withCode.code)
+        : await submitCheckIn(eventId, location, withCrew.current ?? undefined)
       markCheckIn('response', { ok: outcome.kind === 'checkedIn' ? 1 : 0 })
+      if (withCode && outcome.kind === 'refused' && isDoorCodeRefusal(outcome.errorCode)) {
+        // The code's own answer stays in its sheet, in the server's words, with what was typed (gA-wrong, gA-locked, gA-far).
+        Logger.info('events', 'checkin:doorCode:refused', { code: outcome.errorCode })
+        H.error()
+        // Reopened when a Retry from the timeout tray sent it: the sheet had gone for that tray.
+        setDoor((d) => ({
+          fix: withCode.fix,
+          code: withCode.code,
+          error: outcome.refusal.message,
+          locked: outcome.errorCode === CHECK_IN_CODES.DOOR_CODE_LOCKED,
+          tries: (d?.tries ?? 0) + 1,
+        }))
+        return 'refused'
+      }
+      // Anything else (in, a timeout, the event's own no) is the usual door's: the sheet goes first.
+      if (withCode) setDoor(null)
+      if (outcome.kind === 'checkedIn') markArrival(eventId, !!withCode)
 
       if (outcome.kind === 'timeout') {
         Logger.warn('events', 'checkin:timeout')
@@ -228,7 +292,7 @@ export function useCheckInFlow({
               kind: 'primary',
               onPress: () => {
                 closeTray()
-                start()
+                start(withCode)
               },
             },
           ],
@@ -321,12 +385,13 @@ export function useCheckInFlow({
     } catch (error) {
       Logger.error('events', 'checkin:exception', { error: error as any })
       H.error({ blocking: true })
+      setDoor(null)
       showTray(
         'Check-in failed',
         'Something went wrong on our side.',
         [
           { label: 'Close', kind: 'tertiary', onPress: closeTray },
-          { label: 'Try again', variant: 'primary', kind: 'primary', onPress: () => (closeTray(), void start()) },
+          { label: 'Try again', variant: 'primary', kind: 'primary', onPress: () => (closeTray(), void start(withCode)) },
         ],
         { icon: 'cloud-off' }
       )
@@ -339,5 +404,34 @@ export function useCheckInFlow({
     }
   }
 
-  return { checkingIn, youreIn: arrival !== null, asks: arrival?.asks ?? false, pours: pouring ? pours : 0, pourDone, dismissTray, start, getCurrentLocation }
+  const doorSheet: DoorCodeSheetModel | null = door && {
+    error: door.error,
+    locked: door.locked,
+    tries: door.tries,
+    code: door.code,
+    busy: checkingIn,
+    submit: submitDoorCode,
+    clearError: () => setDoor((d) => d && (d.locked ? d : { ...d, error: undefined })),
+    // Not while the code is on its way: its answer is still to come back to this sheet.
+    tryGps: () => {
+      if (inFlight.current) return
+      setDoor(null)
+      void start()
+    },
+    close: () => {
+      if (!inFlight.current) setDoor(null)
+    },
+  }
+
+  return {
+    checkingIn,
+    youreIn: arrival !== null,
+    asks: arrival?.asks ?? false,
+    pours: pouring ? pours : 0,
+    pourDone,
+    dismissTray,
+    start: () => start(),
+    door: doorSheet,
+    getCurrentLocation,
+  }
 }

@@ -1,4 +1,5 @@
 import { barHeight, barTop } from '../../lib/barGeometry'
+import { cameByDoorCode } from '../../lib/checkIn'
 import { handRoomPerson } from '../../lib/roomPersonHandoff'
 import { CHECK_OUT_CONSEQUENCE, CHECK_OUT_LABEL, CHECKING_OUT_LABEL, STAY_LABEL, checkOutCaption, checkOutQuestion } from '../../lib/switchCopy'
 import { router } from 'expo-router'
@@ -74,6 +75,7 @@ import { Toast, type ToastKind } from '../ds/Toast'
 import { ConnectSheet } from '../grid/ConnectSheet'
 import { Material } from '../ui/Material'
 import { CheckInTray, useCheckInTray } from './CheckInTray'
+import { DoorCodeSheet, doorCodeEventLine } from './DoorCodeSheet'
 import { CrewsFoot, CrewsHead, PeopleCrewStrip, RoomCrewCard } from './RoomCrews'
 import { useWithCrew, WithCrewChip } from '../crews/WithCrewChip'
 import { personFace } from '../../lib/personFace'
@@ -1095,6 +1097,7 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
                   hereCount={room.hereCount}
                   others={youPile}
                   state={visibility}
+                  hostSees={!!eventId && cameByDoorCode(eventId)}
                   onChange={() => {
                     if (visibility === 'hidden') return router.push('/settings')
                     markCoachUsed('room_reveal')
@@ -1385,6 +1388,7 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
       ) : null}
 
       <CheckInTray tray={tray} onClose={checkIn.dismissTray} testID="blendn-tray" />
+      <DoorCodeSheet door={checkIn.door} eventLine={doorCodeEventLine(insideEvent?.title, insideEvent?.venue)} testID="blendn-door-code" />
 
       <Sheet
         visible={confirmingOut}

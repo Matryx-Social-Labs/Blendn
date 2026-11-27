@@ -47,6 +47,31 @@ export const CHECK_IN_CODES = {
   EVENT_FULL: "EVENT_FULL",
   /** The `reasonCode` of the door's 404 for an event whose organiser was suspended: a refusal by design, not a failure. */
   ORGANISER_SUSPENDED,
+  /** The `reasonCode` of a refusal the host's door code can fix (gate 13): offer "Enter door code". The server decides. */
+  DOOR_CODE_OFFERED: "DOOR_CODE_OFFERED",
+  DOOR_CODE_PAUSED: "DOOR_CODE_PAUSED",
+  DOOR_CODE_LOCKED: "DOOR_CODE_LOCKED",
+  DOOR_CODE_FAR: "DOOR_CODE_FAR",
+  DOOR_CODE_CHANGED: "DOOR_CODE_CHANGED",
+  DOOR_CODE_WRONG: "DOOR_CODE_WRONG",
+  DOOR_CODE_UNAVAILABLE: "DOOR_CODE_UNAVAILABLE",
+} as const
+
+/** The answers to a typed door code: said in the code's sheet, under the field, in the server's words, never as a tray. */
+const DOOR_CODE_ANSWERS: readonly string[] = [
+  CHECK_IN_CODES.DOOR_CODE_PAUSED,
+  CHECK_IN_CODES.DOOR_CODE_LOCKED,
+  CHECK_IN_CODES.DOOR_CODE_FAR,
+  CHECK_IN_CODES.DOOR_CODE_CHANGED,
+  CHECK_IN_CODES.DOOR_CODE_WRONG,
+  CHECK_IN_CODES.DOOR_CODE_UNAVAILABLE,
+]
+export const isDoorCodeRefusal = (code: string | undefined): boolean => !!code && DOOR_CODE_ANSWERS.includes(code)
+
+/** The refusal tray that offers the code (design/02a gA-tray, COPY.md): one tray for a weak fix and a near miss alike. */
+export const DOOR_CODE_OFFER = {
+  title: "GPS can’t place you",
+  message: "Indoors, GPS can be weak. Ask the host for the door code. It’s on their screen at the entrance.",
 } as const
 
 /**
@@ -77,6 +102,8 @@ export type CheckInRefusal = {
    * "Not now", and the refusal plays no haptic of its own, the fix does.
    */
   fix?: { kind: 'finish_profile' | 'add_age'; label: string }
+  /** The host's door code can fix it (`DOOR_CODE_OFFERED`): the tray offers "Enter door code" and "Try GPS again". */
+  offerDoorCode?: boolean
 }
 
 /** The server's sentence for an age that is not on file ("… Add your age to your profile to check in."), until it sends `AGE_UNKNOWN`. */
@@ -108,6 +135,17 @@ export function checkInRefusal(
   const message = serverMessage?.trim() || GENERIC
 
   switch (errorCode) {
+    case CHECK_IN_CODES.DOOR_CODE_OFFERED:
+      // The server's sentence ("about 45m outside", "GPS signal is too weak") is not shown: the tray names the way in instead.
+      return { ...DOOR_CODE_OFFER, offerDirections: false, icon: "radar", offerDoorCode: true }
+    case CHECK_IN_CODES.DOOR_CODE_PAUSED:
+    case CHECK_IN_CODES.DOOR_CODE_LOCKED:
+    case CHECK_IN_CODES.DOOR_CODE_FAR:
+    case CHECK_IN_CODES.DOOR_CODE_CHANGED:
+    case CHECK_IN_CODES.DOOR_CODE_WRONG:
+    case CHECK_IN_CODES.DOOR_CODE_UNAVAILABLE:
+      // Said under the code's field (`isDoorCodeRefusal`), the sentence alone; titled as its sheet is, should one reach a tray.
+      return { title: "Door code", message, offerDirections: false, icon: "radar" }
     case CHECK_IN_CODES.OUT_OF_RANGE:
       return {
         title: "Not quite there yet",

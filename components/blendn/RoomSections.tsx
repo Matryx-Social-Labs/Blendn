@@ -59,6 +59,8 @@ const SEEN_AS: Record<Visibility, string | null> = {
   hidden: 'You’re not listed here. Show online status is off.',
 }
 const NOBODY_SEES = 'Nobody here sees your name or photo.'
+/** A door-code arrival (gate 13, design/02a gA-ok by the advisor's pick): the host's Door lists you by this name. */
+const HOST_SEES = 'The host sees this name, not your real one.'
 /** H-1: your face in the TimeRing, as the room's hero drew it before C1 (owner, 2026-11-11). */
 const YOU_RING = 96
 const YOU_RING_FACE = 64
@@ -91,6 +93,7 @@ export const RoomYouCard = memo(function RoomYouCard({
   now,
   state,
   onChange,
+  hostSees = false,
   testID = 'room-you',
 }: {
   /** Your face as the room shows it (your creature until you show yourself). */
@@ -107,6 +110,8 @@ export const RoomYouCard = memo(function RoomYouCard({
   now?: number
   state: Visibility
   onChange: () => void
+  /** You came in with the host's door code: the line adds that the host sees this name (anonymous only). */
+  hostSees?: boolean
   testID?: string
 }) {
   const bold = useBoldText()
@@ -115,6 +120,7 @@ export const RoomYouCard = memo(function RoomYouCard({
   const here = othersHereLine(hereCount)
   const hidden = state === 'hidden'
   const seen = SEEN_AS[state]
+  const host = hostSees && !seen ? ` ${HOST_SEES}` : ''
   return (
     <View testID={testID} style={styles.you}>
       <RadialWash layers={YOU_WASH} style={StyleSheet.absoluteFill} />
@@ -140,11 +146,12 @@ export const RoomYouCard = memo(function RoomYouCard({
       </View>
       <View style={styles.youSeen}>
         {hidden ? null : <Avatar size={YOU_ROOM_FACE} {...face} />}
-        <View style={styles.youText} accessible accessibilityLabel={seen ?? `Others here see you as ${name}. ${NOBODY_SEES}`}>
+        <View style={styles.youText} accessible accessibilityLabel={seen ?? `Others here see you as ${name}. ${NOBODY_SEES}${host}`}>
           <Text maxFontSizeMultiplier={MAX_FONT_SCALE.note} style={[font('note', bold), styles.secondary]}>
             {seen ?? (
               <>
                 Others here see you as <Text style={[font('note', bold, FONT_FAMILY.brand[500]), styles.ink]}>{name}</Text>
+                {host ? `.${host}` : null}
               </>
             )}
           </Text>
