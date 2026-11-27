@@ -67,7 +67,7 @@ $ node -e 'const s=require("fs").readFileSync("docs/STORE-LISTING.md","utf8").ma
 113 / 170
 ```
 
-**Description** (limit 4,000): paste [the shared description](#description-both-stores).
+**Description** (limit 4,000): paste [the iOS description](#description-ios). Not the Play one.
 
 | Field | Value |
 |---|---|
@@ -94,18 +94,89 @@ $ node -e 'const s=require("fs").readFileSync("docs/STORE-LISTING.md","utf8").ma
 30 / 30
 ```
 
-**Short description** (limit 80). It's the site's headline. Google doesn't allow "free" in this field.
+**Short description** (limit 80). Play indexes it, so it names the kinds of night where the site's headline says "the event". Google doesn't allow "free" in this field.
 
 ```text play-short
-Meet the people at the event you’re already at.
+Meet the people at the gig, club night, party or pub quiz you’re already at.
 ```
 
 ```
 $ node -e 'const s=require("fs").readFileSync("docs/STORE-LISTING.md","utf8").match(/```text play-short\n([\s\S]*?)\n```/)[1];console.log([...s].length,"/ 80")'
-47 / 80
+76 / 80
 ```
 
-**Full description** (limit 4,000): paste [the shared description](#description-both-stores).
+**Full description** (limit 4,000). Paste this one, not the iOS description. Play indexes the full description and has no keyword field, so this copy names the kinds of night in plain words. It is [the iOS description](#description-ios) with two changes:
+1. A paragraph after the first two lines: Bengaluru (Bangalore) and the kinds of night.
+2. No closing `Starting in Bengaluru.`, because that paragraph says it.
+
+Each term appears once or twice; no stuffing. Its claims trace to the same sources as the iOS description (the table under it).
+
+```text play-description
+Meet the people at the event you’re already at.
+Check in when you arrive, see who else is in the room, and say hi when you’re both ready. Free, for adults 18 and over.
+
+Blend’n is starting in Bengaluru (Bangalore). Whatever the night is, a pub quiz, a gig or concert, a club night, a party or a festival, every event on Blend’n has its own room.
+
+Find What’s On
+The Pulse is a live map of the city tonight, with the places that have something on lit up. Tap “I’m going” on an event and it waits for you in Going.
+
+Check In When You Get There
+Check in at the event and its room opens to you. The room is for people checked in at the event.
+
+Talk to the Room
+In the room you go by a nickname the app gives you, like Cosmic Panda. Ask how long the queue is, save someone a seat, find the afters.
+
+Wave. Talk If They Wave Back.
+Wave at someone. If they wave back, you can talk one to one, still under your nicknames. You choose if and when to show who you are.
+
+Bring Your Crew
+Make a crew with your friends and see which of them are in the room with you.
+
+Report and Block
+Report or block anyone from their profile, and reports go to our team. Room messages are checked automatically as they are sent.
+
+Hosting an event or running a venue? Blend’n for organizers is at organizers.blendn.app.
+Questions: support@blendn.app
+```
+
+```
+$ node -e 'const s=require("fs").readFileSync("docs/STORE-LISTING.md","utf8").match(/```text play-description\n([\s\S]*?)\n```/)[1];console.log([...s].length,"/ 4000")'
+1318 / 4000
+```
+
+```
+$ node -e 'const b=Object.fromEntries([...require("fs").readFileSync("docs/STORE-LISTING.md","utf8").matchAll(/```text ([\w-]+)\n([\s\S]*?)\n```/g)].map(m=>[m[1],m[2]])),p=b["play-description"].split("\n");console.log(p[3].startsWith("Blend’n is starting")&&[...p.slice(0,2),...p.slice(4)].join("\n").replace("\nHosting","\nStarting in Bengaluru.\nHosting")===b.description?"same as the iOS description apart from the two changes":"DIFFERS")'
+same as the iOS description apart from the two changes
+```
+
+The search terms the iOS keyword field carries, counted as whole words, case-insensitive (Play short, then Play full):
+
+```
+$ node -e 'const b=Object.fromEntries([...require("fs").readFileSync("docs/STORE-LISTING.md","utf8").matchAll(/```text ([\w-]+)\n([\s\S]*?)\n```/g)].map(m=>[m[1],m[2]]));for(const w of ["nightlife","party","club","pub","gig","concert","festival","Bangalore","Bengaluru"]){const n=k=>(b[k].match(new RegExp("\\b"+w+"\\b","gi"))||[]).length;console.log(w,n("play-short"),n("play-description"))}'
+nightlife 0 0
+party 1 1
+club 1 1
+pub 1 1
+gig 1 1
+concert 0 1
+festival 0 1
+Bangalore 0 1
+Bengaluru 0 1
+```
+
+| Term | Play short | Play full | Note |
+|---|---|---|---|
+| nightlife | 0 | 0 | Left out: it would need a new claim |
+| party | 1 | 1 | |
+| club | 1 | 1 | "club night" |
+| pub | 1 | 1 | "pub quiz" |
+| gig | 1 | 1 | |
+| concert | 0 | 1 | |
+| festival | 0 | 1 | |
+| Bangalore | 0 | 1 | |
+| Bengaluru | 0 | 1 | Was also 1 in the old shared copy, via the dropped closing line |
+
+**Other Play fields**
 
 | Field | Value |
 |---|---|
@@ -116,9 +187,9 @@ $ node -e 'const s=require("fs").readFileSync("docs/STORE-LISTING.md","utf8").ma
 | Account deletion URL | `https://www.blendn.app/delete-account` (Data safety is ops task 10's) |
 | Developer name | See [Developer name](#developer-name) |
 
-## Description (both stores)
+## Description (iOS)
 
-This is the iOS description and the Play full description. Its first two lines are the hero on www.blendn.app.
+This is the iOS description; Apple does not index it for search. Play has [its own copy](#google-play) with one paragraph more. The first two lines are the hero on www.blendn.app.
 
 ```text description
 Meet the people at the event you’re already at.
@@ -167,6 +238,8 @@ $ node -e 'const s=require("fs").readFileSync("docs/STORE-LISTING.md","utf8").ma
 | Report or block from a profile; reports reach the team | `app/user/[id].tsx:773` ("Report or block"), `app/blocked-users.tsx` |
 | Room messages checked automatically as they are sent | admin `chat/route.ts:39-46` (`moderateMessage`, `preSaveCheck`). Not "before others see them": admin `lib/moderation/degraded-room.ts:57-60` (the big-room hold starts after the 1 s race, so a line is readable for up to about a second), `degraded-room.ts:73` (`verdictForBigRoom`: on a timed-out check a room that is not big proceeds and delivers), `lib/moderation/actions.ts:176-179` (delivered either way when the model is unavailable; only the keyword, spam and contact-info checks cannot fail open). Same wording as the organizer site (seo 03) |
 | Starting in Bengaluru | FACTS.md fact 5 |
+| Play only: "Blend’n is starting in Bengaluru (Bangalore)" | FACTS.md fact 5 |
+| Play only: "every event on Blend’n has its own room" | Same sources as the check-in row: `lib/checkIn.ts:101` (`submitCheckIn`), admin `app/api/mobile/events/[eventId]/chat/route.ts:134`. One room per event, for both event kinds (`event`, `venue_day`): admin `lib/check-in-core.ts:584-605` (`createRoom`, unique `chat_groups.event_id`), `prisma/schema.prisma:2760-2763`, made on first open at `chat/route.ts:146-167`. Draft and deleted events have none and are not public |
 | organizers.blendn.app | 200 on 2026-11-25, `<title>` "Blend'n for organizers – …"; the organizer site, which links no price (seo tasks 03, 04) |
 
 **Left out on purpose:**
