@@ -31,6 +31,8 @@ export interface RoomMessage {
   poll_id?: string
   /** A crew chat's `crew_waved` line (another crew or a person waved at this crew): what Wave back answers. */
   crewWave?: CrewWaveFrom
+  /** That `crew_waved` line, answered: this crew waved or liked back (admin #1029, history only). Its notice starts as "Waved back". */
+  crewWaveAnswered?: true
   /** A sponsored broadcast's media (R3-D5 5.5). */
   media?: { kind: 'image'; uri: string } | { kind: 'video'; uri: string; poster?: string; duration: string }
 }
@@ -66,12 +68,18 @@ export function pollIdOf(msg: any): string | null {
 }
 
 /** `metadata.kind: crew_waved` with its event and exactly who waved (a crew, or a person's room handle); anything else, nothing. */
-const crewWaveField = (msg: any): { crewWave?: CrewWaveFrom } => {
-  const m = msg?.metadata
-  if (!m || m.kind !== 'crew_waved' || typeof m.eventId !== 'string') return {}
-  if (typeof m.fromCrewId === 'string') return { crewWave: { eventId: m.eventId, fromCrewId: m.fromCrewId } }
-  if (typeof m.fromUserId === 'string') return { crewWave: { eventId: m.eventId, fromUserId: m.fromUserId } }
-  return {}
+const crewWaveOf = (m: any): CrewWaveFrom | undefined => {
+  if (!m || m.kind !== 'crew_waved' || typeof m.eventId !== 'string') return undefined
+  if (typeof m.fromCrewId === 'string') return { eventId: m.eventId, fromCrewId: m.fromCrewId }
+  if (typeof m.fromUserId === 'string') return { eventId: m.eventId, fromUserId: m.fromUserId }
+  return undefined
+}
+
+/** A history line's wave, and whether this crew has answered it (admin #1029 `answered`, beside `metadata`). */
+const crewWaveField = (msg: any): Pick<RoomMessage, 'crewWave' | 'crewWaveAnswered'> => {
+  const crewWave = crewWaveOf(msg?.metadata)
+  if (!crewWave) return {}
+  return msg.answered === true ? { crewWave, crewWaveAnswered: true } : { crewWave }
 }
 
 const pollField = (msg: any): { poll_id?: string } => {
@@ -138,10 +146,25 @@ export function roomMessagesFrom(raw: any[], userId?: string, roomKind?: string 
 
 /** A `chat:message` from the socket, as the room holds it. */
 export function roomMessageFromSocket(
-  message: { id: string; userId: string; userName?: string; userImage?: string | null; content: string; kind?: string; type?: string; parentId?: string | null; createdAt: string; pollId?: string },
+  message: {
+    id: string
+    userId: string
+    userName?: string
+    userImage?: string | null
+    content: string
+    kind?: string
+    type?: string
+    parentId?: string | null
+    createdAt: string
+    pollId?: string
+    /** A system line's own, as the history has it (admin #1029). */
+    metadata?: unknown
+  },
   userId: string | undefined,
   roomKind?: string | null
 ): RoomMessage {
+  // Who waved, at once; a live wave is never answered yet, so `answered` is not read here.
+  const crewWave = crewWaveOf(message.metadata)
   return {
     message_id: message.id,
     sender_id: message.userId,
@@ -153,5 +176,6 @@ export function roomMessageFromSocket(
     reply_to_message_id: message.parentId || null,
     created_at: message.createdAt,
     ...pollField(message),
+    ...(crewWave ? { crewWave } : {}),
   }
 }

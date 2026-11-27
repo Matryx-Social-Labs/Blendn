@@ -1,3 +1,4 @@
+import { noteCrewBlocked } from './crewWaveBack'
 import { CREW_REPORT_REASONS, crewMessage } from './crews'
 import { crewsApi } from './crewsApi'
 import { showSheet, type Sheet } from './sheet'
@@ -34,6 +35,7 @@ export const blockCrewSheet = (crew: NamedCrew, onBlocked: () => void): Sheet =>
       run: async () => {
         const result = await crewsApi.hideCrew(crew.crewId)
         if (!result.success) return { ok: false, error: crewMessage(result, 'card', `Couldn’t block ${crew.name}. Try again.`) }
+        noteCrewBlocked(crew.crewId)
         onBlocked()
         return { ok: true, toast: `${crew.name} is blocked` }
       },

@@ -1,5 +1,4 @@
-import { useFocusEffect } from 'expo-router'
-import { useCallback, useState } from 'react'
+import { useSyncExternalStore } from 'react'
 
 import { crewMessage, type BlendRef } from './crews'
 import { crewsApi } from './crewsApi'
@@ -80,57 +79,28 @@ export function askOpenToCrews(eventId: string, crew: { crewId: string; name: st
   })
 }
 
-const HIDDEN_PAGE = 50
-/** 1,000 blocked crews. Past it the list stays unknown, so crew lines are withheld rather than guessed. */
-const HIDDEN_PAGES_MAX = 20
-
-/** Every crew you blocked, or null when any page could not be read. */
-async function readHiddenCrewIds(): Promise<ReadonlySet<string> | null> {
-  const ids = new Set<string>()
-  for (let page = 1; page <= HIDDEN_PAGES_MAX; page += 1) {
-    const r = await crewsApi.hiddenCrews(page, HIDDEN_PAGE)
-    if (!r.success || !r.data) return null
-    r.data.crews.forEach((c) => ids.add(c.crewId))
-    if (!r.data.pagination.hasMore) return ids
-  }
-  return null
-}
-
-/** The crews you blocked, for a chat with a crew's wave in it (`enabled`): read each time it takes focus. Null unless the whole list is known. */
-export function useHiddenCrewIds(enabled: boolean): ReadonlySet<string> | null {
-  const [ids, setIds] = useState<ReadonlySet<string> | null>(null)
-  useFocusEffect(
-    useCallback(() => {
-      if (!enabled) return
-      let live = true
-      void readHiddenCrewIds().then((next) => {
-        if (live) setIds(next)
-      })
-      return () => {
-        live = false
-        // Unknown again until the next focus reads it: a block made elsewhere must not miss this list.
-        setIds(null)
-      }
-    }, [enabled])
-  )
-  return ids
-}
-
-/** A `crew_waved` line by its words: the socket sends it with no metadata. `your`: a crew's; `the`: a person's. */
-const CREW_WAVED = /waved at (your|the) crew$/
-const isSystemLine = (m: Pick<RoomMessage, 'message_type' | 'message_text'>, pattern: RegExp) => m.message_type === 'system' && pattern.test(m.message_text.trim())
-export const isCrewWavedLine = (m: Pick<RoomMessage, 'message_type' | 'message_text' | 'crewWave'>): boolean => !!m.crewWave || isSystemLine(m, CREW_WAVED)
-
-/** A crew's wave (not a person's): the line a block hides. */
-export const isCrewsWave = (m: Pick<RoomMessage, 'crewWave'>): boolean => !!m.crewWave && 'fromCrewId' in m.crewWave
-
 /**
- * Advisor Q2: a blocked crew's `crew_waved` line is not drawn. Fails closed: with the list unknown (`null`), or the line
- * naming no crew (live, before the history is read again), a crew's line is withheld. A person's wave and every other line stay.
+ * Crews blocked or unblocked on this phone since it opened. The server leaves a blocked crew's waves out of every read after
+ * (admin #1029), but a chat already open still holds them: this is what reaches it.
  */
-export function withoutBlockedCrews(messages: RoomMessage[], blocked: ReadonlySet<string> | null): RoomMessage[] {
-  return messages.filter((m) => {
-    if (!m.crewWave) return !isSystemLine(m, /waved at your crew$/)
-    return !('fromCrewId' in m.crewWave) || (blocked !== null && !blocked.has(m.crewWave.fromCrewId))
-  })
+let blockedNow: ReadonlySet<string> = new Set()
+const blockedListeners = new Set<() => void>()
+const setBlockedNow = (next: ReadonlySet<string>) => {
+  blockedNow = next
+  blockedListeners.forEach((fn) => fn())
+}
+export const noteCrewBlocked = (crewId: string) => setBlockedNow(new Set([...blockedNow, crewId]))
+export const noteCrewUnblocked = (crewId: string) => setBlockedNow(new Set([...blockedNow].filter((id) => id !== crewId)))
+const onBlockedNow = (fn: () => void) => {
+  blockedListeners.add(fn)
+  return () => {
+    blockedListeners.delete(fn)
+  }
+}
+/** The crews blocked on this phone since it opened (`noteCrewBlocked`). */
+export const useCrewsBlockedNow = (): ReadonlySet<string> => useSyncExternalStore(onBlockedNow, () => blockedNow)
+
+/** Advisor Q2: a blocked crew's `crew_waved` line is not drawn. A person's wave and every other line stay. */
+export function withoutBlockedCrews(messages: RoomMessage[], blocked: ReadonlySet<string>): RoomMessage[] {
+  return messages.filter((m) => !(m.crewWave && 'fromCrewId' in m.crewWave && blocked.has(m.crewWave.fromCrewId)))
 }
