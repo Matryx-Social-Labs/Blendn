@@ -192,9 +192,10 @@ export async function submitCheckIn(
 /**
  * How the "Why do you go out?" screen went. `closed`: saved, or dismissed by the person (×, back): the room comes next.
  * `abandoned`: taken down by something else — a link or a tap closing it to go elsewhere, or a newer check-in asking
- * again: the room must not be pushed over where they went (review MED-2, RC drive 6).
+ * again: the room must not be pushed over where they went (review MED-2, RC drive 6). `revealed`: saved as Named,
+ * so a reveal offer's "yes" that failed before it is no longer news (SCRUM-1199); the room comes next, as for `closed`.
  */
-export type IntentOutcome = 'closed' | 'abandoned'
+export type IntentOutcome = 'closed' | 'abandoned' | 'revealed'
 
 let intentClosed: ((outcome: IntentOutcome) => void) | null = null
 
@@ -225,11 +226,14 @@ export function intentAnswered(outcome: IntentOutcome = 'closed'): void {
   intentClosed?.(outcome)
 }
 
-/** "Why do you go out?" — the preferences screen with the intent leading. */
-export function askIntentRoute(eventId: string): Href {
+/**
+ * "Why do you go out?" — the preferences screen with the intent leading. `revealed` is whether the
+ * reveal offer's "yes" landed: the screen's save sends its reveal choice, so it must open on the truth.
+ */
+export function askIntentRoute(eventId: string, revealed = false): Href {
   return {
     pathname: '/event-preferences/[eventId]',
-    params: { eventId, revealed: '0', askIntent: '1' },
+    params: { eventId, revealed: revealed ? '1' : '0', askIntent: '1' },
   } as Href
 }
 

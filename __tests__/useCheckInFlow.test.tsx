@@ -220,7 +220,7 @@ describe('a check-in', () => {
     // The question waits for the tray to leave (iOS drops a push made while it is).
     await advance(1000)
     // Shown: the question's own reveal block says Named, so saving it never takes the reveal back.
-    expect(router.push).toHaveBeenCalledWith(askIntentRoute('e1', true))
+    expect(router.push).toHaveBeenCalledWith(expect.objectContaining({ params: expect.objectContaining({ revealed: '1', askIntent: '1' }) }))
     expect(props.onEnterRoom).not.toHaveBeenCalled()
     await act(async () => intentAnswered())
     await done
@@ -446,12 +446,13 @@ describe('a reveal the server did not take', () => {
     await advance(DURATION.base)
     const [, , buttons] = props.showTray.mock.calls[0]
     await act(async () => buttons!.find((b) => b.label === 'Show me')!.onPress())
-    return done
+    // Boxed: an async function returning it bare would wait for it.
+    return { done }
   }
 
   it('says so, with the error haptic, before the room opens', async () => {
     put.mockResolvedValue({ success: false, error: 'Too many requests' })
-    const done = await sayYes({})
+    const { done } = await sayYes({})
     await done
     expect(mockShowToast).toHaveBeenCalledTimes(1)
     expect(mockShowToast).toHaveBeenCalledWith(REVEAL_FAILED, 'error', { haptic: 'error' })
@@ -460,20 +461,20 @@ describe('a reveal the server did not take', () => {
 
   it('a request that throws (offline) is the same failure', async () => {
     put.mockRejectedValue(new Error('Network request failed'))
-    await (await sayYes({}))
+    await (await sayYes({})).done
     expect(mockShowToast).toHaveBeenCalledWith(REVEAL_FAILED, 'error', { haptic: 'error' })
     expect(props.onEnterRoom).toHaveBeenCalledTimes(1)
   })
 
   it('a reveal that landed says nothing', async () => {
-    await (await sayYes({}))
+    await (await sayYes({})).done
     expect(mockShowToast).not.toHaveBeenCalled()
   })
 
   it('the room waits for the answer, so its first read never races the write', async () => {
     let answer!: (r: { success: boolean }) => void
     put.mockReturnValue(new Promise((resolve) => (answer = resolve)))
-    const done = await sayYes({})
+    const { done } = await sayYes({})
     await advance(1000)
     expect(props.onEnterRoom).not.toHaveBeenCalled()
     await act(async () => answer({ success: true }))
@@ -483,10 +484,10 @@ describe('a reveal the server did not take', () => {
 
   it('with the intent question to come: not under its full-screen modal; the question says Anonymous, and the toast waits for the room', async () => {
     put.mockResolvedValue({ success: false })
-    const done = await sayYes({ askIntent: true })
+    const { done } = await sayYes({ askIntent: true })
     await advance(1000)
     // The question opens on the truth: not shown.
-    expect(router.push).toHaveBeenCalledWith(askIntentRoute('e1', false))
+    expect(router.push).toHaveBeenCalledWith(expect.objectContaining({ params: expect.objectContaining({ revealed: '0', askIntent: '1' }) }))
     // Raised now it would draw under the modal on iOS (Toast is a root view).
     expect(mockShowToast).not.toHaveBeenCalled()
     await act(async () => intentAnswered('closed'))
@@ -497,7 +498,7 @@ describe('a reveal the server did not take', () => {
 
   it('…unless they chose Named on the question and it saved: then it would be false', async () => {
     put.mockResolvedValue({ success: false })
-    const done = await sayYes({ askIntent: true })
+    const { done } = await sayYes({ askIntent: true })
     await advance(1000)
     await act(async () => intentAnswered('revealed'))
     await done
@@ -507,7 +508,7 @@ describe('a reveal the server did not take', () => {
 
   it('closed for a link, the room never opens: still told, once', async () => {
     put.mockResolvedValue({ success: false })
-    const done = await sayYes({ askIntent: true })
+    const { done } = await sayYes({ askIntent: true })
     await advance(1000)
     await act(async () => intentAnswered('abandoned'))
     expect(await done).toBe('checkedIn')
