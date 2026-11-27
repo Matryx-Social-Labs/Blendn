@@ -249,6 +249,23 @@ it('saved as Named, it tells the waiting check-in "revealed", so a failed reveal
   await waitFor(() => expect(outcomes).toEqual(['revealed']))
 })
 
+it.each([
+  ['saved as Anonymous', { success: true }],
+  ['a Named save the server refused', { success: false }],
+])('%s says only "closed": the failed reveal is still news', async (_case, answer) => {
+  api.setMatchPreferences.mockResolvedValue(answer as never)
+  const outcomes: string[] = []
+  void untilIntentAnswered().then((o) => outcomes.push(o))
+  const view = await render(<EventPreferences />)
+  await fireEvent.press(await screen.findByRole('checkbox', { name: /^Networking/ }))
+  if (!answer.success) await fireEvent.press(await screen.findByRole('radio', { name: /^Named/ }))
+  await fireEvent.press(screen.getByRole('button', { name: 'Save' }))
+  await waitFor(() => expect(api.setMatchPreferences).toHaveBeenCalled())
+  await view.unmount()
+  await Promise.resolve()
+  expect(outcomes).toEqual(['closed'])
+})
+
 it('a newer wait supersedes an older one as abandoned: the older check-in never pushes its room', async () => {
   const first = untilIntentAnswered()
   void untilIntentAnswered()
