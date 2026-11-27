@@ -49,7 +49,7 @@ describe('<GoLiveSheet>', () => {
       '20 min',
       '45 min',
       '1 hour',
-      'Stay while I’m here, Keeps you live while you’re here, up to 4 hours, free today',
+      'Stay while I’m here, Keeps you live while you’re here, up to 4 hours',
     ])
     expect(radios[1].props.accessibilityState).toMatchObject({ checked: true })
     expect(screen.getByText('You can end it anytime.')).toBeTruthy()
@@ -104,12 +104,14 @@ describe('<GoLiveSheet>', () => {
     expect(spies.success).not.toHaveBeenCalled()
   })
 
-  it('Stay is free for everyone: its own sentence and "free today", no Plus mark; a tap picks it', async () => {
+  // Launch gate 5 (SCRUM-1475): Stay is one of the choices, with no price talk at all ("free today" promised a Plus that is gone).
+  it('Stay is free for everyone: its own sentence, no "free today" chip and no Plus mark; a tap picks it', async () => {
     const onChoice = jest.fn()
     await render(sheet({ onChoice }))
     const stay = screen.getAllByRole('radio')[3]
-    expect(stay.props.accessibilityLabel).toBe('Stay while I’m here, Keeps you live while you’re here, up to 4 hours, free today')
+    expect(stay.props.accessibilityLabel).toBe('Stay while I’m here, Keeps you live while you’re here, up to 4 hours')
     expect(stay.props.accessibilityHint).toBeUndefined()
+    expect(screen.queryByText(/free/i, { includeHiddenElements: true })).toBeNull()
     expect(screen.queryByText('Plus')).toBeNull()
     await fireEvent.press(stay)
     expect(onChoice).toHaveBeenCalledWith('stay')

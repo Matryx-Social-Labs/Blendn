@@ -143,6 +143,18 @@ describe('check-in state changes reach the tab bar', () => {
     expect(heard).not.toHaveBeenCalled()
     off()
   })
+
+  // SCRUM-1480 review: a POST that dies with no server answer (connection reset after the server committed, a failed
+  // token refresh) is not a refusal; the server may have it, so every door re-reads it. A coded no (above) still does not.
+  it('re-reads the server when the check-in ends on time with no server answer', async () => {
+    mockApi.checkIn.mockResolvedValue({ success: false, error: 'No internet connection. Check your network and try again.' })
+    const heard = jest.fn()
+    const off = subscribeCheckInChanged(heard)
+    expect(await submitCheckIn('e1', at)).toMatchObject({ kind: 'refused', alreadyCheckedIn: false })
+    expect(heard).toHaveBeenCalledTimes(1)
+    expect(mockApi.forgetEvent).toHaveBeenCalledWith('e1')
+    off()
+  })
 })
 
 /*
