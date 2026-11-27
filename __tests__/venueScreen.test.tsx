@@ -562,7 +562,7 @@ describe('the dock', () => {
     await mount()
     await openDial(3)
     expect(screen.getAllByRole('radio')[3].props.accessibilityLabel).toBe('Stay while I’m here, Keeps you live while you’re here, up to 4 hours')
-    expect(screen.queryByText(/free today/i, { includeHiddenElements: true })).toBeNull()
+    expect(screen.queryByText(/free/i, { includeHiddenElements: true })).toBeNull()
     expect(screen.queryByText('Plus', { includeHiddenElements: true })).toBeNull()
     expect(screen.queryByText(/Blend’n\+/)).toBeNull()
   })

@@ -109,6 +109,17 @@ describe('submitCheckIn, after it stopped waiting', () => {
     expect(api.forgetEvent.mock.calls.map((c) => c[0])).toEqual(['e1'])
   })
 
+  // Control for the rule above: a no-answer end after a sign-out (or another sign-in) re-reads nothing of the next session.
+  it('a late request with no server answer after a sign-out touches nothing of the next session', async () => {
+    const request = await timedOut()
+    mockSession = 2
+    request.resolve({ success: false, error: TIMEOUT_MESSAGE })
+    await settle()
+    expect(heard).not.toHaveBeenCalled()
+    expect(api.forgetActiveCheckins).not.toHaveBeenCalled()
+    expect(lateLines()).toEqual([{ eventId: 'e1', isIn: false, code: undefined, error: TIMEOUT_MESSAGE, sameSession: false }])
+  })
+
   it('a refusal that lands late changes nothing (control)', async () => {
     const request = await timedOut()
     request.resolve({ success: false, errorCode: 'OUT_OF_RANGE', error: '120 m outside' })
