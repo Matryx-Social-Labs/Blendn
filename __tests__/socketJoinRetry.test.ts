@@ -125,10 +125,9 @@ it('drops a pending retry on a disconnect, and on sign-out', () => {
   expect(joins()).toHaveLength(0)
 
   s.fire('error', SERVER_ERROR)
+  expect(jest.getTimerCount()).toBe(1)
   client.disconnect()
-  s.connected = true
-  jest.advanceTimersByTime(60_000)
-  expect(s.emit).not.toHaveBeenCalled()
+  expect(jest.getTimerCount()).toBe(0)
 })
 
 it('never asks again after a FORBIDDEN or any other code (control)', () => {
