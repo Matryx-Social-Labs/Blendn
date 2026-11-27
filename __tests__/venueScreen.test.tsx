@@ -371,7 +371,7 @@ describe('the page, the design’s details', () => {
 })
 
 describe('the dock', () => {
-  it('Go live opens the dial at 20 minutes; Stay is free today', async () => {
+  it('Go live opens the dial at 20 minutes', async () => {
     await mount()
     await act(async () => {
       fireEvent.press(screen.getByTestId('venue-go-live'))
@@ -561,7 +561,8 @@ describe('the dock', () => {
   it('Stay is free for everyone (launch gate 5): the dial names no Blend’n+ and draws no Plus mark', async () => {
     await mount()
     await openDial(3)
-    expect(screen.getAllByRole('radio')[3].props.accessibilityLabel).toMatch(/, free today$/)
+    expect(screen.getAllByRole('radio')[3].props.accessibilityLabel).toBe('Stay while I’m here, Keeps you live while you’re here, up to 4 hours')
+    expect(screen.queryByText(/free today/i, { includeHiddenElements: true })).toBeNull()
     expect(screen.queryByText('Plus', { includeHiddenElements: true })).toBeNull()
     expect(screen.queryByText(/Blend’n\+/)).toBeNull()
   })
