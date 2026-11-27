@@ -3,7 +3,6 @@ import { Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 
 import { COLOR, MATERIAL, MAX_FONT_SCALE, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
-import { tint } from '../../lib/theme'
 import { HoldToConfirm } from './HoldToConfirm'
 import { RadioRing } from './RadioRing'
 import { Sheet, type SheetAction } from './Sheet'
@@ -24,10 +23,8 @@ const SERVER = {
   eventOn: 'An event is on here.',
   noArea: 'You can’t go live here yet.',
 }
-/** The dial's rows: 56 pt; the chips at their end, 24 pt (Flow 11 `goLive`). */
+/** The dial's rows: 56 pt (Flow 11 `goLive`). */
 const ROW_HEIGHT = SIZE.primary
-const CHIP = SIZE.control / 2
-const CHIP_EDGE = 0.22
 const noop = () => {}
 
 /** What each refusal sheet needs to say; `message` is the server's sentence, verbatim, where there is one. */
@@ -175,7 +172,6 @@ export function GoLiveSheet({
         {CHOICES.map((c, i) => {
           const isStay = c.value === 'stay'
           const sub = isStay ? 'Keeps you live while you’re here, up to 4 hours' : null
-          const chip = isStay ? 'free today' : null
           const selected = choice === c.value
           return (
             <Fragment key={c.label}>
@@ -190,7 +186,7 @@ export function GoLiveSheet({
                 }}
                 android_ripple={{ color: PRESSED_WASH.android }}
                 accessibilityRole="radio"
-                accessibilityLabel={[c.label, sub, chip].filter(Boolean).join(', ')}
+                accessibilityLabel={sub ? `${c.label}, ${sub}` : c.label}
                 accessibilityState={{ checked: selected, disabled: busy }}
                 // The pick is lit (B-T2: a bare radio ring said it alone): the hue's fill behind the row, as a picked RadioCard's.
                 style={({ pressed }) => [
@@ -209,13 +205,6 @@ export function GoLiveSheet({
                     </Text>
                   ) : null}
                 </View>
-                {chip ? (
-                  <View style={styles.free} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-                    <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('caption', bold), { color: COLOR.textSecondary }]}>
-                      {chip}
-                    </Text>
-                  </View>
-                ) : null}
               </Pressable>
             </Fragment>
           )
@@ -244,6 +233,5 @@ const styles = StyleSheet.create({
   row: { minHeight: ROW_HEIGHT, flexDirection: 'row', alignItems: 'center', gap: SPACE.md, paddingHorizontal: SPACE.lg, paddingVertical: SPACE.sm },
   text: { flex: 1 },
   ink: { color: COLOR.textPrimary },
-  free: { height: CHIP, paddingHorizontal: SPACE.sm, borderRadius: RADIUS.capsule, borderWidth: 1, borderColor: tint(COLOR.textPrimary, CHIP_EDGE), justifyContent: 'center' },
   centre: { textAlign: 'center' },
 })
