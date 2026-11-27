@@ -77,9 +77,10 @@ async function openFromServerOffer() {
   await act(async () => {
     await flow.start()
   })
-  const [title, , buttons] = props.showTray.mock.calls[0]
+  const [title, , offered] = props.showTray.mock.calls[0]
+  const buttons = offered!
   expect(title).toBe('GPS can’t place you')
-  expect(buttons.map((b: { label: string; kind?: string }) => [b.label, b.kind])).toEqual([
+  expect(buttons.map((b) => [b.label, b.kind])).toEqual([
     ['Try GPS again', 'tertiary'],
     ['Enter door code', 'lit'],
   ])
@@ -261,10 +262,10 @@ describe('entering the code', () => {
     await type('7KQM4P')
     await pressCheckIn()
     expect(flow.door).toBeNull()
-    const [title, , buttons] = props.showTray.mock.calls.at(-1)!
+    const [title, , shown] = props.showTray.mock.calls.at(-1)!
     expect(title).toBe('Still checking you in')
     submit.mockResolvedValueOnce(refused('DOOR_CODE_WRONG', WRONG))
-    await act(async () => buttons.find((b: { label: string }) => b.label === 'Retry').onPress())
+    await act(async () => shown!.find((b) => b.label === 'Retry')!.onPress())
     expect(submit).toHaveBeenLastCalledWith('e1', FIX, undefined, '7KQM4P')
     // The answer is not lost: the sheet comes back with it, and with the code it is about.
     expect(flow.door).toMatchObject({ error: WRONG, locked: false })
