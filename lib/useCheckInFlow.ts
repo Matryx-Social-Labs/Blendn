@@ -3,7 +3,8 @@ import { useEffect, useRef, useState } from 'react'
 import { apiClient } from './apiClient'
 import { afterSheetDismissed } from './sheetDismissed'
 import { myMainPhoto } from './myPhoto'
-import { askIntentRoute, markArrival, revealOffer, submitCheckIn, untilIntentAnswered, type CheckInOutcome } from './checkIn'
+import { useToast } from '../components/Toast'
+import { askIntentRoute, markArrival, revealOffer, submitCheckIn, untilIntentAnswered, type CheckInOutcome, type IntentOutcome } from './checkIn'
 import { CHECK_IN_CODES, isDoorCodeRefusal, isExpectedRefusal, type CheckInRefusal } from './checkInRefusal'
 import { markCheckIn } from './checkInTiming'
 import { H } from './haptics'
@@ -35,6 +36,19 @@ export type CheckInFlowResult = 'checkedIn' | 'refused' | 'failed'
 /** A code is six characters (`ABCDEFGHJKLMNPQRSTUVWXYZ23456789`): fewer is answered here, never sent. */
 export const DOOR_CODE_LENGTH = 6
 const SHORT_CODE = 'Enter all six characters'
+const REVEAL_FAILED = 'Couldn’t show your name. Try again from the room.'
+
+/** The reveal offer's "yes" (SCRUM-1199): whether it landed. `apiClient` answers a 429 or a refusal with `success: false`; a throw (offline) is a no too. */
+async function reveal(eventId: string): Promise<boolean> {
+  try {
+    const res = await apiClient.setMatchPreferences(eventId, { revealed: true })
+    if (!res.success) Logger.warn('match', 'reveal from prompt refused', { error: res.error })
+    return res.success
+  } catch (error) {
+    Logger.error('match', 'reveal from prompt failed', { error })
+    return false
+  }
+}
 
 /** The door-code sheet while it is open (gate 13, design/02a guest A): its last answer, whether entry is locked, and what its field and buttons do. */
 export type DoorCodeSheetModel = {
@@ -89,6 +103,7 @@ export function useCheckInFlow({
   withCrewId,
 }: UseCheckInFlowOptions) {
   const { user } = useAuth()
+  const { showToast } = useToast()
   const withCrew = useLatest(withCrewId)
   // The pass is up for this door: start the fix now, so the hold finds one waiting.
   useEffect(() => {
@@ -340,6 +355,8 @@ export function useCheckInFlow({
         // What follows a check-in is decided in `lib/checkIn.ts`, the same for
         // every door; only the trays are this screen's.
         let trayShown = false
+        let yes = false
+        let revealFailed = false
         if (revealSuggestion) {
           const offer = await revealOffer({
             id: user.id,
@@ -347,7 +364,7 @@ export function useCheckInFlow({
             photo: myMainPhoto(user),
           })
           trayShown = true
-          const yes = await new Promise<boolean>((answer) => {
+          yes = await new Promise<boolean>((answer) => {
             revealAnswer.current = answer
             const reply = (value: boolean) => () => {
               revealAnswer.current = null
@@ -364,20 +381,22 @@ export function useCheckInFlow({
               { icon: 'eye' }
             )
           })
-          if (yes) {
-            apiClient
-              .setMatchPreferences(eventId, { revealed: true })
-              .catch((e) => Logger.error('match', 'reveal from prompt failed', { error: e }))
-          }
+          // Awaited: `apiClient` answers a 429 or a refusal with `success: false`, not a throw, and the room's first read must not race it.
+          if (yes) revealFailed = !(await reveal(eventId))
         }
+        let intent: IntentOutcome | undefined
         if (askIntent) {
           // iOS drops a push made while a tray is still leaving.
           if (trayShown) await afterSheetDismissed()
           const answered = untilIntentAnswered()
-          router.push(askIntentRoute(eventId))
-          // Closed for a link (or asked again): they went elsewhere, so the room is not pushed over it. Still checked in.
-          if ((await answered) === 'abandoned') return 'checkedIn'
+          // On the truth: its reveal block says Named only if the yes landed, and its save sends that block's choice.
+          router.push(askIntentRoute(eventId, yes && !revealFailed))
+          intent = await answered
         }
+        // Only once the question is gone (a root toast draws under its full-screen modal on iOS), and not if it saved Named.
+        if (revealFailed && intent !== 'revealed') showToast(REVEAL_FAILED, 'error', { haptic: 'error' })
+        // Closed for a link (or asked again): they went elsewhere, so the room is not pushed over it. Still checked in.
+        if (intent === 'abandoned') return 'checkedIn'
         await onEnterRoom?.()
         enteringRoom = true
         return 'checkedIn'

@@ -280,6 +280,8 @@ function EventPreferencesContent() {
       }
       // The Room and the tab bar read the reveal from caches this just made stale: say so, don't wait on a poll (ROOM-03).
       checkInChanged(String(eventId))
+      // Before the unmount's `closed`: a check-in waiting on this hears the reveal it now has (SCRUM-1199).
+      if (askIntent && revealed) intentAnswered('revealed')
       leave()
     } catch (e) {
       Logger.error('match', 'Failed to save match preferences', { error: e })
