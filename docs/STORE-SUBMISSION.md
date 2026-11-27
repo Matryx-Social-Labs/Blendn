@@ -8,6 +8,7 @@ Ops pastes from this file on submission day (ops task 13a). Nothing here is past
 - **Screenshots:** seo task 09.
 - **Running production, incidents, hotfixes:** Blendn-Admin `DEPLOYMENT.md` § "Operating production".
 - **Promoting the API to production:** the ops promotion playbook, `~/.blendn-qa/launch/playbooks/PROD-PROMOTION.md` (on the ops Mac, not in git).
+- **Decisions cited as D-0NN:** the launch decision register, `~/.blendn-qa/launch/DECISION-REGISTER.md` (on the ops Mac, not in git).
 
 **Credentials never go in git.** The review account's address and password live in two places only: App Store Connect (App Review Information) and Play Console (App access). The password is in `~/.blendn-qa/appreview.pass` on the ops Mac. No user id, event id or password belongs in this file.
 
@@ -172,17 +173,18 @@ Hosting and storage (Railway, Tigris) are processors, not partners. Legal decide
 
 ## Storefronts
 
-**Decided: India only, on both stores, for 1.0**, because the published privacy policy says "Blend'n is offered only in India" (`https://www.blendn.app/privacy`, read 2026-11-26). The retention and grievance runbook, the age gate and the listing are written for India too.
+**Decided: India only, on both stores, for 1.0** (register D-019, 2026-11-26). Blend'n depends on density, so an empty country gains nothing, and each country adds its own legal duties (in Canada: PIPEDA, CASL, Quebec). The published privacy policy also says "Blend'n is offered only in India" (`https://www.blendn.app/privacy`, read 2026-11-26), and the retention and grievance runbook, the age gate and the listing are written for India.
 
-- Fable advisor pick, 2026-11-26. It reconciles "India and Canada at launch" (seo `FACTS.md` fact 5) with the task's "India only".
-- **Canada joins by a console change** (no new binary, no review) once both hold:
+- **What reopens it:** the first Canadian host signing up (D-019). Canada then joins by a console change (no new binary, no review), and this pack adds two conditions of its own; both must hold:
   - a Canadian city is live;
   - the lawyer's Canada revision of the privacy policy is published.
   Fill the English (Canada) localisation at the same time (`STORE-LISTING.md`).
 - **App Store Connect:** Pricing and Availability › select countries or regions › India only. Not "All Countries or Regions": that means all 175 storefronts and every future one.
 - **Play Console:** Production › Countries / regions › India only.
 
-**EU Digital Services Act trader status:** Apple requires a declaration even for an app not offered in the EU. Whether the company is a "trader" is legal's call (SCRUM-1144). The owner enters it on submission day (below).
+**EU Digital Services Act trader status: decided, "not a trader" on both stores while the app is offered outside the EU only** (register D-044, 2026-11-26). Apple asks for the declaration even for an app not offered in the EU. Its help page says that distributing only outside the EU is not acting as a trader on the App Store, and declaring trader would publish the company's address for no benefit. The owner ticks it on submission day (below).
+
+- **What reopens it:** any EU or UK launch. Before that storefront is added, switch to trader on both stores and publish the company address, phone and email.
 
 ## Play: data-deletion URL
 
@@ -210,7 +212,7 @@ The page is the seo lane's, which owns the fix. Check it again before pasting th
 - [ ] One real push arrives on the TestFlight install and on a Play internal-test install.
 - [ ] Production-profile build installed, launched, signed in and out on an iPhone and an Android phone (`RELEASING.md`: nothing is submitted until it launches).
 - [ ] Every launch gate is merged and promoted to production (task 12, the promotion playbook).
-- [ ] Legal has signed off the privacy answers and the trader status.
+- [ ] Legal has signed off the privacy answers (Epic SCRUM-1122).
 - [ ] The deletion page matches the listing (above).
 
 Task 11 records its results and build numbers here, under this heading.
@@ -224,6 +226,8 @@ Task 11 records its results and build numbers here, under this heading.
 
 **13a, submit (the owner presses the buttons):**
 - Paste the listing from `STORE-LISTING.md`, plus the notes, age rating and privacy answers from this file.
+- Storefronts: India only, in App Store Connect and in Play Console (§ Storefronts, D-019).
+- EU trader status: declare "not a trader" in App Store Connect and in Play Console (§ Storefronts, D-044).
 - In App Store Connect, select **only** the build number task 11 verified as profile `production`. Staging builds (1.0.0, pointing at staging) sit in the same record. On Play, upload the production AAB as a new production release, and never promote an internal-track release.
 - iOS: no in-app purchase attached, and "Manually release this version" selected.
 - Play: the production release stays a draft, released by a human.
