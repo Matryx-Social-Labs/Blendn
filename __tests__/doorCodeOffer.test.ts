@@ -1,6 +1,6 @@
 /**
  * The door code, guest side (gate 13, SCRUM-1313; design/02a SPEC §4, guest option A): when a check-in is offered the
- * host's door code, and what the request carries. The server shapes are admin dev `8048fe85` (docs/API.md "The door
+ * host's door code, and what the request carries. The server shapes are admin dev `8048fe85` (the admin API doc, "The door
  * code"): `reasonCode: DOOR_CODE_OFFERED` on a refusal the code can fix, `doorCode` plus `deviceInfo.gpsAccuracy` (and
  * `mocked`) on the request, and `DOOR_CODE_*` answers.
  */

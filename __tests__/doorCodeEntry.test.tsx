@@ -38,9 +38,13 @@ const CHANGED = 'That code just changed. Read the new one on the host’s screen
 const LOCKED = 'Too many tries. Try again at 10:52 PM, or step outside and use GPS.'
 
 let flow: ReturnType<typeof useCheckInFlow>
+const keep = (f: ReturnType<typeof useCheckInFlow>) => {
+  flow = f
+}
 /** A door as both screens draw one: the hook, its pour, and its door-code sheet. */
 function Door(props: UseCheckInFlowOptions) {
-  flow = useCheckInFlow(props)
+  const flow = useCheckInFlow(props)
+  keep(flow)
   return (
     <>
       {flow.pours > 0 ? <MomentPour key={flow.pours} venue="Toit" asks={flow.asks} onDone={flow.pourDone} testID="pour" /> : null}
@@ -95,7 +99,8 @@ describe('the offer', () => {
   it('a weak-fix refusal shows the door-code entry: the sheet, its field and its hint', async () => {
     await openFromServerOffer()
     expect(flow.door).not.toBeNull()
-    expect(screen.getByText('Door code', HIDDEN)).toBeTruthy()
+    // The sheet's title and the field's label (upper-cased by its role, hidden from a screen reader).
+    expect(screen.getAllByText('Door code', HIDDEN)).toHaveLength(2)
     expect(screen.getByText('Neon Nights at Toit · Toit', HIDDEN)).toBeTruthy()
     expect(field().props.accessibilityHint).toBe('Six letters and numbers from the host’s screen. It changes every 30 seconds.')
     // §4: forgiving input. §8: no autofill, Go submits.
@@ -220,6 +225,21 @@ describe('entering the code', () => {
     await pressCheckIn()
     expect(flow.door).toBeNull()
     expect(props.showTray).toHaveBeenLastCalledWith('This one’s over', 'This event has ended.', expect.any(Array), { icon: 'moon' })
+  })
+
+  it('a code the server is slow on: the sheet gives way to "Still checking you in", and its Retry resends the code', async () => {
+    await openFromServerOffer()
+    submit.mockResolvedValueOnce({ kind: 'timeout' })
+    await type('7KQM4P')
+    await pressCheckIn()
+    expect(flow.door).toBeNull()
+    const [title, , buttons] = props.showTray.mock.calls.at(-1)!
+    expect(title).toBe('Still checking you in')
+    submit.mockResolvedValueOnce(refused('DOOR_CODE_WRONG', WRONG))
+    await act(async () => buttons.find((b: { label: string }) => b.label === 'Retry').onPress())
+    expect(submit).toHaveBeenLastCalledWith('e1', FIX, undefined, '7KQM4P')
+    // The answer is not lost: the sheet comes back with it.
+    expect(flow.door).toMatchObject({ error: WRONG, locked: false })
   })
 
   it('"Try GPS again" closes the sheet and runs the GPS check-in again', async () => {
