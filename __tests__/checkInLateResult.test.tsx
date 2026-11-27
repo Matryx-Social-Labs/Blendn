@@ -1,10 +1,11 @@
 /**
  * The check-in that answers after the app stopped waiting (SCRUM-1189; launch audit client-feedback Verification 3).
  *
- * `submitCheckIn` gives up at 12 s and shows "Still checking you in", but nothing aborts the request: a queued one is
- * even sent after the tray is up. When the server then says yes, both doors must come to "in" (`checkInChanged`), even
- * if the person pressed Cancel first: a re-read on Cancel happens before the late answer lands, so it is the late answer
- * itself that has to say so.
+ * `submitCheckIn` gives up at 12 s and shows "Still checking you in"; the request goes on (a queued one is even sent
+ * after the tray is up) until apiClient's own 15 s deadline. When the server then says yes, both doors must come to "in"
+ * (`checkInChanged`), even if the person pressed Cancel first: a re-read on Cancel happens before the late answer lands,
+ * so it is the late answer itself that has to say so. When it ends with no server answer at all, the server may still
+ * have said yes, so the doors re-read it (SCRUM-1480).
  */
 import { act, render } from '@testing-library/react-native'
 import React from 'react'
