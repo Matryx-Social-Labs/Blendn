@@ -73,7 +73,7 @@ afterEach(() => {
   jest.restoreAllMocks()
 })
 
-const joins = () => s.emit.mock.calls.filter(([name]) => String(name).startsWith('join:'))
+const joins = () => s.emit.mock.calls.filter((call: unknown[]) => String(call[0]).startsWith('join:'))
 
 it('coalesces several SERVER_ERRORs into one round of joins after the jittered delay', () => {
   s.fire('error', SERVER_ERROR)
