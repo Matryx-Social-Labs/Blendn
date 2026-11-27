@@ -99,11 +99,26 @@ export type CheckInOutcome =
     }
   | { kind: 'timeout' }
 
+/** Rooms entered with the host's door code this session: the Room's you-card says the host sees the pseudonym (gate 13). */
+const byDoorCode = new Set<string>()
+/** ponytail: in memory, so a restart forgets it; the line is for the arrival, and the Room is the same without it. */
+export const cameByDoorCode = (eventId: string): boolean => byDoorCode.has(eventId)
+/** Every arrival says how it came in: a later GPS one (or a check-out) is no longer the code's. */
+export function markArrival(eventId: string, byCode: boolean): void {
+  if (byCode) byDoorCode.add(eventId)
+  else byDoorCode.delete(eventId)
+}
+
 export async function submitCheckIn(
   eventId: string,
-  at: { latitude: number; longitude: number; accuracy?: number | null },
+  at: { latitude: number; longitude: number; accuracy?: number | null; mocked?: boolean },
   /** "With {crew}" on at the hold: that crew is told you're in, by the server, with no second call (crews 4-A2). */
-  withCrewId?: string
+  withCrewId?: string,
+  /**
+   * The host's door code (gate 13), for a guest GPS could not place. It stands in for the fence on the server, which
+   * then requires the fix's accuracy and refuses a fix the OS calls mocked (`DOOR_CODE_FAR`).
+   */
+  doorCode?: string
 ): Promise<CheckInOutcome> {
   let timer: ReturnType<typeof setTimeout> | undefined
   const timeout = new Promise<'timeout'>((resolve) => {
@@ -116,8 +131,14 @@ export async function submitCheckIn(
     // `gpsAccuracy` is the key the route reads — `deviceInfo?.gpsAccuracy` —
     // not a top-level field. Unknown is sent as absent, which the server
     // reads as "assume the usual", never as a number we made up.
-    deviceInfo: { platform: Platform.OS, gpsAccuracy: validAccuracy(at.accuracy) ?? undefined },
+    deviceInfo: {
+      platform: Platform.OS,
+      gpsAccuracy: validAccuracy(at.accuracy) ?? undefined,
+      // Only beside a code for now (client/26, SCRUM-1332, adds it to GPS), and only when the OS said: unknown is not "no".
+      ...(doorCode !== undefined && typeof at.mocked === 'boolean' ? { mocked: at.mocked } : {}),
+    },
     ...(withCrewId ? { withCrewId } : {}),
+    ...(doorCode !== undefined ? { doorCode } : {}),
   })
   const result = await Promise.race([request, timeout]).finally(() => clearTimeout(timer))
 
@@ -266,6 +287,7 @@ export async function checkOutOf(eventId: string) {
   const result = await apiClient.checkOut(eventId)
   if (result.success) {
     forgetRoster(eventId)
+    markArrival(eventId, false)
     // The live hint is the tab bar's poll, and a page opened from a link has no tab bar under it to re-poll: left as it was,
     // the next event page offered "Hold to switch · Leaves {this room}" until a restart (SCRUM-1035 drive).
     if (getLiveEventId() === eventId) setLiveHint(null)

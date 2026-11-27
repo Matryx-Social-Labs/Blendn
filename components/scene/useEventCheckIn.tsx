@@ -13,6 +13,7 @@ import { usePassReach } from '../../lib/usePassReach'
 import { CHECKOUT_FAILED } from '../../lib/useRoomControls'
 import { useCheckInFlow } from '../../lib/useCheckInFlow'
 import { CheckInTray, useCheckInTray } from '../blendn/CheckInTray'
+import { DoorCodeSheet, doorCodeEventLine } from '../blendn/DoorCodeSheet'
 import { MomentPour } from '../ds/MomentPour'
 import { useWithCrew, WithCrewChip } from '../crews/WithCrewChip'
 import type { CrewPlan } from '../../lib/crews'
@@ -35,7 +36,7 @@ export function useEventCheckIn({
   onCheckedOut,
 }: {
   id: string
-  event: (Parameters<typeof doorOf>[0] & { title?: string | null; crew_plans?: CrewPlan[] }) | null
+  event: (Parameters<typeof doorOf>[0] & { title?: string | null; area?: string | null; crew_plans?: CrewPlan[] }) | null
   openMaps: () => void
   /** The page's toast: a check-out that lands says so there (audit B-2). */
   showToast: (message: string, variant: 'success', options: { haptic: ToastHaptic }) => void
@@ -156,6 +157,7 @@ export function useEventCheckIn({
           </View>
         ) : null}
         <CheckInTray tray={tray} onClose={flow.dismissTray} testID="scene-tray" />
+        <DoorCodeSheet door={flow.door} eventLine={doorCodeEventLine(event?.title, event?.venue_name, event?.area)} testID="scene-door-code" />
       </>
     ),
   }

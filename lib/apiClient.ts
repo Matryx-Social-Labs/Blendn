@@ -987,6 +987,8 @@ export interface EventApiItem {
   minAge?: number | null
   /** `open`, `guest_list`, `members_only` or `invite_only` (`lib/scarcity.ts`). Absent from an older server. */
   doorPolicy?: string | null
+  /** The detail route only (gate 13): whether the host's door code is live now (doors to the end, not paused). Never the code. */
+  doorCode?: { available: boolean }
   venueName: string | null
   venue_name?: string | null
   /**
@@ -2757,7 +2759,8 @@ class ApiClientClass {
   async checkIn(
     eventId: string,
     /** `withCrewId`: "With {crew}" at the hold (crews 4-A2) — the server tells that crew you're in. Absent: on your own. */
-    data: { latitude: number; longitude: number; deviceInfo?: Record<string, unknown>; withCrewId?: string }
+    /** `doorCode`: the host's door code (gate 13), for a guest GPS could not place. */
+    data: { latitude: number; longitude: number; deviceInfo?: Record<string, unknown>; withCrewId?: string; doorCode?: string }
   ): Promise<ApiResponse<CheckInResult>> {
     return this.queuedRequest<CheckInResult>(
       `/api/mobile/events/${pathSegment(eventId)}/checkin`,

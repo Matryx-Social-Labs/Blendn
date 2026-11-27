@@ -564,6 +564,7 @@ export async function connect(opts: { force?: boolean } = {}): Promise<boolean> 
  * Disconnect from the socket server
  */
 export function disconnect(): void {
+  cancelJoinRetry()
   if (socket) {
     Logger.info("socket", "Disconnecting...")
     socket.disconnect()
@@ -629,6 +630,39 @@ function rejoinAllRooms(): void {
   }
 }
 
+/*
+ * A join the server could not check (`error { code: "SERVER_ERROR" }`, admin
+ * SCRUM-1402) is asked again; the server does not retry, and the socket stayed out
+ * of the room until its next reconnect (SCRUM-1425). One timer for all rooms, so a
+ * burst of failures is one round of joins; full jitter, so a room of guests is not in step.
+ */
+const JOIN_RETRY_BASE_MS = 2000
+const JOIN_RETRY_MAX_MS = 30000
+const JOIN_RETRY_MAX_ATTEMPTS = 5
+let joinRetryTimer: ReturnType<typeof setTimeout> | null = null
+let joinRetryAttempts = 0
+
+function scheduleJoinRetry(): void {
+  if (joinRetryTimer) return
+  if (joinRetryAttempts >= JOIN_RETRY_MAX_ATTEMPTS) {
+    Logger.warn("socket", "Join retries used up; rooms rejoin on the next reconnect")
+    return
+  }
+  const windowMs = Math.min(JOIN_RETRY_MAX_MS, JOIN_RETRY_BASE_MS * 2 ** joinRetryAttempts)
+  // ponytail: the budget is per connection (reset on connect only, joins have no ack); forgive it
+  // after a quiet period if a long-lived socket is seen to run out across separate bursts.
+  joinRetryAttempts++
+  joinRetryTimer = setTimeout(() => {
+    joinRetryTimer = null
+    rejoinAllRooms()
+  }, Math.random() * windowMs)
+}
+
+function cancelJoinRetry(): void {
+  if (joinRetryTimer) clearTimeout(joinRetryTimer)
+  joinRetryTimer = null
+}
+
 /**
  * Set up socket event handlers
  */
@@ -636,6 +670,8 @@ function setupSocketHandlers(sock: TypedSocket): void {
   // Rejoin all subscribed rooms on every (re)connect
   sock.on("connect", () => {
     Logger.info("socket", "Socket (re)connected, rejoining rooms")
+    cancelJoinRetry()
+    joinRetryAttempts = 0
     rejoinAllRooms()
   })
 
@@ -646,10 +682,13 @@ function setupSocketHandlers(sock: TypedSocket): void {
 
   sock.on("error", (data) => {
     Logger.error("socket", "Server error", { message: data.message, code: data.code })
+    // Only a join the server could not check; FORBIDDEN is a refusal and is never asked again.
+    if (data.code === "SERVER_ERROR") scheduleJoinRetry()
   })
 
   sock.on("disconnect", (reason) => {
     Logger.warn("socket", "Disconnected", { reason })
+    cancelJoinRetry()
     emitConnectionStatus({
       state: "disconnected",
       connected: false,
